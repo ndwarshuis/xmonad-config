@@ -32,6 +32,7 @@ import qualified XMonad.StackSet as W
 
 --------------------------------------------------------------------------------
 main = do
+  -- TODO this is never killed on shutdown
   spawn "xmobar"
 
   xmonad
@@ -103,7 +104,7 @@ main = do
 -- keybindings
 myModMask = mod4Mask
 
-_myRofi = "rofi -m -2" -- show rofi always with the focused window
+_myRofi = "rofi -m -4" -- show rofi always with the focused window
 myTerm = "urxvt"
 myBrowser = "brave"
 myVBox = "VBoxManage startvm win8raw"
@@ -115,7 +116,7 @@ myClipboard = _myRofi ++ " -modi \"clipboard:greenclip print\" \
               \-show clipboard -run-command '{cmd}' \
               \-theme-str '#element.selected.normal \
               \{ background-color: #00c44e; }'"
-myNetSel = "networkmanager_dmenu -m -2"
+myNetSel = "networkmanager_dmenu -m -4"
 myWinSel = _myRofi ++ " -show window"
 myScreenCap = "screencap -s" --external script
 myWindowCap = "screencap -w" --external script
