@@ -193,6 +193,8 @@ myKeys c =
   mkNamedSubmap c "System"
   [ ("M-.", addName "backlight up" $ spawn "adj_backlight up")
   , ("M-,", addName "backlight down" $ spawn "adj_backlight down")
+  , ("M-M1-,", addName "backlight min" $ spawn "adj_backlight min")
+  , ("M-M1-.", addName "backlight max" $ spawn "adj_backlight max")
   , ("M-<F2>", addName "restart xmonad" $ spawn "xmonad --restart")
   , ("M-S-<F2>", addName "recompile xmonad" $ spawn "xmonad --recompile && xmonad --restart")
   -- , ("M-<Home>", addName "quit xmonad" $
