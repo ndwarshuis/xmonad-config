@@ -99,19 +99,20 @@ main = do
 -- keybindings
 myModMask = mod4Mask
 
+_myRofi = "rofi -m -2" -- show rofi always with the focused window
 myTerm = "urxvt"
 myBrowser = "brave"
 myVBox = "VBoxManage startvm win8raw"
 myEditor = "emacsclient -c -e \"(select-frame-set-input-focus (selected-frame))\""
 myCalc = "urxvt -e R"
-myRun = "rofi -show run"
-myAppRun = "rofi -show drun"
-myClipboard = "rofi -modi \"clipboard:greenclip print\" \
+myRun = _myRofi ++ " -show run"
+myAppRun = _myRofi ++ " -show drun"
+myClipboard = _myRofi ++ " -modi \"clipboard:greenclip print\" \
               \-show clipboard -run-command '{cmd}' \
               \-theme-str '#element.selected.normal \
               \{ background-color: #00c44e; }'"
-myNetSel = "networkmanager_dmenu"
-myWinSel = "rofi -show window"
+myNetSel = "networkmanager_dmenu -m -2"
+myWinSel = _myRofi ++ " -show window"
 myScreenCap = "screencap -s" --external script
 myWindowCap = "screencap -w" --external script
 myScreenLock = "screenlock" --external script
