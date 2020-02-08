@@ -203,8 +203,8 @@ myKeys c =
   , ("<XF86AudioLowerVolume>", addName "volume down" $ spawn "amixer -q sset Master 2%-")
   , ("<XF86AudioRaiseVolume>", addName "volume up" $ spawn "amixer -q sset Master 2%+")
   , ("<XF86AudioMute>", addName "volume mute" $ spawn "amixer set Master toggle")
-  , ("M-<F2>", addName "restart xmonad" $ spawn "xmonad --restart")
-  , ("M-S-<F2>", addName "recompile xmonad" $ spawn "xmonad --recompile && xmonad --restart")
+  , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; xmonad --restart")
+  , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; xmonad --recompile && xmonad --restart")
   -- , ("M-<Home>", addName "quit xmonad" $
   --     confirmPrompt hotPromptTheme "Quit XMonad?" $
   --     io (exitWith ExitSuccess))
