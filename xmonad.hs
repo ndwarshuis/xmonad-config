@@ -14,6 +14,7 @@ import XMonad.Actions.CycleWS
 -- import XMonad.Config.Desktop
 -- import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
+import XMonad.Hooks.ManageDocks
 -- import XMonad.Layout.IndependentScreens
 -- import XMonad.Hooks.ManageHelpers
 -- import XMonad.Layout.BinarySpacePartition (emptyBSP)
@@ -31,15 +32,18 @@ import qualified XMonad.StackSet as W
 
 --------------------------------------------------------------------------------
 main = do
-  -- spawn "xmobar" -- Start a task bar such as xmobar.
+  spawn "xmobar"
 
   xmonad
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) myKeys
     $ def { terminal = myTerm
           , modMask = myModMask
+          , layoutHook = avoidStruts $ layoutHook def
+          , manageHook = manageDocks <+> manageHook def
+          , handleEventHook = docksEventHook <+> handleEventHook def
+          , startupHook = docksStartupHook <+> startupHook def
           -- , workspaces = withScreens 2 ["name1", "name2"]
-          -- , layoutHook = myLayoutHook
           }
 
   -- Start xmonad using the main desktop configuration with a few
