@@ -195,14 +195,21 @@ myKeys c =
   , ("M-C-v", addName "run windows VM" $ spawn myVBox)
   ] ++
 
+  mkNamedSubmap c "Multimedia"
+  [ ("<XF86AudioPlay>", addName "toggle play/pause" $ spawn "playerctl play-pause")
+  , ("<XF86AudioPrev>", addName "previous track" $ spawn "playerctl previous")
+  , ("<XF86AudioNext>", addName "next track" $ spawn "playerctl next")
+  , ("<XF86AudioStop>", addName "stop" $ spawn "playerctl stop")
+  , ("<XF86AudioLowerVolume>", addName "volume down" $ spawn "amixer -q sset Master 2%-")
+  , ("<XF86AudioRaiseVolume>", addName "volume up" $ spawn "amixer -q sset Master 2%+")
+  , ("<XF86AudioMute>", addName "volume mute" $ spawn "amixer set Master toggle")
+  ] ++
+
   mkNamedSubmap c "System"
   [ ("M-.", addName "backlight up" $ spawn "adj_backlight up")
   , ("M-,", addName "backlight down" $ spawn "adj_backlight down")
   , ("M-M1-,", addName "backlight min" $ spawn "adj_backlight min")
   , ("M-M1-.", addName "backlight max" $ spawn "adj_backlight max")
-  , ("<XF86AudioLowerVolume>", addName "volume down" $ spawn "amixer -q sset Master 2%-")
-  , ("<XF86AudioRaiseVolume>", addName "volume up" $ spawn "amixer -q sset Master 2%+")
-  , ("<XF86AudioMute>", addName "volume mute" $ spawn "amixer set Master toggle")
   , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; xmonad --restart")
   , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; xmonad --recompile && xmonad --restart")
   -- , ("M-<Home>", addName "quit xmonad" $
