@@ -6,11 +6,15 @@
 module Main (main) where
 
 --------------------------------------------------------------------------------
--- import System.Exit
+import System.Exit
 import System.IO
+
+-- import Graphics.XOSD
+
 import XMonad
 import XMonad.Actions.CopyWindow
 import XMonad.Actions.CycleWS
+import XMonad.Actions.Volume
 -- import XMonad.Config.Desktop
 -- import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
@@ -21,8 +25,8 @@ import XMonad.Hooks.ManageDocks
 -- import XMonad.Layout.NoBorders (noBorders)
 -- import XMonad.Layout.ResizableTile (ResizableTall(..))
 -- import XMonad.Layout.ToggleLayouts (ToggleLayout(..), toggleLayouts)
--- import XMonad.Prompt
--- import XMonad.Prompt.ConfirmPrompt
+import XMonad.Prompt
+import XMonad.Prompt.ConfirmPrompt
 -- import XMonad.Prompt.Shell
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedActions
@@ -32,9 +36,7 @@ import qualified XMonad.StackSet as W
 
 --------------------------------------------------------------------------------
 main = do
-  -- TODO this is never killed on shutdown
   spawn "xmobar"
-
   xmonad
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) myKeys
@@ -100,6 +102,73 @@ main = do
 --   , transience
 --   ]
 
+-- themes
+myFont = "xft:DejaVu Sans:size=11:autohint=false"
+
+-- base00  = "#657b83"
+-- base01  = "#586e75"
+-- base02  = "#073642"
+base03  = "#002b36"
+-- base0   = "#839496"
+-- base1   = "#93a1a1"
+-- base2   = "#eee8d5"
+base3   = "#fdf6e3"
+-- yellow  = "#b58900"
+-- orange  = "#cb4b16"
+red     = "#dc322f"
+-- magenta = "#d33682"
+-- violet  = "#6c71c4"
+blue    = "#268bd2"
+-- cyan    = "#2aa198"
+-- green = "#859900"
+
+-- gap         = 10
+-- topbar      = 10
+-- border      = 0
+prompt      = 20
+-- status = 20
+
+active      = blue
+-- activeWarn  = red
+-- inactive    = base02
+-- focusColor  = blue
+-- unfocusColor = base02
+
+myPromptTheme = def
+    { font = myFont
+    , bgColor = base03
+    , fgColor = active
+    , fgHLight = base03
+    , bgHLight = active
+    , borderColor = base03
+    , promptBorderWidth = 0
+    , height = prompt
+    , position = Top
+}
+
+hotPromptTheme = myPromptTheme
+    { bgColor = red
+    , fgColor = base3
+    , position = Top
+    }
+
+-- osd
+
+-- getOffset :: X Int
+-- getOffset = withWindowSet $
+--   \W.StackSet { W.current = W.Screen { W.screenDetail = SD { screenRect = Rectangle {rect_x=x}}}} -> return $
+--   fromIntegral x
+
+-- displayOsd osd msg = do
+--   xpos <- getOffset
+--   io $ set osd [HOffset xpos]
+--   io $ Graphics.XOSD.display osd 0 msg
+
+-- showVolume :: XOSD -> X ()
+-- showVolume osd = do
+--   volume <- io $ fmap round $ getVolumeChannels ["default"]
+--   muted <- io $ getMute
+--   displayOsd osd $ Percent $ if muted then 0 else volume
 
 -- keybindings
 myModMask = mod4Mask
@@ -155,7 +224,7 @@ myKeys c =
 
   -- mkNamedSubmap c "Master Windows"
   -- [ ("M-=", addName "add master window" $ sendMessage (IncMasterN 1))
-  -- , ("M--", addName "remove master window" $ sendMessage (IncMasterN (-1)))
+  -- , ("M--", addName "remove master window" $ sendMessage (Ingesting (-1)))
   -- ] ++
 
   mkNamedSubmap c "Workspaces"
@@ -200,9 +269,9 @@ myKeys c =
   , ("<XF86AudioPrev>", addName "previous track" $ spawn "playerctl previous")
   , ("<XF86AudioNext>", addName "next track" $ spawn "playerctl next")
   , ("<XF86AudioStop>", addName "stop" $ spawn "playerctl stop")
-  , ("<XF86AudioLowerVolume>", addName "volume down" $ spawn "amixer -q sset Master 2%-")
-  , ("<XF86AudioRaiseVolume>", addName "volume up" $ spawn "amixer -q sset Master 2%+")
-  , ("<XF86AudioMute>", addName "volume mute" $ spawn "amixer set Master toggle")
+  , ("<XF86AudioLowerVolume>", addName "volume down" $ lowerVolume 2 >> return ())
+  , ("<XF86AudioRaiseVolume>", addName "volume up" $ raiseVolume 2 >> return ())
+  , ("<XF86AudioMute>", addName "volume mute" $ toggleMute >> return ())
   ] ++
 
   mkNamedSubmap c "System"
@@ -212,7 +281,7 @@ myKeys c =
   , ("M-M1-.", addName "backlight max" $ spawn "adj_backlight max")
   , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; xmonad --restart")
   , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; xmonad --recompile && xmonad --restart")
-  -- , ("M-<Home>", addName "quit xmonad" $
-  --     confirmPrompt hotPromptTheme "Quit XMonad?" $
-  --     io (exitWith ExitSuccess))
+  , ("M-<Home>", addName "quit xmonad" $
+      confirmPrompt hotPromptTheme "Quit XMonad?" $
+      io (exitWith ExitSuccess))
   ]
