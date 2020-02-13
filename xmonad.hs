@@ -267,6 +267,7 @@ myKeys c =
   , ("<XF86AudioLowerVolume>", addName "volume down" $ lowerVolume 2 >> return ())
   , ("<XF86AudioRaiseVolume>", addName "volume up" $ raiseVolume 2 >> return ())
   , ("<XF86AudioMute>", addName "volume mute" $ toggleMute >> return ())
+  , ("M-C-b", addName "toggle bluetooth" $ spawn "togglebt")
   ] ++
 
   mkNamedSubmap c "System"
