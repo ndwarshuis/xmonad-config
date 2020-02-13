@@ -20,7 +20,7 @@ import XMonad.Actions.Volume
 import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.ManageDocks
 -- import XMonad.Layout.IndependentScreens
--- import XMonad.Hooks.ManageHelpers
+import XMonad.Hooks.ManageHelpers
 -- import XMonad.Layout.BinarySpacePartition (emptyBSP)
 -- import XMonad.Layout.NoBorders (noBorders)
 -- import XMonad.Layout.ResizableTile (ResizableTall(..))
@@ -43,10 +43,10 @@ main = do
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = avoidStruts $ layoutHook def
-          , manageHook = manageDocks <+> manageHook def
+          , manageHook = myManageHook <+> manageDocks <+> manageHook def
           , handleEventHook = docksEventHook <+> handleEventHook def
           , startupHook = docksStartupHook <+> startupHook def
-          -- , workspaces = withScreens 2 ["name1", "name2"]
+          , workspaces = myWorkspaces
           }
 
   -- Start xmonad using the main desktop configuration with a few
@@ -65,6 +65,9 @@ main = do
     --   ]
 
 --------------------------------------------------------------------------------
+
+myWorkspaces = map show [0..9 :: Int] ++ ["VM"]
+
 -- | Customize layouts.
 --
 -- This layout configuration uses two primary layouts, 'ResizableTall'
@@ -85,22 +88,15 @@ main = do
 --   , font              = "xft:monospace:size=9"
 --   }
 
---------------------------------------------------------------------------------
--- | Manipulate windows as they are created.  The list given to
--- @composeOne@ is processed from top to bottom.  The first matching
--- rule wins.
---
--- Use the `xprop' tool to get the info you need for these matches.
--- For className, use the second value that xprop gives you.
--- myManageHook = composeOne
---   [ className =? "Pidgin" -?> doFloat
---   , className =? "XCalc"  -?> doFloat
---   , className =? "mpv"    -?> doFloat
---   , isDialog              -?> doCenterFloat
-
---     -- Move transient windows to their parent:
---   , transience
---   ]
+myManageHook = composeOne
+  -- virtualbox seems to do whatever the "VirtualBoxVM" class
+  -- window does, and as such I guess we only need to match that
+  [ -- className =? "VirtualBox Machine" -?> doShift "3"
+  className =? "VirtualBoxVM" -?> doShift "VM" <+> doFloat
+  -- , className =? "URxvt" -?> doFloat
+  , className =? "mpv"    -?> doFloat
+  , isDialog              -?> doCenterFloat
+  ]
 
 -- themes
 myFont = "xft:DejaVu Sans:size=11:autohint=false"
@@ -228,12 +224,15 @@ myKeys c =
   -- ] ++
 
   mkNamedSubmap c "Workspaces"
-  [ (mods ++ show i, addName (msg ++ " " ++ show i) $ windows $ f w)
+  -- NOTE this assumes that there are workspaces bound to numbers
+  ([ (mods ++ show i, addName (msg ++ " " ++ show i) $ windows $ f w)
     | (w, i) <- zip (XMonad.workspaces c) [1..] :: [(String, Int)]
     , (mods, msg, f) <-
       [ ("M-", "switch to workspace", W.view)
       , ("M-S-", "move client to workspace", W.shift)]
   ] ++
+  [ ("M-v", addName "switch to VM workspace" $ windows $ W.view "VM")
+  ]) ++
 
   mkNamedSubmap c "Screens"
   [ ("M-l", addName "move up screen" nextScreen)
