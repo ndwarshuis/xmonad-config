@@ -22,7 +22,8 @@ import XMonad.Hooks.ManageDocks
 -- import XMonad.Layout.IndependentScreens
 import XMonad.Hooks.ManageHelpers
 -- import XMonad.Layout.BinarySpacePartition (emptyBSP)
--- import XMonad.Layout.NoBorders (noBorders)
+import XMonad.Layout.NoBorders
+import XMonad.Layout.PerWorkspace
 -- import XMonad.Layout.ResizableTile (ResizableTall(..))
 -- import XMonad.Layout.ToggleLayouts (ToggleLayout(..), toggleLayouts)
 import XMonad.Prompt
@@ -42,7 +43,7 @@ main = do
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) myKeys
     $ def { terminal = myTerm
           , modMask = myModMask
-          , layoutHook = avoidStruts $ layoutHook def
+          , layoutHook = myLayouts
           , manageHook = myManageHook <+> manageDocks <+> manageHook def
           , handleEventHook = docksEventHook <+> handleEventHook def
           , startupHook = docksStartupHook <+> startupHook def
@@ -68,15 +69,10 @@ main = do
 
 myWorkspaces = map show [0..9 :: Int] ++ ["VM"]
 
--- | Customize layouts.
---
--- This layout configuration uses two primary layouts, 'ResizableTall'
--- and 'BinarySpacePartition'.  You can also use the 'M-<Esc>' key
--- binding defined above to toggle between the current layout and a
--- full screen layout.
--- myLayouts = toggleLayouts (noBorders Full) others
---   where
---     others = ResizableTall 1 (1.5/100) (3/5) [] ||| emptyBSP
+-- this isn't perfect for Virtualbox because the border seems to be
+-- required for hover-focus the controls bar at the top
+myLayouts = onWorkspace "VM" (lessBorders OnlyScreenFloat Full) $
+            (avoidStruts $ layoutHook def)
 
 --------------------------------------------------------------------------------
 -- | Customize the way 'XMonad.Prompt' looks and behaves.  It's a
