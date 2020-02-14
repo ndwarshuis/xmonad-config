@@ -16,7 +16,7 @@ import XMonad.Actions.CopyWindow
 import XMonad.Actions.CycleWS
 import XMonad.Actions.Volume
 -- import XMonad.Config.Desktop
--- import XMonad.Hooks.DynamicLog
+import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.ManageDocks
 -- import XMonad.Layout.IndependentScreens
@@ -37,7 +37,7 @@ import qualified XMonad.StackSet as W
 
 --------------------------------------------------------------------------------
 main = do
-  spawn "xmobar"
+  h <- spawnPipe "xmobar"
   xmonad
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) myKeys
@@ -48,6 +48,10 @@ main = do
           , handleEventHook = docksEventHook <+> handleEventHook def
           , startupHook = docksStartupHook <+> startupHook def
           , workspaces = myWorkspaces
+          , logHook = dynamicLogWithPP $
+            def { ppOutput = hPutStrLn h
+                , ppTitle = const ""
+                , ppLayout = const "" }
           }
 
   -- Start xmonad using the main desktop configuration with a few
