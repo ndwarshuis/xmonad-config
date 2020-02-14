@@ -101,7 +101,8 @@ myManageHook = composeOne
   -- window does, and as such I guess we only need to match that
   [ -- className =? "VirtualBox Machine" -?> doShift "3"
   className =? "VirtualBoxVM" -?> doShift "VM" <+> doFloat
-  -- , className =? "URxvt" -?> doFloat
+  , className =? "Seafile Client" -?> doFloat
+  , className =? "R_x11" -?> doFloat
   , className =? "mpv"    -?> doFloat
   , isDialog              -?> doCenterFloat
   ]
