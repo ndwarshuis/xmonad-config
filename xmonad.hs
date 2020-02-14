@@ -32,6 +32,7 @@ import XMonad.Prompt.ConfirmPrompt
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedActions
 import XMonad.Util.Run
+import XMonad.Util.WorkspaceCompare
 
 import qualified XMonad.StackSet as W
 
@@ -48,10 +49,7 @@ main = do
           , handleEventHook = docksEventHook <+> handleEventHook def
           , startupHook = docksStartupHook <+> startupHook def
           , workspaces = myWorkspaces
-          , logHook = dynamicLogWithPP $
-            def { ppOutput = hPutStrLn h
-                , ppTitle = const ""
-                , ppLayout = const "" }
+          , logHook = myLoghook h
           }
 
   -- Start xmonad using the main desktop configuration with a few
@@ -71,12 +69,22 @@ main = do
 
 --------------------------------------------------------------------------------
 
-myWorkspaces = map show [0..9 :: Int] ++ ["VM"]
+myWorkspaces = map show [1..10 :: Int] ++ ["VM"]
 
 -- this isn't perfect for Virtualbox because the border seems to be
 -- required for hover-focus the controls bar at the top
 myLayouts = onWorkspace "VM" (lessBorders OnlyScreenFloat Full) $
             (avoidStruts $ layoutHook def)
+
+-- TODO hack dynamicLogXinerama and sort the screen by its xrandr
+-- position (Graphics.X11.Xrandr?)
+myLoghook h = dynamicLogWithPP $
+              def { ppOutput = hPutStrLn h
+                  , ppCurrent = wrap "<" ">"
+                  , ppVisible = wrap "[" "]"
+                  , ppTitle = const ""
+                  , ppSep = " | "
+                  , ppSort = getSortByXineramaRule }
 
 --------------------------------------------------------------------------------
 -- | Customize the way 'XMonad.Prompt' looks and behaves.  It's a
