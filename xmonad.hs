@@ -207,6 +207,8 @@ showKeybindings x = addName "Show Keybindings" $ io $ do
 mkNamedSubmap c sectionName bindings = 
   (subtitle sectionName:) $ mkNamedKeymap c bindings
 
+-- NOTE: the following bindings are used by dunst:
+-- "M-~", "M-<esc>", "M-S-<esc>", "M-S-."
 myKeys c =
   mkNamedSubmap c "Window Focus"
   [ ("M-j", addName "focus down" $ windows W.focusDown)
