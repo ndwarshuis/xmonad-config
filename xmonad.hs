@@ -195,6 +195,8 @@ myScreenCap = "screencap -s" --external script
 myWindowCap = "screencap -w" --external script
 myScreenLock = "screenlock" --external script
 
+showVBox = windows $ W.view "VM"
+
 showKeybindings :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 showKeybindings x = addName "Show Keybindings" $ io $ do
     h <- spawnPipe "zenity --text-info --font=DejaVu Sans"
@@ -239,7 +241,7 @@ myKeys c =
       [ ("M-", "switch to workspace", W.view)
       , ("M-S-", "move client to workspace", W.shift)]
   ] ++
-  [ ("M-v", addName "switch to VM workspace" $ windows $ W.view "VM")
+  [ ("M-v", addName "switch to VM workspace" showVBox)
   ]) ++
 
   mkNamedSubmap c "Screens"
@@ -268,7 +270,7 @@ myKeys c =
   , ("M-C-w", addName "run browser" $ spawn myBrowser)
   , ("M-C-t", addName "run terminal" $ spawn myTerm)
   , ("M-C-q", addName "run calc" $ spawn myCalc)
-  , ("M-C-v", addName "run windows VM" $ spawn myVBox)
+  , ("M-C-v", addName "run windows VM" $ spawn myVBox >> showVBox)
   ] ++
 
   mkNamedSubmap c "Multimedia"
