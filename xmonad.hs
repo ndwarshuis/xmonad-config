@@ -9,11 +9,14 @@ module Main (main) where
 import System.Exit
 import System.IO
 
--- import Graphics.XOSD
+import Data.List (sortBy)
+import Data.Maybe (isJust)
+import Data.Ord (comparing)
 
 import XMonad
 import XMonad.Actions.CopyWindow
 import XMonad.Actions.CycleWS
+import XMonad.Actions.PhysicalScreens
 import XMonad.Actions.Volume
 -- import XMonad.Config.Desktop
 import XMonad.Hooks.DynamicLog
@@ -32,7 +35,6 @@ import XMonad.Prompt.ConfirmPrompt
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedActions
 import XMonad.Util.Run
-import XMonad.Util.WorkspaceCompare
 
 import qualified XMonad.StackSet as W
 
@@ -76,15 +78,27 @@ myWorkspaces = map show [1..10 :: Int] ++ ["VM"]
 myLayouts = onWorkspace "VM" (lessBorders OnlyScreenFloat Full) $
             (avoidStruts $ layoutHook def)
 
--- TODO hack dynamicLogXinerama and sort the screen by its xrandr
--- position (Graphics.X11.Xrandr?)
-myLoghook h = dynamicLogWithPP $
-              def { ppOutput = hPutStrLn h
-                  , ppCurrent = wrap "<" ">"
-                  , ppVisible = wrap "[" "]"
-                  , ppTitle = const ""
-                  , ppSep = " | "
-                  , ppSort = getSortByXineramaRule }
+-- | Format workspace and layout in loghook
+-- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
+-- is the workspace and LAYOUT is the current layout. Each workspace
+-- in the brackets is currently visible and the order reflects the
+-- physical location of each screen. The "<>" is the workspace
+-- that currently has focus
+myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
+
+myWindowSetXinerama ws = "[" ++ unwords onscreen ++ "] " ++
+  unwords offscreen ++ " | " ++ layout
+  where
+    onscreen = map (fmtTags . W.tag . W.workspace)
+      . sortBy compareXCoord $ W.current ws : W.visible ws
+    fmtTags t = if t == W.currentTag ws then wrap "<" ">" t else t
+    offscreen = map W.tag . filter (isJust . W.stack)
+      . sortBy (comparing W.tag) $ W.hidden ws
+    layout = description . W.layout . W.workspace . W.current $ ws
+    compareXCoord s0 s1 = compare x0 x1
+      where
+        (_, (Rectangle x0 _ _ _)) = getScreenIdAndRectangle s0
+        (_, (Rectangle x1 _ _ _)) = getScreenIdAndRectangle s1
 
 --------------------------------------------------------------------------------
 -- | Customize the way 'XMonad.Prompt' looks and behaves.  It's a
