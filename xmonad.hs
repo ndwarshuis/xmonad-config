@@ -54,21 +54,6 @@ main = do
           , logHook = myLoghook h
           }
 
-  -- Start xmonad using the main desktop configuration with a few
-  -- simple overrides:
-  -- xmonad $ desktopConfig
-  --   { modMask    = mod4Mask -- Use the "Win" key for the mod key
-  --   , manageHook = myManageHook <+> manageHook desktopConfig
-  --   , layoutHook = desktopLayoutModifiers $ myLayouts
-  --   , logHook    = dynamicLogString def >>= xmonadPropLog
-  --   }
-
-    -- `additionalKeysP` -- Add some extra key bindings:
-    --   [ ("M-S-q",   confirmPrompt myXPConfig "exit" (io exitSuccess))
-    --   , ("M-p",     shellPrompt myXPConfig)
-    --   , ("M-<Esc>", sendMessage (Toggle "Full"))
-    --   ]
-
 --------------------------------------------------------------------------------
 
 myWorkspaces = map show [1..10 :: Int] ++ ["VM"]
