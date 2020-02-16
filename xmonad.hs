@@ -73,7 +73,8 @@ myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 
 myWindowSetXinerama ws = wsString ++ sep ++ layout
   where
-    wsString = xmobarColor "#444444" "" $ onscreen ++ " " ++ offscreen 
+    wsString = xmobarColor "#444444" "" $ onscreen ++ offscreen'
+    offscreen' = if offscreen == "" then "" else " " ++ offscreen
     sep = xmobarColor "#888888" "" " : "
     onscreen = xmobarColor "#5574ad" visColor
       $ wrap " " " "
