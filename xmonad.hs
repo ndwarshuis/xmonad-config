@@ -10,7 +10,7 @@ import System.Exit
 import System.IO
 
 import Data.List (sortBy)
-import Data.Maybe (isJust)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Ord (comparing)
 
 import XMonad
@@ -156,6 +156,23 @@ hotPromptTheme = myPromptTheme
     , position = Top
     }
 
+
+-- TODO is there a better way to get the prompt to say what I want?
+data PowerPrompt = PowerPrompt
+
+instance XPrompt PowerPrompt where
+    showXPrompt PowerPrompt = "Select Option: "
+
+myPowerPrompt = mkXPrompt PowerPrompt conf comps
+  $ fromMaybe (return ())
+  . (`lookup` commands)
+  where
+    comps = (mkComplFunFromList' (map fst commands))
+    conf = hotPromptTheme
+    commands =
+      map (\cmd -> (cmd, spawn $ "systemctl " ++ cmd))
+      [ "poweroff", "suspend", "reboot", "hibernate"]
+
 -- osd
 
 -- getOffset :: X Int
@@ -293,6 +310,7 @@ myKeys c =
   , ("M-M1-.", addName "backlight max" $ spawn "adj_backlight max")
   , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; xmonad --restart")
   , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; xmonad --recompile && xmonad --restart")
+  , ("M-p", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" $
       confirmPrompt hotPromptTheme "Quit XMonad?" $
       io (exitWith ExitSuccess))
