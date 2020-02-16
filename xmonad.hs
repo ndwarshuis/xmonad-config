@@ -184,8 +184,8 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
     conf = myPromptTheme
     commands =
       [ ("poweroff", spawn "systemctl poweroff")
-      , ("suspend", spawn "systemctl suspend")
-      , ("hibernate", spawn "systemctl hibernate")
+      , ("suspend", spawn myScreenLock >> spawn "systemctl suspend")
+      , ("hibernate", spawn myScreenLock >> spawn "systemctl hibernate")
       , ("reboot", spawn "systemctl reboot")
       ]
 
