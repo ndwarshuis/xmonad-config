@@ -182,8 +182,11 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
     comps = (mkComplFunFromList' (map fst commands))
     conf = hotPromptTheme
     commands =
-      map (\cmd -> (cmd, spawn $ "systemctl " ++ cmd))
-      [ "poweroff", "suspend", "reboot", "hibernate"]
+      [ ("poweroff", spawn "systemctl poweroff")
+      , ("suspend", spawn "systemctl suspend")
+      , ("hibernate", spawn "systemctl hibernate")
+      , ("reboot", spawn "systemctl reboot")
+      ]
 
 -- osd
 
