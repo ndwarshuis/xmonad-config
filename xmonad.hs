@@ -71,14 +71,25 @@ myLayouts = onWorkspace "VM" (lessBorders OnlyScreenFloat Full) $
 -- that currently has focus
 myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 
-myWindowSetXinerama ws = "[" ++ unwords onscreen ++ "] " ++
-  unwords offscreen ++ " | " ++ layout
+myWindowSetXinerama ws = wsString ++ sep ++ layout
   where
-    onscreen = map (fmtTags . W.tag . W.workspace)
-      . sortBy compareXCoord $ W.current ws : W.visible ws
-    fmtTags t = if t == W.currentTag ws then wrap "<" ">" t else t
-    offscreen = map W.tag . filter (isJust . W.stack)
-      . sortBy (comparing W.tag) $ W.hidden ws
+    wsString = xmobarColor "#444444" "" $ onscreen ++ " " ++ offscreen 
+    sep = xmobarColor "#888888" "" " : "
+    onscreen = xmobarColor "#5574ad" visColor
+      $ wrap " " " "
+      $ unwords
+      $ map (fmtTags . W.tag . W.workspace)
+      . sortBy compareXCoord
+      $ W.current ws : W.visible ws
+    fmtTags t = if t == W.currentTag ws
+      then xmobarColor "#2c2c2c" visColor t
+      else t
+    offscreen = unwords
+      $ map W.tag
+      . filter (isJust . W.stack)
+      . sortBy (comparing W.tag)
+      $ W.hidden ws
+    visColor = "#8fc7ff"
     layout = description . W.layout . W.workspace . W.current $ ws
     compareXCoord s0 s1 = compare x0 x1
       where
