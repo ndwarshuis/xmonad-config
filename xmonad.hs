@@ -31,6 +31,7 @@ import XMonad.Layout.PerWorkspace
 -- import XMonad.Layout.ToggleLayouts (ToggleLayout(..), toggleLayouts)
 import XMonad.Prompt
 import XMonad.Prompt.ConfirmPrompt
+import XMonad.Prompt.XMonad
 -- import XMonad.Prompt.Shell
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedActions
@@ -124,27 +125,27 @@ myFont = "xft:DejaVu Sans:size=11:autohint=false"
 -- base00  = "#657b83"
 -- base01  = "#586e75"
 -- base02  = "#073642"
-base03  = "#002b36"
+-- base03  = "#002b36"
 -- base0   = "#839496"
 -- base1   = "#93a1a1"
 -- base2   = "#eee8d5"
-base3   = "#fdf6e3"
+-- base3   = "#fdf6e3"
 -- yellow  = "#b58900"
 -- orange  = "#cb4b16"
-red     = "#dc322f"
+-- red     = "#dc322f"
 -- magenta = "#d33682"
 -- violet  = "#6c71c4"
-blue    = "#268bd2"
+-- blue    = "#268bd2"
 -- cyan    = "#2aa198"
 -- green = "#859900"
 
 -- gap         = 10
 -- topbar      = 10
 -- border      = 0
-prompt      = 20
+-- prompt      = 20
 -- status = 20
 
-active      = blue
+-- active      = blue
 -- activeWarn  = red
 -- inactive    = base02
 -- focusColor  = blue
@@ -152,21 +153,21 @@ active      = blue
 
 myPromptTheme = def
     { font = myFont
-    , bgColor = base03
-    , fgColor = active
-    , fgHLight = base03
-    , bgHLight = active
-    , borderColor = base03
+    , bgColor = "#eeeeee"
+    , fgColor = "#282828"
+    , fgHLight = "white"
+    , bgHLight = "#268bd2"
+    , borderColor = "white"
     , promptBorderWidth = 0
-    , height = prompt
-    , position = Top
+    , height = 30
+    , position = CenteredAt 0.5 0.5
 }
 
-hotPromptTheme = myPromptTheme
-    { bgColor = red
-    , fgColor = base3
-    , position = Top
-    }
+-- hotPromptTheme = myPromptTheme
+--     { bgColor = red
+--     , fgColor = base3
+--     , position = Top
+--     }
 
 
 -- TODO is there a better way to get the prompt to say what I want?
@@ -180,7 +181,7 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
   . (`lookup` commands)
   where
     comps = (mkComplFunFromList' (map fst commands))
-    conf = hotPromptTheme
+    conf = myPromptTheme
     commands =
       [ ("poweroff", spawn "systemctl poweroff")
       , ("suspend", spawn "systemctl suspend")
@@ -325,8 +326,8 @@ myKeys c =
   , ("M-M1-.", addName "backlight max" $ spawn "adj_backlight max")
   , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; xmonad --restart")
   , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; xmonad --recompile && xmonad --restart")
-  , ("M-p", addName "power menu" myPowerPrompt)
+  , ("M-<End>", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" $
-      confirmPrompt hotPromptTheme "Quit XMonad?" $
+      confirmPrompt myPromptTheme "Quit XMonad?" $
       io (exitWith ExitSuccess))
   ]
