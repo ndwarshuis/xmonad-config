@@ -114,8 +114,10 @@ myManageHook = composeOne
   [ -- className =? "VirtualBox Machine" -?> doShift "3"
   className =? "VirtualBoxVM" -?> doShift "VM" <+> doFloat
   , className =? "Seafile Client" -?> doFloat
+  , className =? "Gimp-2.10" -?> doFloat
   , className =? "R_x11" -?> doFloat
   , className =? "mpv"    -?> doFloat
+  , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
   , isDialog              -?> doCenterFloat
   ]
 
