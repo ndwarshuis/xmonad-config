@@ -59,9 +59,7 @@ main = do
 
 myWorkspaces = map show [1..10 :: Int] ++ ["VM"]
 
--- this isn't perfect for Virtualbox because the border seems to be
--- required for hover-focus the controls bar at the top
-myLayouts = onWorkspace "VM" (lessBorders OnlyScreenFloat Full) $
+myLayouts = onWorkspace "VM" (noBorders Full) $
             (avoidStruts $ layoutHook def)
 
 -- | Format workspace and layout in loghook
@@ -109,10 +107,10 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
 --   }
 
 myManageHook = composeOne
-  -- virtualbox seems to do whatever the "VirtualBoxVM" class
-  -- window does, and as such I guess we only need to match that
-  [ -- className =? "VirtualBox Machine" -?> doShift "3"
-  className =? "VirtualBoxVM" -?> doShift "VM" <+> doFloat
+  -- assume virtualbox is not run with the toolbar in fullscreen mode
+  -- as this makes a new window that confusingly must go over the
+  -- actual VM window
+  [ className =? "VirtualBoxVM" -?> doShift "VM"
   , className =? "Seafile Client" -?> doFloat
   , className =? "Gimp-2.10" -?> doFloat
   , className =? "R_x11" -?> doFloat
