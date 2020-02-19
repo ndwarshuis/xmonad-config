@@ -31,7 +31,7 @@ import XMonad.Layout.PerWorkspace
 -- import XMonad.Layout.ToggleLayouts (ToggleLayout(..), toggleLayouts)
 import XMonad.Prompt
 import XMonad.Prompt.ConfirmPrompt
-import XMonad.Prompt.XMonad
+-- import XMonad.Prompt.XMonad
 -- import XMonad.Prompt.Shell
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedActions
@@ -111,10 +111,16 @@ myManageHook = composeOne
   -- as this makes a new window that confusingly must go over the
   -- actual VM window
   [ className =? "VirtualBoxVM" -?> doShift "VM"
+  -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
+  -- all of GIMP
   , className =? "Gimp-2.10" -?> doFloat
+  -- plots and graphics created by R
   , className =? "R_x11" -?> doFloat
   , className =? "mpv"    -?> doFloat
+  -- the floating windows created by the brave browser
+  , stringProperty "WM_NAME" =? "Brave" -?> doFloat
+  -- the dialog windows created by the zotero addon in Google Docs
   , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
   , isDialog              -?> doCenterFloat
   ]
@@ -243,30 +249,21 @@ mkNamedSubmap c sectionName bindings =
 -- NOTE: the following bindings are used by dunst:
 -- "M-~", "M-<esc>", "M-S-<esc>", "M-S-."
 myKeys c =
-  mkNamedSubmap c "Window Focus"
+  mkNamedSubmap c "Window Layouts"
   [ ("M-j", addName "focus down" $ windows W.focusDown)
   , ("M-k", addName "focus up" $ windows W.focusUp)
   , ("M-m", addName "focus master" $ windows W.focusMaster)
-  ] ++
-
-  mkNamedSubmap c "Window Layouts"
-  [ ("M-S-j", addName "swap down" $ windows W.swapDown)
+  , ("M-S-j", addName "swap down" $ windows W.swapDown)
   , ("M-S-k", addName "swap up" $ windows W.swapUp)
-  , ("M-<Return>", addName "swap master" $ windows W.swapMaster)
-  , ("M-<Space>", addName "next layout" $ sendMessage NextLayout)
-  , ("M-S-<Space>", addName "reset layout" $ setLayout $ XMonad.layoutHook c)
+  , ("M-S-m", addName "swap master" $ windows W.swapMaster)
+  , ("M-C-j", addName "remove master window" $ sendMessage (IncMasterN (-1)))
+  , ("M-C-k", addName "add master window" $ sendMessage (IncMasterN 1))
+  , ("M-<Return>", addName "next layout" $ sendMessage NextLayout)
+  , ("M-S-<Return>", addName "reset layout" $ setLayout $ XMonad.layoutHook c)
   , ("M-t", addName "sink tiling" $ withFocused $ windows . W.sink)
-  ] ++
-
-  mkNamedSubmap c "Window Sizing"
-  [ ("M--", addName "shrink" $ sendMessage Shrink)
+  , ("M--", addName "shrink" $ sendMessage Shrink)
   , ("M-=", addName "expand" $ sendMessage Expand)
   ] ++
-
-  -- mkNamedSubmap c "Master Windows"
-  -- [ ("M-=", addName "add master window" $ sendMessage (IncMasterN 1))
-  -- , ("M--", addName "remove master window" $ sendMessage (Ingesting (-1)))
-  -- ] ++
 
   mkNamedSubmap c "Workspaces"
   -- NOTE this assumes that there are workspaces bound to numbers
