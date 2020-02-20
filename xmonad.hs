@@ -25,7 +25,9 @@ import XMonad.Hooks.ManageDocks
 -- import XMonad.Layout.IndependentScreens
 import XMonad.Hooks.ManageHelpers
 -- import XMonad.Layout.BinarySpacePartition (emptyBSP)
+import XMonad.Layout.Named
 import XMonad.Layout.NoBorders
+import XMonad.Layout.NoFrillsDecoration
 import XMonad.Layout.PerWorkspace
 -- import XMonad.Layout.ResizableTile (ResizableTall(..))
 -- import XMonad.Layout.ToggleLayouts (ToggleLayout(..), toggleLayouts)
@@ -57,10 +59,34 @@ main = do
 
 --------------------------------------------------------------------------------
 
+myTopBarTheme = def
+    { fontName              = myFont
+    , inactiveBorderColor   = "#999999"
+    , inactiveColor         = "#999999"
+    , inactiveTextColor     = "#999999"
+    , activeBorderColor     = "#eeeeee"
+    , activeColor           = "#eeeeee"
+    , activeTextColor       = "#eeeeee"
+    -- , urgentBorderColor     = red
+    -- , urgentTextColor       = yellow
+    , decoHeight            = 20
+    }
+
 myWorkspaces = map show [1..10 :: Int] ++ ["VM"]
 
-myLayouts = onWorkspace "VM" (noBorders Full) $
-            (avoidStruts $ layoutHook def)
+myLayouts = onWorkspace "VM" (noBorders Full)
+  $ tall ||| full
+  where
+    addTopBar = noFrillsDeco shrinkText myTopBarTheme
+    tall = named "Tall"
+      $ avoidStruts
+      $ addTopBar
+      $ noBorders
+      $ Tall 1 0.03 0.5
+    full = named "Full"
+      $ avoidStruts
+      $ noBorders
+      $ Full
 
 -- | Format workspace and layout in loghook
 -- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
