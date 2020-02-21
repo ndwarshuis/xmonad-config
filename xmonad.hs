@@ -75,7 +75,7 @@ myTopBarTheme = def
 myWorkspaces = map show [1..10 :: Int] ++ ["VM"]
 
 myLayouts = onWorkspace "VM" (noBorders Full)
-  $ tall ||| full
+  $ tall ||| single ||| full
   where
     addTopBar = noFrillsDeco shrinkText myTopBarTheme
     tall = named "Tall"
@@ -83,8 +83,12 @@ myLayouts = onWorkspace "VM" (noBorders Full)
       $ addTopBar
       $ noBorders
       $ Tall 1 0.03 0.5
-    full = named "Full"
+    single = named "Single"
+      $ addTopBar
       $ avoidStruts
+      $ noBorders
+      $ Full
+    full = named "Full"
       $ noBorders
       $ Full
 
