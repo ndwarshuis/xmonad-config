@@ -254,6 +254,7 @@ myBrowser = "brave"
 myVBox = "VBoxManage startvm win8raw"
 myEditor = "emacsclient -c -e \"(select-frame-set-input-focus (selected-frame))\""
 myCalc = "urxvt -e R"
+myFileManager = "pcmanfm"
 myRun = _myRofi ++ " -show run"
 myAppRun = _myRofi ++ " -show drun"
 myClipboard = _myRofi ++ " -modi \"clipboard:greenclip print\" \
@@ -330,11 +331,12 @@ myKeys c =
   , ("M-g", addName "launch clipboard manager" $ spawn myClipboard )
   , ("M-a", addName "launch network selector" $ spawn myNetSel )
   , ("M-w", addName "launch window selector" $ spawn myWinSel )
-  , ("M-C-e", addName "run editor" $ spawn myEditor)
-  , ("M-C-w", addName "run browser" $ spawn myBrowser)
-  , ("M-C-t", addName "run terminal" $ spawn myTerm)
-  , ("M-C-q", addName "run calc" $ spawn myCalc)
-  , ("M-C-v", addName "run windows VM" $ spawn myVBox >> showVBox)
+  , ("M-C-e", addName "launch editor" $ spawn myEditor)
+  , ("M-C-w", addName "launch browser" $ spawn myBrowser)
+  , ("M-C-t", addName "launch terminal" $ spawn myTerm)
+  , ("M-C-q", addName "launch calc" $ spawn myCalc)
+  , ("M-C-f", addName "launch file manager" $ spawn myFileManager)
+  , ("M-C-v", addName "launch windows VM" $ spawn myVBox >> showVBox)
   ] ++
 
   mkNamedSubmap c "Multimedia"
