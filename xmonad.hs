@@ -150,6 +150,8 @@ myManageHook = composeOne
   , className =? "mpv"    -?> doFloat
   -- the floating windows created by the brave browser
   , stringProperty "WM_NAME" =? "Brave" -?> doFloat
+  , (stringProperty "WM_WINDOW_ROLE" =? "pop-up"
+     <&&> className =? "Brave-browser") -?> doFloat
   -- the dialog windows created by the zotero addon in Google Docs
   , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
   , isDialog              -?> doCenterFloat
