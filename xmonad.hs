@@ -55,6 +55,8 @@ main = do
           , startupHook = docksStartupHook <+> startupHook def
           , workspaces = myWorkspaces
           , logHook = myLoghook h
+          , clickJustFocuses = False
+          , focusFollowsMouse = False
           }
 
 --------------------------------------------------------------------------------
