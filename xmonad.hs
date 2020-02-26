@@ -11,11 +11,13 @@ import System.IO
 
 import Data.List (sortBy)
 import Data.Maybe (fromMaybe, isJust)
+import Data.Monoid (All(..))
 import Data.Ord (comparing)
 
 import XMonad
 import XMonad.Actions.CopyWindow
 import XMonad.Actions.CycleWS
+import XMonad.Actions.DynamicWorkspaces
 import XMonad.Actions.PhysicalScreens
 import XMonad.Actions.Volume
 -- import XMonad.Config.Desktop
@@ -51,7 +53,7 @@ main = do
           , modMask = myModMask
           , layoutHook = myLayouts
           , manageHook = myManageHook <+> manageDocks <+> manageHook def
-          , handleEventHook = docksEventHook <+> handleEventHook def
+          , handleEventHook = myEventHook <+> docksEventHook <+> handleEventHook def
           , startupHook = docksStartupHook <+> startupHook def
           , workspaces = myWorkspaces
           , logHook = myLoghook h
@@ -74,9 +76,11 @@ myTopBarTheme = def
     , decoHeight            = 20
     }
 
-myWorkspaces = map show [1..10 :: Int] ++ ["VM"]
+myWorkspaces = map show [1..10 :: Int]
 
-myLayouts = onWorkspace "VM" (noBorders Full)
+myVMWorkspace = "VM"
+
+myLayouts = onWorkspace myVMWorkspace (noBorders Full)
   $ tall ||| single ||| full
   where
     addTopBar = noFrillsDeco shrinkText myTopBarTheme
@@ -158,6 +162,16 @@ myManageHook = composeOne
   , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
   , isDialog              -?> doCenterFloat
   ]
+
+myEventHook (DestroyWindowEvent { ev_window = w, ev_event = e })
+  -- remove the VM workspace after the VM is closed
+  -- there will be two destroy events and we only need one, so match
+  -- when the window id == event id (vs the parent's id)
+  | w == e = do
+      removeEmptyWorkspaceByTag myVMWorkspace
+      return (All True)
+  | otherwise = return (All True)
+myEventHook _ = return (All True)
 
 -- themes
 myFont = "xft:DejaVu Sans:size=11:autohint=false"
@@ -269,7 +283,7 @@ myScreenCap = "screencap -s" --external script
 myWindowCap = "screencap -w" --external script
 myScreenLock = "screenlock" --external script
 
-showVBox = windows $ W.view "VM"
+showVBox = windows $ W.view myVMWorkspace
 
 showKeybindings :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 showKeybindings x = addName "Show Keybindings" $ io $ do
@@ -338,7 +352,7 @@ myKeys c =
   , ("M-C-t", addName "launch terminal" $ spawn myTerm)
   , ("M-C-q", addName "launch calc" $ spawn myCalc)
   , ("M-C-f", addName "launch file manager" $ spawn myFileManager)
-  , ("M-C-v", addName "launch windows VM" $ spawn myVBox >> showVBox)
+  , ("M-C-v", addName "launch windows VM" $ spawn myVBox >> appendWorkspace myVMWorkspace)
   ] ++
 
   mkNamedSubmap c "Multimedia"
