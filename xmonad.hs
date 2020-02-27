@@ -27,11 +27,15 @@ import XMonad.Hooks.ManageDocks
 -- import XMonad.Layout.IndependentScreens
 import XMonad.Hooks.ManageHelpers
 -- import XMonad.Layout.BinarySpacePartition (emptyBSP)
+-- import XMonad.Layout.DragPane
+-- import XMonad.Layout.IM
+-- import XMonad.Layout.LayoutCombinators hiding ((|||))
 import XMonad.Layout.Named
 import XMonad.Layout.NoBorders
 import XMonad.Layout.NoFrillsDecoration
 import XMonad.Layout.PerWorkspace
--- import XMonad.Layout.ResizableTile (ResizableTall(..))
+-- import XMonad.Layout.ResizableTile
+import XMonad.Layout.Tabbed
 -- import XMonad.Layout.ToggleLayouts (ToggleLayout(..), toggleLayouts)
 import XMonad.Prompt
 import XMonad.Prompt.ConfirmPrompt
@@ -40,6 +44,7 @@ import XMonad.Prompt.ConfirmPrompt
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedActions
 import XMonad.Util.Run
+import XMonad.Util.WindowProperties
 
 import qualified XMonad.StackSet as W
 
@@ -76,11 +81,23 @@ myTopBarTheme = def
     , decoHeight            = 20
     }
 
+myTabbedTheme = def
+   { fontName = myFont
+   , activeColor = "#d6d6d6"
+   , activeTextColor = "black"
+   , activeBorderColor = "#d6d6d6"
+   , inactiveColor = "#999999"
+   , inactiveTextColor = "#333333"
+   , inactiveBorderColor = "#999999"
+   }
+
 myWorkspaces = map show [1..10 :: Int]
 
 myVMWorkspace = "VM"
+myGimpWorkspace = "GIMP"
 
 myLayouts = onWorkspace myVMWorkspace (noBorders Full)
+  -- $ onWorkspace myGimpWorkspace gimpLayout
   $ tall ||| single ||| full
   where
     addTopBar = noFrillsDeco shrinkText myTopBarTheme
@@ -89,14 +106,19 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
       $ addTopBar
       $ noBorders
       $ Tall 1 0.03 0.5
-    single = named "Single"
-      $ addTopBar
+    single = named "Tabbed"
+      -- $ addTopBar
       $ avoidStruts
       $ noBorders
-      $ Full
+      $ tabbed shrinkText myTabbedTheme
     full = named "Full"
       $ noBorders
       $ Full
+    -- gimpLayout = named "Gimp Layout"
+    --   $ avoidStruts
+    --   $ (tabbedAlways shrinkText defaultTheme) ****||* Full
+    --   -- $ withIM (11/64) (Or (Title "Toolbox") (Title "Tool Options"))
+    --   -- $ (tabbedAlways shrinkText defaultTheme)
 
 -- | Format workspace and layout in loghook
 -- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
