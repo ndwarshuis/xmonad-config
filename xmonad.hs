@@ -292,8 +292,10 @@ myClipboard = _myRofi ++ " -modi \"clipboard:greenclip print\" \
 myNetSel = "networkmanager_dmenu -m -4"
 myWinSel = _myRofi ++ " -show window"
 myDevSel = "rofi-udisks"
-myScreenCap = "screencap -s" --external script
-myWindowCap = "screencap -w" --external script
+-- TODO this will steal focus from the current window (and puts it
+-- in the root window?) ...need to fix
+myScreenCap = "flameshot gui" --external script
+-- myWindowCap = "screencap -w" --external script
 myScreenLock = "screenlock" --external script
 
 showVBox = windows $ W.view myVMWorkspace
@@ -351,8 +353,8 @@ myKeys c =
   mkNamedSubmap c "Actions"
   [ ("M-q", addName "close window" kill1)
   , ("M-r", addName "run program" $ spawn myRun)
-  , ("M-C-s", addName "capture screen" $ spawn myScreenCap)
-  , ("M-C-S-s", addName "capture focused window" $ spawn myWindowCap)
+  , ("M-C-s", addName "capture screen area" $ spawn myScreenCap)
+  -- , ("M-C-S-s", addName "capture focused window" $ spawn myWindowCap)
   , ("M-<Delete>", addName "lock screen" $ spawn myScreenLock)
   ] ++
 
