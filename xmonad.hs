@@ -11,7 +11,6 @@ import System.IO
 
 import Data.List (sortBy)
 import Data.Maybe (fromMaybe, isJust)
-import Data.Monoid (All(..))
 import Data.Ord (comparing)
 
 import XMonad
@@ -44,7 +43,7 @@ import XMonad.Prompt.ConfirmPrompt
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedActions
 import XMonad.Util.Run
-import XMonad.Util.WindowProperties
+-- import XMonad.Util.WindowProperties
 
 import qualified XMonad.StackSet as W
 
@@ -58,7 +57,7 @@ main = do
           , modMask = myModMask
           , layoutHook = myLayouts
           , manageHook = myManageHook <+> manageDocks <+> manageHook def
-          , handleEventHook = myEventHook <+> docksEventHook <+> handleEventHook def
+          , handleEventHook = docksEventHook <+> handleEventHook def
           , startupHook = docksStartupHook <+> startupHook def
           , workspaces = myWorkspaces
           , logHook = myLoghook h
@@ -172,7 +171,8 @@ myManageHook = composeOne
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
   -- all of GIMP
-  , className =? "Gimp-2.10" -?> doFloat
+  , className =? "Gimp" -?> doFloat
+  -- , title =? "GIMP Startup" -?> doIgnore
   -- plots and graphics created by R
   , className =? "R_x11" -?> doFloat
   , className =? "mpv"    -?> doFloat
@@ -184,16 +184,6 @@ myManageHook = composeOne
   , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
   , isDialog              -?> doCenterFloat
   ]
-
-myEventHook (DestroyWindowEvent { ev_window = w, ev_event = e })
-  -- remove the VM workspace after the VM is closed
-  -- there will be two destroy events and we only need one, so match
-  -- when the window id == event id (vs the parent's id)
-  | w == e = do
-      removeEmptyWorkspaceByTag myVMWorkspace
-      return (All True)
-  | otherwise = return (All True)
-myEventHook _ = return (All True)
 
 -- themes
 myFont = "xft:DejaVu Sans:size=11:autohint=false"
@@ -345,6 +335,7 @@ myKeys c =
       , ("M-S-", "move client to workspace", W.shift)]
   ] ++
   [ ("M-v", addName "switch to VM workspace" showVBox)
+  , ("M-M1-g", addName "switch to Gimp workspace" $ windows $ W.view myGimpWorkspace)
   ]) ++
 
   mkNamedSubmap c "Screens"
@@ -374,7 +365,8 @@ myKeys c =
   , ("M-C-t", addName "launch terminal" $ spawn myTerm)
   , ("M-C-q", addName "launch calc" $ spawn myCalc)
   , ("M-C-f", addName "launch file manager" $ spawn myFileManager)
-  , ("M-C-v", addName "launch windows VM" $ spawn myVBox >> appendWorkspace myVMWorkspace)
+  , ("M-C-v", addName "launch windows VM" $ spawn myVBox  >> appendWorkspace myVMWorkspace)
+  , ("M-C-g", addName "launch GIMP" $ spawn "gimp" >> appendWorkspace myGimpWorkspace)
   ] ++
 
   mkNamedSubmap c "Multimedia"
