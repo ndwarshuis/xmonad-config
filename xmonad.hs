@@ -291,6 +291,7 @@ myClipboard = _myRofi ++ " -modi \"clipboard:greenclip print\" \
               \{ background-color: #00c44e; }'"
 myNetSel = "networkmanager_dmenu -m -4"
 myWinSel = _myRofi ++ " -show window"
+myDevSel = "rofi-udisks"
 myScreenCap = "screencap -s" --external script
 myWindowCap = "screencap -w" --external script
 myScreenLock = "screenlock" --external script
@@ -360,6 +361,7 @@ myKeys c =
   , ("M-g", addName "launch clipboard manager" $ spawn myClipboard )
   , ("M-a", addName "launch network selector" $ spawn myNetSel )
   , ("M-w", addName "launch window selector" $ spawn myWinSel )
+  , ("M-u", addName "launch device selector" $ spawn myDevSel )
   , ("M-C-e", addName "launch editor" $ spawn myEditor)
   , ("M-C-w", addName "launch browser" $ spawn myBrowser)
   , ("M-C-t", addName "launch terminal" $ spawn myTerm)
