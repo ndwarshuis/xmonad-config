@@ -110,7 +110,7 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
       -- $ addTopBar
       $ avoidStruts
       $ noBorders
-      $ tabbed shrinkText myTabbedTheme
+      $ tabbedAlways shrinkText myTabbedTheme
     full = named "Full"
       $ noBorders
       $ Full
