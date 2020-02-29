@@ -291,7 +291,7 @@ myClipboard = _myRofi ++ " -modi \"clipboard:greenclip print\" \
               \{ background-color: #00c44e; }'"
 myNetSel = "networkmanager_dmenu -m -4"
 myWinSel = _myRofi ++ " -show window"
-myDevSel = "rofi-udisks"
+myDevSel = "rofi-devices"
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
 myScreenCap = "flameshot gui" --external script
