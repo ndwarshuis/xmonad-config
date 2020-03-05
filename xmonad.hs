@@ -170,6 +170,10 @@ myManageHook = composeOne
   [ className =? "VirtualBoxVM" -?> doShift "VM"
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
+  -- gnucash
+  , (className =? "Gnucash" <&&> title =? "Transaction Import Assistant") -?> doFloat
+  -- xsane
+  , className =? "Xsane" -?> doFloat
   -- all of GIMP
   , className =? "Gimp" -?> doFloat
   -- , title =? "GIMP Startup" -?> doIgnore
