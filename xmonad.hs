@@ -9,9 +9,15 @@ module Main (main) where
 import System.Exit
 import System.IO
 
+import Data.Char
 import Data.List (sortBy)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Ord (comparing)
+import Data.Monoid (All(..))
+
+import Graphics.X11.Xlib.Atom
+import Graphics.X11.Xlib.Extras
+import Graphics.X11.Types
 
 import XMonad
 import XMonad.Actions.CopyWindow
@@ -57,7 +63,7 @@ main = do
           , modMask = myModMask
           , layoutHook = myLayouts
           , manageHook = myManageHook <+> manageDocks <+> manageHook def
-          , handleEventHook = docksEventHook <+> handleEventHook def
+          , handleEventHook = myEventHook <+> docksEventHook <+> handleEventHook def
           , startupHook = docksStartupHook <+> startupHook def
           , workspaces = myWorkspaces
           , logHook = myLoghook h
@@ -189,6 +195,31 @@ myManageHook = composeOne
   , isDialog              -?> doCenterFloat
   ]
 
+-- This is a giant hack to "listen" for applications that close. Some
+-- apps like Virtualbox go on their own workspace which is dynamically
+-- created. But I want said workspace to disappear when the app
+-- closes. This is actually hard. We can't just listen to
+-- DestroyWindow events as VBox will "destroy" windows when it
+-- switches to fullscreen and back. We also can't just monitor the
+-- process from the window since WindowDestroy events don't have PIDs
+-- attached to them. Therefore, the hack to make this all work is to
+-- make a script fire when VirtualBox (and other apps that I want to
+-- control in this manner) close. This script fires a bogus
+-- ClientMessage event to the root window. This event will have a
+-- BITMAP atom (which should do nothing) and a "magic string" in the
+-- data field that can be intercepted here. When this event is
+-- registered here, close the dynamic workspaces that are empty.
+myEventHook (ClientMessageEvent { ev_message_type = t, ev_data = d })
+  | t == bITMAP && magicstring == data2string d = do
+    mapM_ removeEmptyWorkspaceByTag [myVMWorkspace, myGimpWorkspace]
+    return (All True)
+  | otherwise = return (All True)
+    where
+      magicstring = "xxxxxxxxxxxxxxxxxxxx"
+      data2string = map (chr . fromInteger . toInteger)
+myEventHook _ = do
+  return (All True)
+
 -- themes
 myFont = "xft:DejaVu Sans:size=11:autohint=false"
 
@@ -283,7 +314,7 @@ myModMask = mod4Mask
 _myRofi = "rofi -m -4" -- show rofi always with the focused window
 myTerm = "urxvt"
 myBrowser = "brave"
-myVBox = "VBoxManage startvm win8raw"
+myVBox = "vbox-start win8raw"
 myEditor = "emacsclient -c -e \"(select-frame-set-input-focus (selected-frame))\""
 myCalc = "urxvt -e R"
 myFileManager = "pcmanfm"
