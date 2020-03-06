@@ -12,8 +12,8 @@ import System.IO
 import Data.Char
 import Data.List (sortBy)
 import Data.Maybe (fromMaybe, isJust)
-import Data.Ord (comparing)
 import Data.Monoid (All(..))
+import Data.Ord (comparing)
 
 import Graphics.X11.Xlib.Atom
 import Graphics.X11.Xlib.Extras
@@ -210,13 +210,18 @@ myManageHook = composeOne
 -- data field that can be intercepted here. When this event is
 -- registered here, close the dynamic workspaces that are empty.
 myEventHook (ClientMessageEvent { ev_message_type = t, ev_data = d })
-  | t == bITMAP && magicstring == data2string d = do
-    mapM_ removeEmptyWorkspaceByTag [myVMWorkspace, myGimpWorkspace]
+  | t == bITMAP = do
+    let (magic, tag) = splitAt 5 $ map (chr . fromInteger . toInteger) d
+    io $ putStrLn magic
+    if magic == magicString then do 
+      let tag' = filter isAlphaNum tag
+      io $ putStrLn (show tag')
+      -- TODO this actually won't remove an empty workspace if
+      -- there are the same number of active workspaces as screens
+      removeEmptyWorkspaceByTag tag'
+    else return ()
     return (All True)
   | otherwise = return (All True)
-    where
-      magicstring = "xxxxxxxxxxxxxxxxxxxx"
-      data2string = map (chr . fromInteger . toInteger)
 myEventHook _ = do
   return (All True)
 
@@ -314,7 +319,6 @@ myModMask = mod4Mask
 _myRofi = "rofi -m -4" -- show rofi always with the focused window
 myTerm = "urxvt"
 myBrowser = "brave"
-myVBox = "vbox-start win8raw"
 myEditor = "emacsclient -c -e \"(select-frame-set-input-focus (selected-frame))\""
 myCalc = "urxvt -e R"
 myFileManager = "pcmanfm"
@@ -332,6 +336,14 @@ myDevSel = "rofi-devices"
 myScreenCap = "flameshot gui" --external script
 -- myWindowCap = "screencap -w" --external script
 myScreenLock = "screenlock" --external script
+
+removeWorkspaceOnExit cmd ws =
+  unwords [cmd, "&&", "xit-event", magicString, ws]
+
+magicString = "%%%%%"
+
+myVBox = removeWorkspaceOnExit "vbox-start win8raw" myVMWorkspace
+myGimp = removeWorkspaceOnExit "gimp" myGimpWorkspace
 
 showVBox = windows $ W.view myVMWorkspace
 
@@ -405,7 +417,7 @@ myKeys c =
   , ("M-C-q", addName "launch calc" $ spawn myCalc)
   , ("M-C-f", addName "launch file manager" $ spawn myFileManager)
   , ("M-C-v", addName "launch windows VM" $ spawn myVBox  >> appendWorkspace myVMWorkspace)
-  , ("M-C-g", addName "launch GIMP" $ spawn "gimp" >> appendWorkspace myGimpWorkspace)
+  , ("M-C-g", addName "launch GIMP" $ spawn myGimp >> appendWorkspace myGimpWorkspace)
   ] ++
 
   mkNamedSubmap c "Multimedia"
