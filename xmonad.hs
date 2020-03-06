@@ -1,11 +1,5 @@
---------------------------------------------------------------------------------
--- | Example.hs
---
--- Example configuration file for xmonad using the latest recommended
--- features (e.g., 'desktopConfig').
 module Main (main) where
 
---------------------------------------------------------------------------------
 import System.Exit
 import System.IO
 
@@ -53,7 +47,6 @@ import XMonad.Util.Run
 
 import qualified XMonad.StackSet as W
 
---------------------------------------------------------------------------------
 main = do
   h <- spawnPipe "xmobar"
   xmonad
@@ -70,8 +63,6 @@ main = do
           , clickJustFocuses = False
           , focusFollowsMouse = False
           }
-
---------------------------------------------------------------------------------
 
 myTopBarTheme = def
     { fontName              = myFont
@@ -158,16 +149,6 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
       where
         (_, (Rectangle x0 _ _ _)) = getScreenIdAndRectangle s0
         (_, (Rectangle x1 _ _ _)) = getScreenIdAndRectangle s1
-
---------------------------------------------------------------------------------
--- | Customize the way 'XMonad.Prompt' looks and behaves.  It's a
--- great replacement for dzen.
--- myXPConfig = def
---   { position          = Top
---   , alwaysHighlight   = True
---   , promptBorderWidth = 0
---   , font              = "xft:monospace:size=9"
---   }
 
 myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
