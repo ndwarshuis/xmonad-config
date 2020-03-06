@@ -1,13 +1,14 @@
 module Main (main) where
 
+import Control.Monad (when, void)
+
 import System.Exit
 import System.IO
 
 import Data.Char
-import Data.List (sortBy)
+import Data.List (sortBy, sortOn)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Monoid (All(..))
-import Data.Ord (comparing)
 
 import Graphics.X11.Xlib.Atom
 import Graphics.X11.Xlib.Extras
@@ -108,8 +109,7 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
       $ noBorders
       $ tabbedAlways shrinkText myTabbedTheme
     full = named "Full"
-      $ noBorders
-      $ Full
+      $ noBorders Full
     -- gimpLayout = named "Gimp Layout"
     --   $ avoidStruts
     --   $ (tabbedAlways shrinkText defaultTheme) ****||* Full
@@ -141,14 +141,14 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
     offscreen = unwords
       $ map W.tag
       . filter (isJust . W.stack)
-      . sortBy (comparing W.tag)
+      . sortOn W.tag
       $ W.hidden ws
     visColor = "#8fc7ff"
     layout = description . W.layout . W.workspace . W.current $ ws
     compareXCoord s0 s1 = compare x0 x1
       where
-        (_, (Rectangle x0 _ _ _)) = getScreenIdAndRectangle s0
-        (_, (Rectangle x1 _ _ _)) = getScreenIdAndRectangle s1
+        (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
+        (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
 
 myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
@@ -190,21 +190,30 @@ myManageHook = composeOne
 -- BITMAP atom (which should do nothing) and a "magic string" in the
 -- data field that can be intercepted here. When this event is
 -- registered here, close the dynamic workspaces that are empty.
-myEventHook (ClientMessageEvent { ev_message_type = t, ev_data = d })
+myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (magic, tag) = splitAt 5 $ map (chr . fromInteger . toInteger) d
     io $ putStrLn magic
-    if magic == magicString then do 
+    when (magic == magicString) $ do
       let tag' = filter isAlphaNum tag
-      io $ putStrLn (show tag')
-      -- TODO this actually won't remove an empty workspace if
-      -- there are the same number of active workspaces as screens
-      removeEmptyWorkspaceByTag tag'
-    else return ()
+      removeEmptyWorkspaceByTag' tag'
+      -- let onscreen = (\w -> W.current w : W.visible w) W.workspaces windows
+      -- io $ putStrLn (show tag')
+      -- -- TODO this actually won't remove an empty workspace if
+      -- -- there are the same number of active workspaces as screens
+      -- removeEmptyWorkspaceByTag tag'
     return (All True)
   | otherwise = return (All True)
-myEventHook _ = do
-  return (All True)
+myEventHook _ = return (All True)
+
+removeEmptyWorkspaceByTag' tag = do
+  -- TODO this function works by first hiding the workspace to be
+  -- removed and then removing it. This won't work if there are no
+  -- other hidden workspaces to take it's place. So, need to scan
+  -- through the list of workspaces and swap the first one that is
+  -- empty with the workspace to be removed. If it actually is empty,
+  -- this will be enough to make it disappear.
+  removeEmptyWorkspaceByTag tag
 
 -- themes
 myFont = "xft:DejaVu Sans:size=11:autohint=false"
@@ -267,7 +276,7 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
   $ fromMaybe (return ())
   . (`lookup` commands)
   where
-    comps = (mkComplFunFromList' (map fst commands))
+    comps = mkComplFunFromList' (map fst commands)
     conf = myPromptTheme
     commands =
       [ ("poweroff", spawn "systemctl poweroff")
@@ -406,9 +415,9 @@ myKeys c =
   , ("<XF86AudioPrev>", addName "previous track" $ spawn "playerctl previous")
   , ("<XF86AudioNext>", addName "next track" $ spawn "playerctl next")
   , ("<XF86AudioStop>", addName "stop" $ spawn "playerctl stop")
-  , ("<XF86AudioLowerVolume>", addName "volume down" $ lowerVolume 2 >> return ())
-  , ("<XF86AudioRaiseVolume>", addName "volume up" $ raiseVolume 2 >> return ())
-  , ("<XF86AudioMute>", addName "volume mute" $ toggleMute >> return ())
+  , ("<XF86AudioLowerVolume>", addName "volume down" $ void (lowerVolume 2))
+  , ("<XF86AudioRaiseVolume>", addName "volume up" $ void (raiseVolume 2))
+  , ("<XF86AudioMute>", addName "volume mute" $ void toggleMute)
   , ("M-C-b", addName "toggle bluetooth" $ spawn "togglebt")
   ] ++
 
@@ -421,6 +430,5 @@ myKeys c =
   , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; xmonad --recompile && xmonad --restart")
   , ("M-<End>", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" $
-      confirmPrompt myPromptTheme "Quit XMonad?" $
-      io (exitWith ExitSuccess))
+      confirmPrompt myPromptTheme "Quit XMonad?" $ io exitSuccess)
   ]
