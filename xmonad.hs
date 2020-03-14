@@ -204,7 +204,6 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
     if | magic == magicString -> removeEmptyWorkspaceByTag' tag
        | magic == acpiMagic -> do
          let acpiTag = readMaybe tag :: Maybe ACPIEvent
-         io $ print acpiTag
          forM_ acpiTag $ \case
            Power -> myPowerPrompt
            Sleep -> confirmPrompt myPromptTheme "suspend?" runSuspend
