@@ -1,11 +1,16 @@
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE LambdaCase #-}
+
 module Main (main) where
 
-import Control.Monad (when, void)
+import ACPI
+import SendXMsg
+
+import Control.Monad (forM_, void, when)
 
 import System.Exit
 import System.IO
 
-import Data.Char
 import Data.List (sortBy, sortOn)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Monoid (All(..))
@@ -13,6 +18,8 @@ import Data.Monoid (All(..))
 import Graphics.X11.Xlib.Atom
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Types
+
+import Text.Read (readMaybe)
 
 import XMonad
 import XMonad.Actions.CopyWindow
@@ -50,6 +57,7 @@ import qualified XMonad.StackSet as W
 
 main = do
   h <- spawnPipe "xmobar"
+  -- spawn "powermon"
   xmonad
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) myKeys
@@ -192,16 +200,18 @@ myManageHook = composeOne
 -- registered here, close the dynamic workspaces that are empty.
 myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
-    let (magic, tag) = splitAt 5 $ map (chr . fromInteger . toInteger) d
-    io $ putStrLn magic
-    when (magic == magicString) $ do
-      let tag' = filter isAlphaNum tag
-      removeEmptyWorkspaceByTag' tag'
-      -- let onscreen = (\w -> W.current w : W.visible w) W.workspaces windows
-      -- io $ putStrLn (show tag')
-      -- -- TODO this actually won't remove an empty workspace if
-      -- -- there are the same number of active workspaces as screens
-      -- removeEmptyWorkspaceByTag tag'
+    let (magic, tag) = splitXMsg d
+    if | magic == magicString -> removeEmptyWorkspaceByTag' tag
+       | magic == acpiMagic -> do
+         let acpiTag = readMaybe tag :: Maybe ACPIEvent
+         io $ print acpiTag
+         forM_ acpiTag $ \case
+           Power -> myPowerPrompt
+           Sleep -> confirmPrompt myPromptTheme "suspend?" runSuspend
+           LidClose -> do
+             status <- io isDischarging
+             forM_ status $ \s -> runScreenLock >> when s runSuspend
+       | otherwise -> return ()
     return (All True)
   | otherwise = return (All True)
 myEventHook _ = return (All True)
@@ -272,6 +282,12 @@ data PowerPrompt = PowerPrompt
 instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "Select Option: "
 
+runScreenLock = spawn myScreenLock
+runPowerOff = spawn "systemctl poweroff"
+runSuspend = spawn "systemctl suspend"
+runHibernate = spawn "systemctl hibernate"
+runReboot = spawn "systemctl reboot"
+
 myPowerPrompt = mkXPrompt PowerPrompt conf comps
   $ fromMaybe (return ())
   . (`lookup` commands)
@@ -279,10 +295,10 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
     comps = mkComplFunFromList' (map fst commands)
     conf = myPromptTheme
     commands =
-      [ ("poweroff", spawn "systemctl poweroff")
-      , ("suspend", spawn myScreenLock >> spawn "systemctl suspend")
-      , ("hibernate", spawn myScreenLock >> spawn "systemctl hibernate")
-      , ("reboot", spawn "systemctl reboot")
+      [ ("poweroff", runPowerOff)
+      , ("suspend", runScreenLock >> runSuspend)
+      , ("hibernate", runScreenLock >> runHibernate)
+      , ("reboot", runReboot)
       ]
 
 -- osd
@@ -426,8 +442,8 @@ myKeys c =
   , ("M-,", addName "backlight down" $ spawn "adj_backlight down")
   , ("M-M1-,", addName "backlight min" $ spawn "adj_backlight min")
   , ("M-M1-.", addName "backlight max" $ spawn "adj_backlight max")
-  , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; xmonad --restart")
-  , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; xmonad --recompile && xmonad --restart")
+  , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; killall powermon; xmonad --restart")
+  , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; killall powermon; xmonad --recompile && xmonad --restart")
   , ("M-<End>", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" $
       confirmPrompt myPromptTheme "Quit XMonad?" $ io exitSuccess)
