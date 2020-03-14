@@ -57,7 +57,7 @@ import qualified XMonad.StackSet as W
 
 main = do
   h <- spawnPipe "xmobar"
-  -- spawn "powermon"
+  spawn "powermon"
   xmonad
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) myKeys
