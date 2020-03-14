@@ -201,7 +201,7 @@ myManageHook = composeOne
 myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (magic, tag) = splitXMsg d
-    if | magic == magicString -> removeEmptyWorkspaceByTag' tag
+    if | magic == magicStringWS -> removeEmptyWorkspaceByTag' tag
        | magic == acpiMagic -> do
          let acpiTag = readMaybe tag :: Maybe ACPIEvent
          forM_ acpiTag $ \case
@@ -281,12 +281,22 @@ data PowerPrompt = PowerPrompt
 instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "Select Option: "
 
-runScreenLock = spawn myScreenLock
+runScreenLock :: X ()
+runScreenLock = spawn "screenlock"
+
+runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
+
+runSuspend :: X ()
 runSuspend = spawn "systemctl suspend"
+
+runHibernate :: X ()
 runHibernate = spawn "systemctl hibernate"
+
+runReboot :: X ()
 runReboot = spawn "systemctl reboot"
 
+myPowerPrompt :: X ()
 myPowerPrompt = mkXPrompt PowerPrompt conf comps
   $ fromMaybe (return ())
   . (`lookup` commands)
@@ -300,57 +310,152 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
       , ("reboot", runReboot)
       ]
 
--- osd
+myQuitPrompt :: X ()
+myQuitPrompt = confirmPrompt myPromptTheme "quit?" $ io exitSuccess
 
--- getOffset :: X Int
--- getOffset = withWindowSet $
---   \W.StackSet { W.current = W.Screen { W.screenDetail = SD { screenRect = Rectangle {rect_x=x}}}} -> return $
---   fromIntegral x
+-- shell commands
 
--- displayOsd osd msg = do
---   xpos <- getOffset
---   io $ set osd [HOffset xpos]
---   io $ Graphics.XOSD.display osd 0 msg
+formatCmd :: String -> [String] -> String
+formatCmd cmd args = unwords $ cmd : args
 
--- showVolume :: XOSD -> X ()
--- showVolume osd = do
---   volume <- io $ fmap round $ getVolumeChannels ["default"]
---   muted <- io $ getMute
---   displayOsd osd $ Percent $ if muted then 0 else volume
+spawnCmd :: String -> [String] -> X ()
+spawnCmd cmd args = spawn $ formatCmd cmd args
 
--- keybindings
-myModMask = mod4Mask
+(#!&&) :: String -> String -> String
+cmdA #!&& cmdB = cmdA ++ " && " ++ cmdB
 
-_myRofi = "rofi -m -4" -- show rofi always with the focused window
+infixr 0 #!&&
+
+magicStringWS :: String
+magicStringWS = "%%%%%"
+
+spawnCmdOwnWS :: String -> [String] -> String -> X ()
+spawnCmdOwnWS cmd args ws = spawn
+  $ formatCmd cmd args
+  #!&& formatCmd "xit-event" [magicStringWS, ws]
+
+spawnKill :: [String] -> X ()
+spawnKill cmds = spawn $ formatCmd "killall" cmds
+
+myTerm :: String
 myTerm = "urxvt"
-myBrowser = "brave"
-myEditor = "emacsclient -c -e \"(select-frame-set-input-focus (selected-frame))\""
-myCalc = "urxvt -e R"
-myFileManager = "pcmanfm"
-myRun = _myRofi ++ " -show run"
-myAppRun = _myRofi ++ " -show drun"
-myClipboard = _myRofi ++ " -modi \"clipboard:greenclip print\" \
-              \-show clipboard -run-command '{cmd}' \
-              \-theme-str '#element.selected.normal \
-              \{ background-color: #00c44e; }'"
-myNetSel = "networkmanager_dmenu -m -4"
-myWinSel = _myRofi ++ " -show window"
-myDevSel = "rofi-devices"
+
+runTerm :: X ()
+runTerm = spawn myTerm
+
+runCalc :: X ()
+runCalc = spawnCmd myTerm ["-e", "R"]
+
+myDmenuCmd :: String
+myDmenuCmd = "rofi"
+
+-- TODO this almost works except when a workspace with no windows is
+-- focuses. In this case, rofi considers the root window to be focused
+-- and will showup wherever the mouse pointer is. Need a way to get
+-- the focused workspace and translate that to a monitor number for
+-- rofi to consume
+myDmenuArgs :: [String]
+myDmenuArgs = ["-m", "-4"] -- show rofi with the focused window
+
+spawnDmenuCmd :: [String] -> X ()
+spawnDmenuCmd args = spawnCmd myDmenuCmd $ myDmenuArgs ++ args
+
+runCmdMenu :: X ()
+runCmdMenu = spawnDmenuCmd ["-show", "run"]
+
+runAppMenu :: X ()
+runAppMenu = spawnDmenuCmd ["-show", "drun"]
+
+runClipMenu :: X ()
+runClipMenu = spawnDmenuCmd 
+  [ "-modi", "\"clipboard:greenclip print\""
+  , "-show", "clipboard"
+  , "-run-command", "'{cmd}'"
+  , "-theme-str", "'#element.selected.normal { background-color: #00c44e; }'"
+  ]
+
+runWinMenu :: X ()
+runWinMenu = spawnDmenuCmd ["-show", "window"]
+
+runNetMenu :: X ()
+runNetMenu = spawnCmd "networkmanager_dmenu" myDmenuArgs
+
+runDevMenu :: X ()
+runDevMenu = spawn "rofi-devices"
+
+runBrowser :: X ()
+runBrowser = spawn "brave"
+
+runEditor :: X ()
+runEditor = spawnCmd "emacsclient"
+  ["-c", "-e", "(select-frame-set-input-focus (selected-frame))\""]
+
+runFileManager :: X ()
+runFileManager = spawn "pcmanfm"
+
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
-myScreenCap = "flameshot gui" --external script
+runScreenCap :: X ()
+runScreenCap = spawn "flameshot gui"
 -- myWindowCap = "screencap -w" --external script
-myScreenLock = "screenlock" --external script
 
-removeWorkspaceOnExit cmd ws =
-  unwords [cmd, "&&", "xit-event", magicString, ws]
+runVBox :: X ()
+runVBox = spawnCmdOwnWS "vbox-start win8raw" [] myVMWorkspace
 
-magicString = "%%%%%"
+runGimp :: X ()
+runGimp = spawnCmdOwnWS "gimp" [] myGimpWorkspace
 
-myVBox = removeWorkspaceOnExit "vbox-start win8raw" myVMWorkspace
-myGimp = removeWorkspaceOnExit "gimp" myGimpWorkspace
+runCleanup :: X ()
+runCleanup = spawnKill ["xmobar", "powermon"]
 
-showVBox = windows $ W.view myVMWorkspace
+runRestart :: X ()
+runRestart = spawnCmd "xmonad" ["--restart"]
+
+runRecompile :: X ()
+runRecompile = spawnCmd "xmonad" ["--recompile"]
+
+myMultimediaCtl :: String
+myMultimediaCtl = "playerctl"
+
+runTogglePlay :: X ()
+runTogglePlay = spawnCmd myMultimediaCtl ["play-pause"]
+
+runPrevTrack :: X ()
+runPrevTrack = spawnCmd myMultimediaCtl ["previous"]
+
+runNextTrack :: X ()
+runNextTrack = spawnCmd myMultimediaCtl ["next"]
+
+runStopPlay :: X ()
+runStopPlay = spawnCmd myMultimediaCtl ["stop"]
+
+runVolumeDown :: X ()
+runVolumeDown = void (lowerVolume 2)
+
+runVolumeUp :: X ()
+runVolumeUp = void (lowerVolume 2)
+
+runVolumeMute :: X ()
+runVolumeMute = void toggleMute
+
+runToggleBluetooth :: X ()
+runToggleBluetooth = spawn "togglebt"
+
+runIncBacklight :: X ()
+runIncBacklight = spawnCmd "adj_backlight" ["up"]
+
+runDecBacklight :: X ()
+runDecBacklight = spawnCmd "adj_backlight" ["down"]
+
+runMinBacklight :: X ()
+runMinBacklight = spawnCmd "adj_backlight" ["min"]
+
+runMaxBacklight :: X ()
+runMaxBacklight = spawnCmd "adj_backlight" ["max"]
+
+showWorkspace tag = windows $ W.view tag
+
+-- keybindings
 
 showKeybindings :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 showKeybindings x = addName "Show Keybindings" $ io $ do
@@ -359,11 +464,20 @@ showKeybindings x = addName "Show Keybindings" $ io $ do
     hClose h
     return ()
 
+myModMask :: KeyMask
+myModMask = mod4Mask
+
+mkNamedSubmap
+  :: XConfig l
+     -> String
+     -> [(String, NamedAction)]
+     -> [((KeyMask, KeySym), NamedAction)]
 mkNamedSubmap c sectionName bindings = 
   (subtitle sectionName:) $ mkNamedKeymap c bindings
 
 -- NOTE: the following bindings are used by dunst:
 -- "M-~", "M-<esc>", "M-S-<esc>", "M-S-."
+myKeys :: XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
 myKeys c =
   mkNamedSubmap c "Window Layouts"
   [ ("M-j", addName "focus down" $ windows W.focusDown)
@@ -372,6 +486,7 @@ myKeys c =
   , ("M-S-j", addName "swap down" $ windows W.swapDown)
   , ("M-S-k", addName "swap up" $ windows W.swapUp)
   , ("M-S-m", addName "swap master" $ windows W.swapMaster)
+  -- TODO this will decrement past 0?
   , ("M-C-j", addName "remove master window" $ sendMessage (IncMasterN (-1)))
   , ("M-C-k", addName "add master window" $ sendMessage (IncMasterN 1))
   , ("M-<Return>", addName "next layout" $ sendMessage NextLayout)
@@ -389,8 +504,8 @@ myKeys c =
       [ ("M-", "switch to workspace", W.view)
       , ("M-S-", "move client to workspace", W.shift)]
   ] ++
-  [ ("M-v", addName "switch to VM workspace" showVBox)
-  , ("M-M1-g", addName "switch to Gimp workspace" $ windows $ W.view myGimpWorkspace)
+  [ ("M-v", addName "switch to VM workspace" $ showWorkspace myVMWorkspace)
+  , ("M-M1-g", addName "switch to Gimp workspace" $ showWorkspace myGimpWorkspace)
   ]) ++
 
   mkNamedSubmap c "Screens"
@@ -404,46 +519,45 @@ myKeys c =
 
   mkNamedSubmap c "Actions"
   [ ("M-q", addName "close window" kill1)
-  , ("M-r", addName "run program" $ spawn myRun)
-  , ("M-C-s", addName "capture screen area" $ spawn myScreenCap)
+  , ("M-r", addName "run program" runCmdMenu)
+  , ("M-C-s", addName "capture screen area" runScreenCap)
   -- , ("M-C-S-s", addName "capture focused window" $ spawn myWindowCap)
-  , ("M-<Delete>", addName "lock screen" $ spawn myScreenLock)
+  , ("M-<Delete>", addName "lock screen" runScreenLock)
   ] ++
 
   mkNamedSubmap c "Launchers"
-  [ ("<XF86Search>", addName "select/launch app" $ spawn myAppRun )
-  , ("M-g", addName "launch clipboard manager" $ spawn myClipboard )
-  , ("M-a", addName "launch network selector" $ spawn myNetSel )
-  , ("M-w", addName "launch window selector" $ spawn myWinSel )
-  , ("M-u", addName "launch device selector" $ spawn myDevSel )
-  , ("M-C-e", addName "launch editor" $ spawn myEditor)
-  , ("M-C-w", addName "launch browser" $ spawn myBrowser)
-  , ("M-C-t", addName "launch terminal" $ spawn myTerm)
-  , ("M-C-q", addName "launch calc" $ spawn myCalc)
-  , ("M-C-f", addName "launch file manager" $ spawn myFileManager)
-  , ("M-C-v", addName "launch windows VM" $ spawn myVBox  >> appendWorkspace myVMWorkspace)
-  , ("M-C-g", addName "launch GIMP" $ spawn myGimp >> appendWorkspace myGimpWorkspace)
+  [ ("<XF86Search>", addName "select/launch app" runAppMenu)
+  , ("M-g", addName "launch clipboard manager" runClipMenu)
+  , ("M-a", addName "launch network selector" runNetMenu)
+  , ("M-w", addName "launch window selector" runWinMenu)
+  , ("M-u", addName "launch device selector" runDevMenu)
+  , ("M-C-e", addName "launch editor" runEditor)
+  , ("M-C-w", addName "launch browser" runBrowser)
+  , ("M-C-t", addName "launch terminal" runTerm)
+  , ("M-C-q", addName "launch calc" runCalc)
+  , ("M-C-f", addName "launch file manager" runFileManager)
+  , ("M-C-v", addName "launch windows VM" $ runVBox >> appendWorkspace myVMWorkspace)
+  , ("M-C-g", addName "launch GIMP" $ runGimp >> appendWorkspace myGimpWorkspace)
   ] ++
 
   mkNamedSubmap c "Multimedia"
-  [ ("<XF86AudioPlay>", addName "toggle play/pause" $ spawn "playerctl play-pause")
-  , ("<XF86AudioPrev>", addName "previous track" $ spawn "playerctl previous")
-  , ("<XF86AudioNext>", addName "next track" $ spawn "playerctl next")
-  , ("<XF86AudioStop>", addName "stop" $ spawn "playerctl stop")
-  , ("<XF86AudioLowerVolume>", addName "volume down" $ void (lowerVolume 2))
-  , ("<XF86AudioRaiseVolume>", addName "volume up" $ void (raiseVolume 2))
-  , ("<XF86AudioMute>", addName "volume mute" $ void toggleMute)
-  , ("M-C-b", addName "toggle bluetooth" $ spawn "togglebt")
+  [ ("<XF86AudioPlay>", addName "toggle play/pause" runTogglePlay)
+  , ("<XF86AudioPrev>", addName "previous track" runPrevTrack)
+  , ("<XF86AudioNext>", addName "next track" runNextTrack)
+  , ("<XF86AudioStop>", addName "stop" runStopPlay)
+  , ("<XF86AudioLowerVolume>", addName "volume down" runVolumeDown)
+  , ("<XF86AudioRaiseVolume>", addName "volume up" runVolumeUp)
+  , ("<XF86AudioMute>", addName "volume mute" runVolumeMute)
+  , ("M-C-b", addName "toggle bluetooth" runToggleBluetooth)
   ] ++
 
   mkNamedSubmap c "System"
-  [ ("M-.", addName "backlight up" $ spawn "adj_backlight up")
-  , ("M-,", addName "backlight down" $ spawn "adj_backlight down")
-  , ("M-M1-,", addName "backlight min" $ spawn "adj_backlight min")
-  , ("M-M1-.", addName "backlight max" $ spawn "adj_backlight max")
-  , ("M-<F2>", addName "restart xmonad" $ spawn "killall xmobar; killall powermon; xmonad --restart")
-  , ("M-S-<F2>", addName "recompile xmonad" $ spawn "killall xmobar; killall powermon; xmonad --recompile && xmonad --restart")
+  [ ("M-.", addName "backlight up" runIncBacklight)
+  , ("M-,", addName "backlight down" runDecBacklight)
+  , ("M-M1-,", addName "backlight min" runMaxBacklight)
+  , ("M-M1-.", addName "backlight max" runMinBacklight)
+  , ("M-<F2>", addName "restart xmonad" $ runCleanup >> runRestart)
+  , ("M-S-<F2>", addName "recompile xmonad" $ runCleanup >> runRecompile)
   , ("M-<End>", addName "power menu" myPowerPrompt)
-  , ("M-<Home>", addName "quit xmonad" $
-      confirmPrompt myPromptTheme "Quit XMonad?" $ io exitSuccess)
+  , ("M-<Home>", addName "quit xmonad" myQuitPrompt)
   ]
