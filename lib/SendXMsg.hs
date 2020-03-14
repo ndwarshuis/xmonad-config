@@ -25,10 +25,17 @@ sendXMsg magic tag = do
   flush dpy
   where
     m = str2digit magic
-    t = str2digit tag
+    t = str2digit $ tag ++ [garbageDelim]
+
+-- WORKAROUND: setClientMessageEvent seems to put garbage on the end
+-- of the data field (which is probably some yucky c problem I don't
+-- understand). Easy solution, put something at the end of the tag to
+-- separate the tag from the garbage
+garbageDelim :: Char
+garbageDelim = '~'
 
 splitXMsg :: (Integral a) => [a] -> (String, String)
-splitXMsg s = (magic, filter isAlphaNum tag)
+splitXMsg s = (magic, filter isAlphaNum . takeWhile (/= garbageDelim) $ tag)
   where
     (magic, tag) = splitAt 5 $ map (chr . fromInteger . toInteger) s
 
