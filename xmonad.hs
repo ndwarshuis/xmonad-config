@@ -455,6 +455,12 @@ runMaxBacklight = spawnCmd "adj_backlight" ["max"]
 
 showWorkspace tag = windows $ W.view tag
 
+enableDPMS :: X ()
+enableDPMS = spawnCmd "xset" ["s", "on", "+dpms"]
+
+disableDPMS :: X ()
+disableDPMS = spawnCmd "xset" ["s", "off", "-dpms"]
+
 -- keybindings
 
 showKeybindings :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
@@ -563,6 +569,8 @@ myKeys c =
   , ("M-,", addName "backlight down" runDecBacklight)
   , ("M-M1-,", addName "backlight min" runMaxBacklight)
   , ("M-M1-.", addName "backlight max" runMinBacklight)
+  , ("M-M1-=", addName "enable screensaver" enableDPMS)
+  , ("M-M1--", addName "disable screensaver" disableDPMS)
   , ("M-<F2>", addName "restart xmonad" $ runCleanup >> runRestart)
   , ("M-S-<F2>", addName "recompile xmonad" $ runCleanup >> runRecompile)
   , ("M-<End>", addName "power menu" myPowerPrompt)
