@@ -459,10 +459,17 @@ showWorkspace tag = windows $ W.view tag
 
 showKeybindings :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 showKeybindings x = addName "Show Keybindings" $ io $ do
-    h <- spawnPipe "zenity --text-info --font=DejaVu Sans"
+    h <- spawnPipe cmd
     hPutStr h (unlines $ showKm x)
     hClose h
     return ()
+  where cmd = formatCmd myDmenuCmd $ myDmenuArgs ++
+          [ "-dmenu"
+          , "-p"
+          , "commands"
+          , "-theme-str"
+          , "'#element.selected.normal { background-color: #a200ff; }'"
+          ]
 
 myModMask :: KeyMask
 myModMask = mod4Mask
