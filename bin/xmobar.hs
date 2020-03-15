@@ -1,3 +1,5 @@
+import Xmobar.Screensaver
+
 import Xmobar
 import XMonad (getXMonadDir)
 
@@ -23,7 +25,8 @@ myTemplate :: String
 myTemplate = concat
   [ "%UnsafeStdinReader%"
   , " }{ "
-  , "%wlp0s20f3wi%"
+  , "%screensaver%"
+  , sep, "%wlp0s20f3wi%"
   , sep, "%alsa:default:Master%"
   , sep, "%battery%"
   , sep, "%bright%"
@@ -103,6 +106,8 @@ config confDir = defaultConfig {
         ]
 
       , Run $ Date "%Y-%m-%d %H:%M" "date" 10
+
+      , Run $ Screensaver ("<fn=1>\xf108</fn>", fgColor0, fgColor1) 10
 
       , Run UnsafeStdinReader
       ]
