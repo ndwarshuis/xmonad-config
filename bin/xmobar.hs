@@ -1,5 +1,7 @@
 import Xmobar.Screensaver
 
+import Data.List
+
 import Xmobar
 import XMonad (getXMonadDir)
 
@@ -22,17 +24,21 @@ sep :: String
 sep = wrapColor fgColor1 " : "
 
 myTemplate :: String
-myTemplate = concat
-  [ "%UnsafeStdinReader%"
-  , " }{ "
-  , "%screensaver%"
-  , sep, "%wlp0s20f3wi%"
-  , sep, "%alsa:default:Master%"
-  , sep, "%battery%"
-  , sep, "%bright%"
-  , sep, "%locks%"
-  , sep, "%date% "
-  ] 
+myTemplate = formatTemplate left right
+  where
+    formatTemplate l r = intercalate sep l
+      ++ " }{ "
+      ++ intercalate sep r
+      ++ " "
+    left = [ "%UnsafeStdinReader%" ]
+    right = [ "%wlp0s20f3wi%"
+            , "%alsa:default:Master%"
+            , "%battery%"
+            , "%bright%"
+            , "%screensaver%"
+            , "%locks%"
+            , "%date%"
+            ]
 
 config :: String -> Config
 config confDir = defaultConfig { 
@@ -107,7 +113,7 @@ config confDir = defaultConfig {
 
       , Run $ Date "%Y-%m-%d %H:%M" "date" 10
 
-      , Run $ Screensaver ("<fn=1>\xf108</fn>", fgColor0, fgColor1) 10
+      , Run $ Screensaver ("<fn=1>\xf254</fn>", fgColor0, fgColor1) 10
 
       , Run UnsafeStdinReader
       ]
