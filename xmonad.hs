@@ -605,8 +605,8 @@ myKeys hs c =
   mkNamedSubmap c "System"
   [ ("M-.", addName "backlight up" runIncBacklight)
   , ("M-,", addName "backlight down" runDecBacklight)
-  , ("M-M1-,", addName "backlight min" runMaxBacklight)
-  , ("M-M1-.", addName "backlight max" runMinBacklight)
+  , ("M-M1-,", addName "backlight min" runMinBacklight)
+  , ("M-M1-.", addName "backlight max" runMaxBacklight)
   , ("M-M1-=", addName "enable screensaver" enableDPMS)
   , ("M-M1--", addName "disable screensaver" disableDPMS)
   , ("M-<F2>", addName "restart xmonad" $ runCleanup hs >> runRestart)
