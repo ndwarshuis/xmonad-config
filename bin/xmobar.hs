@@ -1,14 +1,25 @@
 import Xmobar
+import XMonad (getXMonadDir)
 
+fgColor0 :: String
 fgColor0 = "black"
+
+fgColor1 :: String
 fgColor1 = "#888888"
+
+bgColor0 :: String
 bgColor0 = "#eeeeee"
+
+bdColor :: String
 bdColor = "#cccccc"
 
+wrapColor :: String -> String -> String
 wrapColor c s = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
 
+sep :: String
 sep = wrapColor fgColor1 " : "
 
+myTemplate :: String
 myTemplate = concat
   [ "%UnsafeStdinReader%"
   , " }{ "
@@ -20,7 +31,8 @@ myTemplate = concat
   , sep, "%date% "
   ] 
 
-config = defaultConfig { 
+config :: String -> Config
+config confDir = defaultConfig { 
   font = "xft:DejaVu Sans Mono:size=11:bold:antialias=true"
   , additionalFonts =
     [ "xft:FontAwesome:pixelsize=13:antialias=true:hinting=true"
@@ -44,7 +56,7 @@ config = defaultConfig {
   , overrideRedirect = True
   , pickBroadest = False
   , persistent = True
-  , iconRoot = "/home/ndwar/.local/share/xmobar/icons"
+  , iconRoot = confDir ++ "/icons"
 
   , commands = 
       [ Run $ Alsa "default" "Master"
@@ -97,4 +109,6 @@ config = defaultConfig {
   }
 
 main :: IO ()
-main = xmobar config
+main = do
+  confDir <- getXMonadDir
+  xmobar $ config confDir
