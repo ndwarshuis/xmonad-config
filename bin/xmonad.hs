@@ -18,6 +18,7 @@ import Graphics.X11.Types
 
 import Control.Exception
 
+import System.Directory
 import System.Exit
 import System.IO
 import System.Process (waitForProcess)
@@ -421,11 +422,28 @@ runEditor = spawnCmd "emacsclient"
 runFileManager :: X ()
 runFileManager = spawn "pcmanfm"
 
+getScreenshotDir :: IO FilePath
+getScreenshotDir = do
+  h <- getHomeDirectory
+  return $ h ++ "/Pictures/screenshots"
+
+runFlameshot :: String -> X ()
+runFlameshot mode = do
+  ssDir <- io getScreenshotDir
+  spawnCmd "flameshot" $ mode : ["-p", ssDir]
+
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
-runScreenCap :: X ()
-runScreenCap = spawn "flameshot gui"
+runAreaCapture :: X ()
+runAreaCapture = runFlameshot "gui"
+
 -- myWindowCap = "screencap -w" --external script
+
+runScreenCapture :: X ()
+runScreenCapture = runFlameshot "screen"
+
+runDesktopCapture :: X ()
+runDesktopCapture = runFlameshot "full"
 
 runVBox :: X ()
 runVBox = spawnCmdOwnWS "vbox-start win8raw" [] myVMWorkspace
@@ -585,7 +603,9 @@ myKeys hs c =
   mkNamedSubmap c "Actions"
   [ ("M-q", addName "close window" kill1)
   , ("M-r", addName "run program" runCmdMenu)
-  , ("M-C-s", addName "capture screen area" runScreenCap)
+  , ("M-C-s", addName "capture area" runAreaCapture)
+  , ("M-C-S-s", addName "capture screen" runScreenCapture)
+  , ("M-C-d", addName "capture desktop" runDesktopCapture)
   -- , ("M-C-S-s", addName "capture focused window" $ spawn myWindowCap)
   , ("M-<Delete>", addName "lock screen" runScreenLock)
   ] ++
