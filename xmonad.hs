@@ -349,6 +349,11 @@ cmdA #!&& cmdB = cmdA ++ " && " ++ cmdB
 
 infixr 0 #!&&
 
+(#!||) :: String -> String -> String
+cmdA #!|| cmdB = cmdA ++ " || " ++ cmdB
+
+infixr 0 #!||
+
 magicStringWS :: String
 magicStringWS = "%%%%%"
 
@@ -449,8 +454,17 @@ killPID pID = do
 runRestart :: X ()
 runRestart = restart "xmonad" True
 
--- runRecompile :: X ()
--- runRecompile = void $ recompile True -- spawnCmd "xmonad" ["--recompile"]
+runRecompile :: X ()
+runRecompile = do
+  -- assume that the conf directory contains a valid stack project
+  -- TODO this is hacky AF
+  confDir <- getXMonadDir
+  spawn $ cmd confDir
+  where
+    cmd c = formatCmd "cd" [c]
+      #!&& formatCmd "stack" ["install", ":xmonad"]
+      #!&& formatCmd "notify-send" ["\"compilation succeeded\""]
+      #!|| formatCmd "notify-send" ["\"compilation failed\""]
 
 myMultimediaCtl :: String
 myMultimediaCtl = "playerctl"
@@ -471,7 +485,7 @@ runVolumeDown :: X ()
 runVolumeDown = void (lowerVolume 2)
 
 runVolumeUp :: X ()
-runVolumeUp = void (lowerVolume 2)
+runVolumeUp = void (raiseVolume 2)
 
 runVolumeMute :: X ()
 runVolumeMute = void toggleMute
@@ -610,7 +624,7 @@ myKeys hs c =
   , ("M-M1-=", addName "enable screensaver" enableDPMS)
   , ("M-M1--", addName "disable screensaver" disableDPMS)
   , ("M-<F2>", addName "restart xmonad" $ runCleanup hs >> runRestart)
-  -- , ("M-S-<F2>", addName "recompile xmonad" $ runCleanup hs)
+  , ("M-S-<F2>", addName "recompile xmonad" runRecompile)
   , ("M-<End>", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" myQuitPrompt)
   ]
