@@ -6,10 +6,7 @@ module Main (main) where
 import ACPI
 import SendXMsg
 
-import Control.Monad (forM_, void, when)
-
-import System.Exit
-import System.IO
+import Control.Monad (mapM_, forM_, void, when)
 
 import Data.List (sortBy, sortOn)
 import Data.Maybe (fromMaybe, isJust)
@@ -18,6 +15,20 @@ import Data.Monoid (All(..))
 import Graphics.X11.Xlib.Atom
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Types
+
+import Control.Exception
+
+import System.Exit
+import System.IO
+import System.Process (waitForProcess)
+import System.Process.Internals
+  ( ProcessHandle__(ClosedHandle, OpenHandle)
+  , withProcessHandle
+  , mkProcessHandle)
+import System.Posix.IO
+import System.Posix.Process
+import System.Posix.Signals
+import System.Posix.Types
 
 import Text.Read (readMaybe)
 
@@ -56,11 +67,11 @@ import XMonad.Util.Run
 import qualified XMonad.StackSet as W
 
 main = do
-  h <- spawnPipe "xmobar"
-  spawn "powermon"
-  xmonad
+  (barPID, h) <- spawnPipe' "xmobar"
+  pwrPID <- spawnPID "powermon"
+  launch
     $ ewmh
-    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) myKeys
+    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [pwrPID, barPID])
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
@@ -72,6 +83,18 @@ main = do
           , clickJustFocuses = False
           , focusFollowsMouse = False
           }
+
+spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)
+spawnPipe' x = io $ do
+    (rd, wr) <- createPipe
+    setFdOption wr CloseOnExec True
+    h <- fdToHandle wr
+    hSetBuffering h LineBuffering
+    p <- xfork $ do
+          _ <- dupTo rd stdInput
+          executeFile "/bin/sh" False ["-c", x] Nothing
+    closeFd rd
+    return (p, h)
 
 myTopBarTheme = def
     { fontName              = myFont
@@ -334,8 +357,8 @@ spawnCmdOwnWS cmd args ws = spawn
   $ formatCmd cmd args
   #!&& formatCmd "xit-event" [magicStringWS, ws]
 
-spawnKill :: [String] -> X ()
-spawnKill cmds = spawn $ formatCmd "killall" cmds
+-- spawnKill :: [String] -> X ()
+-- spawnKill = mapM_ (spawn . ("killall " ++))
 
 myTerm :: String
 myTerm = "urxvt"
@@ -388,7 +411,7 @@ runBrowser = spawn "brave"
 
 runEditor :: X ()
 runEditor = spawnCmd "emacsclient"
-  ["-c", "-e", "(select-frame-set-input-focus (selected-frame))\""]
+  ["-c", "-e", "\"(select-frame-set-input-focus (selected-frame))\""]
 
 runFileManager :: X ()
 runFileManager = spawn "pcmanfm"
@@ -405,14 +428,29 @@ runVBox = spawnCmdOwnWS "vbox-start win8raw" [] myVMWorkspace
 runGimp :: X ()
 runGimp = spawnCmdOwnWS "gimp" [] myGimpWorkspace
 
-runCleanup :: X ()
-runCleanup = spawnKill ["xmobar", "powermon"]
+runCleanup :: [ProcessID] -> X ()
+runCleanup ps = io $ mapM_ killPID ps
+
+killPID :: ProcessID -> IO ()
+killPID pID = do
+  h <- mkProcessHandle pID False
+  -- this may fail of the PID does not exist
+  _ <- try $ sendSIGTERM h :: IO (Either IOException ())
+  -- this may fail if the process exits instantly and the handle
+  -- is destroyed by the time we get to this line (I think?)
+  _ <- try $ waitForProcess h :: IO (Either IOException ExitCode)
+  return ()
+  where
+    sendSIGTERM h = withProcessHandle h $ \case
+      OpenHandle _ -> signalProcess sigTERM pID
+      ClosedHandle _ -> return ()
+      _ -> return () -- this should never happen
 
 runRestart :: X ()
-runRestart = spawnCmd "xmonad" ["--restart"]
+runRestart = restart "xmonad" True
 
-runRecompile :: X ()
-runRecompile = spawnCmd "xmonad" ["--recompile"]
+-- runRecompile :: X ()
+-- runRecompile = void $ recompile True -- spawnCmd "xmonad" ["--recompile"]
 
 myMultimediaCtl :: String
 myMultimediaCtl = "playerctl"
@@ -490,8 +528,8 @@ mkNamedSubmap c sectionName bindings =
 
 -- NOTE: the following bindings are used by dunst:
 -- "M-~", "M-<esc>", "M-S-<esc>", "M-S-."
-myKeys :: XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
-myKeys c =
+myKeys :: [ProcessID] -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
+myKeys hs c =
   mkNamedSubmap c "Window Layouts"
   [ ("M-j", addName "focus down" $ windows W.focusDown)
   , ("M-k", addName "focus up" $ windows W.focusUp)
@@ -571,8 +609,8 @@ myKeys c =
   , ("M-M1-.", addName "backlight max" runMinBacklight)
   , ("M-M1-=", addName "enable screensaver" enableDPMS)
   , ("M-M1--", addName "disable screensaver" disableDPMS)
-  , ("M-<F2>", addName "restart xmonad" $ runCleanup >> runRestart)
-  , ("M-S-<F2>", addName "recompile xmonad" $ runCleanup >> runRecompile)
+  , ("M-<F2>", addName "restart xmonad" $ runCleanup hs >> runRestart)
+  -- , ("M-S-<F2>", addName "recompile xmonad" $ runCleanup hs)
   , ("M-<End>", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" myQuitPrompt)
   ]
