@@ -39,10 +39,28 @@ packages:
 # - git: https://github.com/commercialhaskell/stack.git
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
-extra-deps: []
+extra-deps:
+- iwlib-0.1.0
+- github: ndwarshuis/xmobar
+  commit: 4d750adcdecf5c1085ff583cf69392fcaf5dfaf7
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
+flags:
+  xmobar:
+    with_dbus: true
+    with_threaded: true
+    with_utf8: true
+    with_xft: true
+    with_mpd: false
+    with_mpris: false
+    with_inotify: false
+    with_iwlib: true
+    with_alsa: true
+    with_datezone: true
+    with_xpm: true
+    with_uvmeter: false
+    with_weather: false
 
 # Extra package databases containing global packages
 # extra-package-dbs: []
