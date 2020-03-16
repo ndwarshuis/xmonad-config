@@ -21,7 +21,7 @@ bgColor :: String
 bgColor = "#d6d6d6"
 
 fgColor :: String
-fgColor = "#000000"
+fgColor = "#2c2c2c"
 
 bordersColor :: String
 bordersColor = darken' 0.85 bgColor
@@ -94,7 +94,7 @@ fmtFontXFT ThemeFont
 
 font = ThemeFont
   { family = "DejaVu Sans"
-  , size = Just 11
+  , size = Just 10
   , antialias = Just True
   , weight = Nothing
   , slant = Nothing
@@ -104,7 +104,7 @@ font = ThemeFont
 -- Complete themes
 
 tabbedTheme = D.def
-  { D.fontName              = fmtFontXFT font
+  { D.fontName              = fmtFontXFT font { weight = Just Bold }
 
   , D.activeTextColor       = fgColor
   , D.activeColor           = bgColor
