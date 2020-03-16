@@ -5,7 +5,7 @@ module Main (main) where
 
 import ACPI
 import SendXMsg
-import Theme
+import qualified Theme as T
 
 import Control.Monad (mapM_, forM_, void, when)
 
@@ -107,7 +107,7 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
   -- $ onWorkspace myGimpWorkspace gimpLayout
   $ tall ||| single ||| full
   where
-    addTopBar = noFrillsDeco shrinkText tabbedTheme
+    addTopBar = noFrillsDeco shrinkText T.tabbedTheme
     tall = named "Tall"
       $ avoidStruts
       $ addTopBar
@@ -117,7 +117,7 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
       -- $ addTopBar
       $ avoidStruts
       $ noBorders
-      $ tabbedAlways shrinkText tabbedTheme
+      $ tabbedAlways shrinkText T.tabbedTheme
     full = named "Full"
       $ noBorders Full
     -- gimpLayout = named "Gimp Layout"
@@ -136,24 +136,25 @@ myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 
 myWindowSetXinerama ws = wsString ++ sep ++ layout
   where
-    wsString = xmobarColor "#444444" "" $ onscreen ++ offscreen'
-    offscreen' = if offscreen == "" then "" else " " ++ offscreen
-    sep = xmobarColor "#888888" "" " : "
-    onscreen = xmobarColor "#5574ad" visColor
+    wsString = xmobarColor T.backdropFgColor "" $ onscreen ++ offscreen'
+    offscreen' = if null offscreen then "" else " " ++ offscreen
+    sep = xmobarColor T.backdropFgColor "" " : "
+    onscreen = xmobarColor hilightFgColor hilightBgColor
       $ wrap " " " "
       $ unwords
       $ map (fmtTags . W.tag . W.workspace)
       . sortBy compareXCoord
       $ W.current ws : W.visible ws
     fmtTags t = if t == W.currentTag ws
-      then xmobarColor "#2c2c2c" visColor t
+      then xmobarColor T.fgColor hilightBgColor t
       else t
     offscreen = unwords
       $ map W.tag
       . filter (isJust . W.stack)
       . sortOn W.tag
       $ W.hidden ws
-    visColor = "#8fc7ff"
+    hilightBgColor = "#8fc7ff"
+    hilightFgColor = T.blend' 0.5 hilightBgColor T.fgColor
     layout = description . W.layout . W.workspace . W.current $ ws
     compareXCoord s0 s1 = compare x0 x1
       where
@@ -208,7 +209,7 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
          let acpiTag = readMaybe tag :: Maybe ACPIEvent
          forM_ acpiTag $ \case
            Power -> myPowerPrompt
-           Sleep -> confirmPrompt promptTheme "suspend?" runSuspend
+           Sleep -> confirmPrompt T.promptTheme "suspend?" runSuspend
            LidClose -> do
              status <- io isDischarging
              forM_ status $ \s -> runScreenLock >> when s runSuspend
@@ -253,7 +254,7 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
   . (`lookup` commands)
   where
     comps = mkComplFunFromList' (map fst commands)
-    conf = promptTheme
+    conf = T.promptTheme
     commands =
       [ ("poweroff", runPowerOff)
       , ("suspend", runScreenLock >> runSuspend)
@@ -262,7 +263,7 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
       ]
 
 myQuitPrompt :: X ()
-myQuitPrompt = confirmPrompt promptTheme "quit?" $ io exitSuccess
+myQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
 
 -- shell commands
 
