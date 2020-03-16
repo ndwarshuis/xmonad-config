@@ -5,6 +5,7 @@ module Main (main) where
 
 import ACPI
 import SendXMsg
+import Theme
 
 import Control.Monad (mapM_, forM_, void, when)
 
@@ -97,29 +98,6 @@ spawnPipe' x = io $ do
     closeFd rd
     return (p, h)
 
-myTopBarTheme = def
-    { fontName              = myFont
-    , inactiveBorderColor   = "#999999"
-    , inactiveColor         = "#999999"
-    , inactiveTextColor     = "#999999"
-    , activeBorderColor     = "#d6d6d6"
-    , activeColor           = "#d6d6d6"
-    , activeTextColor       = "#d6d6d6"
-    -- , urgentBorderColor     = red
-    -- , urgentTextColor       = yellow
-    , decoHeight            = 20
-    }
-
-myTabbedTheme = def
-   { fontName = myFont
-   , activeColor = "#d6d6d6"
-   , activeTextColor = "black"
-   , activeBorderColor = "#d6d6d6"
-   , inactiveColor = "#999999"
-   , inactiveTextColor = "#333333"
-   , inactiveBorderColor = "#999999"
-   }
-
 myWorkspaces = map show [1..10 :: Int]
 
 myVMWorkspace = "VM"
@@ -129,7 +107,7 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
   -- $ onWorkspace myGimpWorkspace gimpLayout
   $ tall ||| single ||| full
   where
-    addTopBar = noFrillsDeco shrinkText myTopBarTheme
+    addTopBar = noFrillsDeco shrinkText tabbedTheme
     tall = named "Tall"
       $ avoidStruts
       $ addTopBar
@@ -139,7 +117,7 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
       -- $ addTopBar
       $ avoidStruts
       $ noBorders
-      $ tabbedAlways shrinkText myTabbedTheme
+      $ tabbedAlways shrinkText tabbedTheme
     full = named "Full"
       $ noBorders Full
     -- gimpLayout = named "Gimp Layout"
@@ -230,7 +208,7 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
          let acpiTag = readMaybe tag :: Maybe ACPIEvent
          forM_ acpiTag $ \case
            Power -> myPowerPrompt
-           Sleep -> confirmPrompt myPromptTheme "suspend?" runSuspend
+           Sleep -> confirmPrompt promptTheme "suspend?" runSuspend
            LidClose -> do
              status <- io isDischarging
              forM_ status $ \s -> runScreenLock >> when s runSuspend
@@ -247,57 +225,6 @@ removeEmptyWorkspaceByTag' tag = do
   -- empty with the workspace to be removed. If it actually is empty,
   -- this will be enough to make it disappear.
   removeEmptyWorkspaceByTag tag
-
--- themes
-myFont = "xft:DejaVu Sans:size=11:autohint=false"
-
--- base00  = "#657b83"
--- base01  = "#586e75"
--- base02  = "#073642"
--- base03  = "#002b36"
--- base0   = "#839496"
--- base1   = "#93a1a1"
--- base2   = "#eee8d5"
--- base3   = "#fdf6e3"
--- yellow  = "#b58900"
--- orange  = "#cb4b16"
--- red     = "#dc322f"
--- magenta = "#d33682"
--- violet  = "#6c71c4"
--- blue    = "#268bd2"
--- cyan    = "#2aa198"
--- green = "#859900"
-
--- gap         = 10
--- topbar      = 10
--- border      = 0
--- prompt      = 20
--- status = 20
-
--- active      = blue
--- activeWarn  = red
--- inactive    = base02
--- focusColor  = blue
--- unfocusColor = base02
-
-myPromptTheme = def
-    { font = myFont
-    , bgColor = "#eeeeee"
-    , fgColor = "#282828"
-    , fgHLight = "white"
-    , bgHLight = "#268bd2"
-    , borderColor = "white"
-    , promptBorderWidth = 0
-    , height = 30
-    , position = CenteredAt 0.5 0.5
-}
-
--- hotPromptTheme = myPromptTheme
---     { bgColor = red
---     , fgColor = base3
---     , position = Top
---     }
-
 
 -- TODO is there a better way to get the prompt to say what I want?
 data PowerPrompt = PowerPrompt
@@ -326,7 +253,7 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
   . (`lookup` commands)
   where
     comps = mkComplFunFromList' (map fst commands)
-    conf = myPromptTheme
+    conf = promptTheme
     commands =
       [ ("poweroff", runPowerOff)
       , ("suspend", runScreenLock >> runSuspend)
@@ -335,7 +262,7 @@ myPowerPrompt = mkXPrompt PowerPrompt conf comps
       ]
 
 myQuitPrompt :: X ()
-myQuitPrompt = confirmPrompt myPromptTheme "quit?" $ io exitSuccess
+myQuitPrompt = confirmPrompt promptTheme "quit?" $ io exitSuccess
 
 -- shell commands
 
@@ -508,9 +435,11 @@ runVolumeUp = void (raiseVolume 2)
 runVolumeMute :: X ()
 runVolumeMute = void toggleMute
 
+-- TODO write this in haskell
 runToggleBluetooth :: X ()
 runToggleBluetooth = spawn "togglebt"
 
+-- TODO write these in haskell
 runIncBacklight :: X ()
 runIncBacklight = spawnCmd "adj_backlight" ["up"]
 

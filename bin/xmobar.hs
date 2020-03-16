@@ -1,27 +1,17 @@
 import Xmobar.Screensaver
 
+import qualified Theme as T
+
 import Data.List
 
 import Xmobar
 import XMonad (getXMonadDir)
 
-fgColor0 :: String
-fgColor0 = "black"
-
-fgColor1 :: String
-fgColor1 = "#888888"
-
-bgColor0 :: String
-bgColor0 = "#eeeeee"
-
-bdColor :: String
-bdColor = "#cccccc"
-
 wrapColor :: String -> String -> String
 wrapColor c s = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
 
 sep :: String
-sep = wrapColor fgColor1 " : "
+sep = wrapColor T.backdropFgColor " : "
 
 myTemplate :: String
 myTemplate = formatTemplate left right
@@ -40,20 +30,38 @@ myTemplate = formatTemplate left right
             , "%date%"
             ]
 
+barFont :: String
+barFont = T.fmtFontXFT T.font
+  { T.family = "DejaVu Sans Mono"
+  , T.size = Just 11
+  , T.weight = Just T.Bold
+  }
+
+iconFont :: String
+iconFont = T.fmtFontXFT T.font
+  { T.family = "FontAwesome"
+  , T.size = Nothing
+  , T.pixelsize = Just 13
+  }
+
+blockFont :: String
+blockFont = T.fmtFontXFT T.font
+  { T.family = "Symbola"
+  , T.size = Just 13
+  , T.weight = Just T.Bold
+  }
+
 config :: String -> Config
 config confDir = defaultConfig { 
-  font = "xft:DejaVu Sans Mono:size=11:bold:antialias=true"
-  , additionalFonts =
-    [ "xft:FontAwesome:pixelsize=13:antialias=true:hinting=true"
-    , "xft:Symbola:size=13:bold:antialias=true"
-    ]
+  font = barFont
+  , additionalFonts = [ iconFont, blockFont ]
   , textOffset = 16
   , textOffsets = [ 16, 17 ]
-  , bgColor = bgColor0
-  , fgColor = fgColor0
+  , bgColor = T.bgColor
+  , fgColor = T.fgColor
   , position = BottomSize C 100 24
   , border = NoBorder
-  , borderColor = bdColor
+  , borderColor = T.bordersColor
 
   , sepChar = "%"
   , alignSep = "}{"
@@ -73,16 +81,16 @@ config confDir = defaultConfig {
         , "--"
         , "-O", "<fn=1>\xf028</fn>"
         , "-o", "<fn=1>\xf026 </fn>"
-        , "-c", fgColor0
-        , "-C", fgColor0
+        , "-c", T.fgColor
+        , "-C", T.fgColor
         ]
 
       , Run $ Battery [ "--template", "<acstatus><left>"
                     , "--Low", "10"
                     , "--High", "80"
                     , "--low", "red"
-                    , "--normal", fgColor0
-                    , "--high", fgColor0
+                    , "--normal", T.fgColor
+                    , "--high", T.fgColor
                     , "--"
                     , "-P"
                     , "-o" , "<fn=1>\xf0e7</fn>"
@@ -103,9 +111,9 @@ config confDir = defaultConfig {
 
       , Run $ Locks
         [ "-N", "<fn=2>\x1f13d</fn>"
-        , "-n", wrapColor fgColor1 "<fn=2>\x1f13d</fn>"
+        , "-n", wrapColor T.backdropFgColor "<fn=2>\x1f13d</fn>"
         , "-C", "<fn=2>\x1f132</fn>"
-        , "-c", wrapColor fgColor1 "<fn=2>\x1f132</fn>"
+        , "-c", wrapColor T.backdropFgColor "<fn=2>\x1f132</fn>"
         , "-s", ""
         , "-S", ""
         , "-d", "<fn=2> </fn>"
@@ -113,7 +121,7 @@ config confDir = defaultConfig {
 
       , Run $ Date "%Y-%m-%d %H:%M" "date" 10
 
-      , Run $ Screensaver ("<fn=1>\xf254</fn>", fgColor0, fgColor1) 10
+      , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.fgColor) 10
 
       , Run UnsafeStdinReader
       ]
