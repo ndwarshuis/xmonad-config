@@ -267,11 +267,11 @@ myQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
 
 -- shell commands
 
-formatCmd :: String -> [String] -> String
-formatCmd cmd args = unwords $ cmd : args
+fmtCmd :: String -> [String] -> String
+fmtCmd cmd args = unwords $ cmd : args
 
 spawnCmd :: String -> [String] -> X ()
-spawnCmd cmd args = spawn $ formatCmd cmd args
+spawnCmd cmd args = spawn $ fmtCmd cmd args
 
 (#!&&) :: String -> String -> String
 cmdA #!&& cmdB = cmdA ++ " && " ++ cmdB
@@ -283,13 +283,18 @@ cmdA #!|| cmdB = cmdA ++ " || " ++ cmdB
 
 infixr 0 #!||
 
+(#!>>) :: String -> String -> String
+cmdA #!>> cmdB = cmdA ++ "; " ++ cmdB
+
+infixr 0 #!>>
+
 magicStringWS :: String
 magicStringWS = "%%%%%"
 
 spawnCmdOwnWS :: String -> [String] -> String -> X ()
 spawnCmdOwnWS cmd args ws = spawn
-  $ formatCmd cmd args
-  #!&& formatCmd "xit-event" [magicStringWS, ws]
+  $ fmtCmd cmd args
+  #!&& fmtCmd "xit-event" [magicStringWS, ws]
 
 -- spawnKill :: [String] -> X ()
 -- spawnKill = mapM_ (spawn . ("killall " ++))
@@ -407,10 +412,10 @@ runRecompile = do
   confDir <- getXMonadDir
   spawn $ cmd confDir
   where
-    cmd c = formatCmd "cd" [c]
-      #!&& formatCmd "stack" ["install", ":xmonad"]
-      #!&& formatCmd "notify-send" ["\"compilation succeeded\""]
-      #!|| formatCmd "notify-send" ["\"compilation failed\""]
+    cmd c = fmtCmd "cd" [c]
+      #!&& fmtCmd "stack" ["install", ":xmonad"]
+      #!&& fmtCmd "notify-send" ["\"compilation succeeded\""]
+      #!|| fmtCmd "notify-send" ["\"compilation failed\""]
 
 myMultimediaCtl :: String
 myMultimediaCtl = "playerctl"
@@ -442,8 +447,8 @@ runToggleBluetooth = spawn
   $ "bluetoothctl show | grep -q \"Powered: no\""
   #!&& "a=on"
   #!|| "a=off"
-  #!>> formatCmd "bluetoothctl" ["power", "$a", ">", "/dev/null"]
-  #!&& formatCmd "notify-send" ["\"bluetooth powered $a\""]
+  #!>> fmtCmd "bluetoothctl" ["power", "$a", ">", "/dev/null"]
+  #!&& fmtCmd "notify-send" ["\"bluetooth powered $a\""]
 
 -- TODO write these in haskell
 runIncBacklight :: X ()
@@ -474,7 +479,7 @@ showKeybindings x = addName "Show Keybindings" $ io $ do
     hPutStr h (unlines $ showKm x)
     hClose h
     return ()
-  where cmd = formatCmd myDmenuCmd $ myDmenuArgs ++
+  where cmd = fmtCmd myDmenuCmd $ myDmenuArgs ++
           [ "-dmenu"
           , "-p"
           , "commands"
