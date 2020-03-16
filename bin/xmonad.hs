@@ -255,7 +255,7 @@ myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
     comp = mkComplFunFromList []
     theme = T.promptTheme { promptKeymap = keymap }
     keymap = M.fromList
-      $ ((0, xK_g), quit) :
+      $ ((controlMask, xK_g), quit) :
       map (first $ (,) 0)
       [ (xK_p, sendAction "p")
       , (xK_s, sendAction "s")
