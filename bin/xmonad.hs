@@ -436,9 +436,14 @@ runVolumeUp = void (raiseVolume 2)
 runVolumeMute :: X ()
 runVolumeMute = void toggleMute
 
--- TODO write this in haskell
+-- TODO make a formatter for the notify command
 runToggleBluetooth :: X ()
-runToggleBluetooth = spawn "togglebt"
+runToggleBluetooth = spawn
+  $ "bluetoothctl show | grep -q \"Powered: no\""
+  #!&& "a=on"
+  #!|| "a=off"
+  #!>> formatCmd "bluetoothctl" ["power", "$a", ">", "/dev/null"]
+  #!&& formatCmd "notify-send" ["\"bluetooth powered $a\""]
 
 -- TODO write these in haskell
 runIncBacklight :: X ()
