@@ -10,13 +10,15 @@ import qualified Theme as T
 import Control.Monad (mapM_, forM_, void, when)
 
 import Data.List (sortBy, sortOn)
-import Data.Maybe (fromMaybe, isJust)
+import qualified Data.Map.Lazy as M
+import Data.Maybe (isJust)
 import Data.Monoid (All(..))
 
 import Graphics.X11.Xlib.Atom
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Types
 
+import Control.Arrow (first)
 import Control.Exception
 
 import System.Directory
@@ -165,7 +167,7 @@ myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
   -- as this makes a new window that confusingly must go over the
   -- actual VM window
-  [ className =? "VirtualBoxVM" -?> doShift "VM"
+  [ className =? "VirtualBoxVM" -?> doShift myVMWorkspace
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
   -- gnucash
@@ -173,7 +175,7 @@ myManageHook = composeOne
   -- xsane
   , className =? "Xsane" -?> doFloat
   -- all of GIMP
-  , className =? "Gimp" -?> doFloat
+  , className =? "Gimp" -?> doFloat >> doShift myGimpWorkspace
   -- , title =? "GIMP Startup" -?> doIgnore
   -- plots and graphics created by R
   , className =? "R_x11" -?> doFloat
@@ -227,11 +229,10 @@ removeEmptyWorkspaceByTag' tag = do
   -- this will be enough to make it disappear.
   removeEmptyWorkspaceByTag tag
 
--- TODO is there a better way to get the prompt to say what I want?
 data PowerPrompt = PowerPrompt
 
 instance XPrompt PowerPrompt where
-    showXPrompt PowerPrompt = "Select Option: "
+    showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
 
 runScreenLock :: X ()
 runScreenLock = spawn "screenlock"
@@ -249,18 +250,27 @@ runReboot :: X ()
 runReboot = spawn "systemctl reboot"
 
 myPowerPrompt :: X ()
-myPowerPrompt = mkXPrompt PowerPrompt conf comps
-  $ fromMaybe (return ())
-  . (`lookup` commands)
+myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
   where
-    comps = mkComplFunFromList' (map fst commands)
-    conf = T.promptTheme
-    commands =
-      [ ("poweroff", runPowerOff)
-      , ("suspend", runScreenLock >> runSuspend)
-      , ("hibernate", runScreenLock >> runHibernate)
-      , ("reboot", runReboot)
+    comp = mkComplFunFromList []
+    theme = T.promptTheme { promptKeymap = keymap }
+    keymap = M.fromList
+      $ ((0, xK_g), quit) :
+      map (first $ (,) 0)
+      [ (xK_p, sendAction "p")
+      , (xK_s, sendAction "s")
+      , (xK_h, sendAction "h")
+      , (xK_r, sendAction "r")
+      , (xK_Return, quit)
+      , (xK_Escape, quit)
       ]
+    sendAction a = setInput a >> setSuccess True >> setDone True
+    executeAction a
+      | a == "p" = runPowerOff
+      | a == "s" = runScreenLock >> runSuspend
+      | a == "h" = runScreenLock >> runHibernate
+      | a == "r" = runReboot
+      | otherwise = return () -- should never happen
 
 myQuitPrompt :: X ()
 myQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
