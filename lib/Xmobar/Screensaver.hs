@@ -1,7 +1,5 @@
 module Xmobar.Screensaver where
 
--- import Control.Monad
-
 import Graphics.X11.Xlib.Display
 import Graphics.X11.XScreenSaver
 
@@ -20,7 +18,6 @@ run' :: (String, String, String) -> IO String
 run' (text, colorOn, colorOff) = do
   dpy <- openDisplay ""
   xssi <- xScreenSaverQueryInfo dpy
-  print "hi"
   closeDisplay dpy
   return $ case xssi of
     Just x -> wrapColor text
