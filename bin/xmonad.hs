@@ -7,9 +7,9 @@ import ACPI
 import SendXMsg
 import qualified Theme as T
 
-import Control.Monad (mapM_, forM_, void, when)
+import Control.Monad (foldM, mapM_, forM_, void, when)
 
-import Data.List (sortBy, sortOn)
+import Data.List (find, sortBy, sortOn)
 import qualified Data.Map.Lazy as M
 import Data.Maybe (isJust)
 import Data.Monoid (All(..))
@@ -17,6 +17,7 @@ import Data.Monoid (All(..))
 import Graphics.X11.Xlib.Atom
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Types
+import Graphics.X11.Xrandr
 
 import Control.Arrow (first)
 import Control.Exception
@@ -163,6 +164,9 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
         (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
         (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
 
+getFocusedScreen :: X Rectangle
+getFocusedScreen = withWindowSet $ return . screenRect . W.screenDetail . W.current
+
 myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
   -- as this makes a new window that confusingly must go over the
@@ -275,6 +279,9 @@ myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
 myQuitPrompt :: X ()
 myQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
 
+-- TODO for some reason the screen never wakes up after suspend when
+-- the nvidia card is up, so block suspend if nvidia card is running
+-- and warn user
 isUsingNvidia :: IO Bool
 isUsingNvidia = doesDirectoryExist "/sys/module/nvidia"
 
@@ -343,8 +350,45 @@ myDmenuCmd = "rofi"
 myDmenuArgs :: [String]
 myDmenuArgs = ["-m", "-4"] -- show rofi with the focused window
 
+-- TODO simplify the convoluted garbage heap...to be fair, this is
+-- going to be ugly simply because rofi uses xrandr and xmonad uses
+-- xinerama to get screen information...and apparently these index
+-- differently. However, I'm sure there's a way to condense this code
+-- to something more sane :(
+getMonitorName :: X (Maybe String)
+getMonitorName = do
+  dpy <- asks display
+  root <- asks theRoot
+  res <- io $ xrrGetScreenResourcesCurrent dpy root
+  outputs <- io $ case res of
+    Just res' -> foldM (procOutput dpy res') [] $ xrr_sr_outputs res'
+    Nothing -> return []
+  (Rectangle sx sy _ _) <- getFocusedScreen
+  return $ case find (\(_, x, y) -> x == fromIntegral sx && y == fromIntegral sy) outputs of
+    Just (name, _, _) -> Just name
+    Nothing -> Nothing
+  where
+    procOutput dpy res acc output = do
+      oi <- xrrGetOutputInfo dpy res output
+      case oi of
+        Just oi' -> procResources dpy res acc oi'
+        Nothing -> return acc
+    procResources dpy res acc oi = do
+      let name = xrr_oi_name oi
+      -- 0 = connected; 1 = disconnected
+      if xrr_oi_connection oi == 0 then do
+        ci <- xrrGetCrtcInfo dpy res $ xrr_oi_crtc oi
+        return $ case ci of
+          Just ci' -> (name, xrr_ci_x ci', xrr_ci_y ci') : acc
+          Nothing -> acc
+      else return acc
+
 spawnDmenuCmd :: [String] -> X ()
-spawnDmenuCmd args = spawnCmd myDmenuCmd $ myDmenuArgs ++ args
+spawnDmenuCmd args = do
+  name <- getMonitorName
+  case name of
+    Just n -> spawnCmd myDmenuCmd $ ["-m", n] ++ args
+    Nothing -> io $ putStrLn "fail"
 
 runCmdMenu :: X ()
 runCmdMenu = spawnDmenuCmd ["-show", "run"]
@@ -364,8 +408,13 @@ runWinMenu :: X ()
 runWinMenu = spawnDmenuCmd ["-show", "window"]
 
 runNetMenu :: X ()
-runNetMenu = spawnCmd "networkmanager_dmenu" myDmenuArgs
+runNetMenu = do
+  name <- getMonitorName
+  case name of
+    Just n -> spawnCmd "networkmanager_dmenu" ["-m", n]
+    Nothing -> io $ putStrLn "fail"
 
+-- TODO this command does not know how to take external args
 runDevMenu :: X ()
 runDevMenu = spawn "rofi-devices"
 
