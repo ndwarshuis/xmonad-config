@@ -275,6 +275,20 @@ myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
 myQuitPrompt :: X ()
 myQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
 
+isUsingNvidia :: IO Bool
+isUsingNvidia = doesDirectoryExist "/sys/module/nvidia"
+
+runOptimusPrompt :: X ()
+runOptimusPrompt = do
+  nvidiaOn <- io isUsingNvidia
+  switch $ if nvidiaOn then "intel" else "nvidia"
+  where
+    switch mode = confirmPrompt T.promptTheme (prompt mode) (cmd mode)
+    prompt mode = "gpu switch to " ++ mode ++ "?"
+    cmd mode = spawnCmd "optimus-manager"
+      ["--switch", mode, "--no-confirm"]
+      >> io exitSuccess
+
 -- shell commands
 
 fmtCmd :: String -> [String] -> String
@@ -597,4 +611,5 @@ myKeys hs c =
   , ("M-S-<F2>", addName "recompile xmonad" runRecompile)
   , ("M-<End>", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" myQuitPrompt)
+  , ("M-<Esc>", addName "switch gpu" runOptimusPrompt)
   ]
