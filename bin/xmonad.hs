@@ -342,14 +342,6 @@ runCalc = spawnCmd myTerm ["-e", "R"]
 myDmenuCmd :: String
 myDmenuCmd = "rofi"
 
--- TODO this almost works except when a workspace with no windows is
--- focuses. In this case, rofi considers the root window to be focused
--- and will showup wherever the mouse pointer is. Need a way to get
--- the focused workspace and translate that to a monitor number for
--- rofi to consume
-myDmenuArgs :: [String]
-myDmenuArgs = ["-m", "-4"] -- show rofi with the focused window
-
 -- TODO simplify the convoluted garbage heap...to be fair, this is
 -- going to be ugly simply because rofi uses xrandr and xmonad uses
 -- xinerama to get screen information...and apparently these index
@@ -414,9 +406,12 @@ runNetMenu = do
     Just n -> spawnCmd "networkmanager_dmenu" ["-m", n]
     Nothing -> io $ putStrLn "fail"
 
--- TODO this command does not know how to take external args
 runDevMenu :: X ()
-runDevMenu = spawn "rofi-devices"
+runDevMenu = do
+  name <- getMonitorName
+  case name of
+    Just n -> spawnCmd "rofi-devices" ["-m", n]
+    Nothing -> io $ putStrLn "fail"
 
 runBrowser :: X ()
 runBrowser = spawn "brave"
@@ -547,13 +542,19 @@ disableDPMS = spawnCmd "xset" ["s", "off", "-dpms"]
 -- keybindings
 
 showKeybindings :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
-showKeybindings x = addName "Show Keybindings" $ io $ do
-    h <- spawnPipe cmd
-    hPutStr h (unlines $ showKm x)
-    hClose h
-    return ()
-  where cmd = fmtCmd myDmenuCmd $ myDmenuArgs ++
+showKeybindings x = addName "Show Keybindings" $ do
+  name <- getMonitorName
+  case name of
+    Just n -> do
+      h <- spawnPipe $ cmd n
+      io $ hPutStr h (unlines $ showKm x)
+      io $ hClose h
+      return ()
+    Nothing -> io $ putStrLn "fail"
+  where cmd name = fmtCmd myDmenuCmd
           [ "-dmenu"
+          , "-m"
+          , name
           , "-p"
           , "commands"
           , "-theme-str"
