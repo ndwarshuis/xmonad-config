@@ -7,11 +7,11 @@ import ACPI
 import SendXMsg
 import qualified Theme as T
 
-import Control.Monad (foldM, mapM_, forM_, void, when)
+import Control.Monad (mapM_, forM, forM_, void, when)
 
 import Data.List (find, sortBy, sortOn)
 import qualified Data.Map.Lazy as M
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, catMaybes)
 import Data.Monoid (All(..))
 
 import Graphics.X11.Xlib.Atom
@@ -345,35 +345,35 @@ myDmenuCmd = "rofi"
 -- TODO simplify the convoluted garbage heap...to be fair, this is
 -- going to be ugly simply because rofi uses xrandr and xmonad uses
 -- xinerama to get screen information...and apparently these index
--- differently. However, I'm sure there's a way to condense this code
--- to something more sane :(
+-- differently.
 getMonitorName :: X (Maybe String)
 getMonitorName = do
   dpy <- asks display
   root <- asks theRoot
-  res <- io $ xrrGetScreenResourcesCurrent dpy root
-  outputs <- io $ case res of
-    Just res' -> foldM (procOutput dpy res') [] $ xrr_sr_outputs res'
-    Nothing -> return []
-  (Rectangle sx sy _ _) <- getFocusedScreen
-  return $ case find (\(_, x, y) -> x == fromIntegral sx && y == fromIntegral sy) outputs of
-    Just (name, _, _) -> Just name
-    Nothing -> Nothing
+  -- these are the focused screen coordinates according to xinerama
+  (sx, sy) <- getCoords
+  io $ do
+    res <- xrrGetScreenResourcesCurrent dpy root
+    outputs <- forM res $ \res' ->
+      forM (xrr_sr_outputs res') $ \output -> do
+        oi <- xrrGetOutputInfo dpy res' output
+        case oi of
+          -- connection: 0 == connected, 1 == disconnected
+          Just XRROutputInfo { xrr_oi_connection = 0
+                             , xrr_oi_name = name
+                             , xrr_oi_crtc = crtc
+                             } -> do
+            ci <- xrrGetCrtcInfo dpy res' crtc
+            return $ (\ci' -> Just (name, xrr_ci_x ci', xrr_ci_y ci'))
+              =<< ci
+          _ -> return Nothing
+    return $ (\(name, _, _) -> Just name)
+      =<< find (\(_, x, y) -> x == sx && y == sy) . catMaybes
+      =<< outputs
   where
-    procOutput dpy res acc output = do
-      oi <- xrrGetOutputInfo dpy res output
-      case oi of
-        Just oi' -> procResources dpy res acc oi'
-        Nothing -> return acc
-    procResources dpy res acc oi = do
-      let name = xrr_oi_name oi
-      -- 0 = connected; 1 = disconnected
-      if xrr_oi_connection oi == 0 then do
-        ci <- xrrGetCrtcInfo dpy res $ xrr_oi_crtc oi
-        return $ case ci of
-          Just ci' -> (name, xrr_ci_x ci', xrr_ci_y ci') : acc
-          Nothing -> acc
-      else return acc
+    getCoords = do
+      (Rectangle x y _ _) <- getFocusedScreen
+      return (fromIntegral x, fromIntegral y)
 
 spawnDmenuCmd :: [String] -> X ()
 spawnDmenuCmd args = do
