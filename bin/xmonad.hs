@@ -5,13 +5,16 @@ module Main (main) where
 
 import ACPI
 import SendXMsg
+import Notify
+import Shell
+
 import qualified Theme as T
 
 import Control.Monad (mapM_, forM, forM_, void, when)
 
 import Data.List (find, sortBy, sortOn)
 import qualified Data.Map.Lazy as M
-import Data.Maybe (isJust, catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import Data.Monoid (All(..))
 
 import Graphics.X11.Xlib.Atom
@@ -222,6 +225,9 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
        | otherwise -> return ()
     return (All True)
   | otherwise = return (All True)
+-- myEventHook DestroyWindowEvent { ev_window = w } = do
+--   io $ print w
+  -- return (All True)
 myEventHook _ = return (All True)
 
 removeEmptyWorkspaceByTag' tag = do
@@ -298,27 +304,6 @@ runOptimusPrompt = do
 
 -- shell commands
 
-fmtCmd :: String -> [String] -> String
-fmtCmd cmd args = unwords $ cmd : args
-
-spawnCmd :: String -> [String] -> X ()
-spawnCmd cmd args = spawn $ fmtCmd cmd args
-
-(#!&&) :: String -> String -> String
-cmdA #!&& cmdB = cmdA ++ " && " ++ cmdB
-
-infixr 0 #!&&
-
-(#!||) :: String -> String -> String
-cmdA #!|| cmdB = cmdA ++ " || " ++ cmdB
-
-infixr 0 #!||
-
-(#!>>) :: String -> String -> String
-cmdA #!>> cmdB = cmdA ++ "; " ++ cmdB
-
-infixr 0 #!>>
-
 magicStringWS :: String
 magicStringWS = "%%%%%"
 
@@ -326,9 +311,6 @@ spawnCmdOwnWS :: String -> [String] -> String -> X ()
 spawnCmdOwnWS cmd args ws = spawn
   $ fmtCmd cmd args
   #!&& fmtCmd "xit-event" [magicStringWS, ws]
-
--- spawnKill :: [String] -> X ()
--- spawnKill = mapM_ (spawn . ("killall " ++))
 
 myTerm :: String
 myTerm = "urxvt"
@@ -381,7 +363,6 @@ getMonitorName = do
     getCoords = do
       (Rectangle x y _ _) <- getFocusedScreen
       return (fromIntegral x, fromIntegral y)
-
 
 spawnDmenuCmd :: String -> [String] -> X ()
 spawnDmenuCmd cmd args = do
@@ -485,8 +466,8 @@ runRecompile = do
   where
     cmd c = fmtCmd "cd" [c]
       #!&& fmtCmd "stack" ["install", ":xmonad"]
-      #!&& fmtCmd "notify-send" ["\"compilation succeeded\""]
-      #!|| fmtCmd "notify-send" ["\"compilation failed\""]
+      #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "compilation succeeded" }
+      #!|| fmtNotifyCmd defNoteError { body = Just $ Text "compilation failed" }
 
 myMultimediaCtl :: String
 myMultimediaCtl = "playerctl"
@@ -512,14 +493,13 @@ runVolumeUp = void (raiseVolume 2)
 runVolumeMute :: X ()
 runVolumeMute = void toggleMute
 
--- TODO make a formatter for the notify command
 runToggleBluetooth :: X ()
 runToggleBluetooth = spawn
   $ "bluetoothctl show | grep -q \"Powered: no\""
   #!&& "a=on"
   #!|| "a=off"
   #!>> fmtCmd "bluetoothctl" ["power", "$a", ">", "/dev/null"]
-  #!&& fmtCmd "notify-send" ["\"bluetooth powered $a\""]
+  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
 -- TODO write these in haskell
 runIncBacklight :: X ()

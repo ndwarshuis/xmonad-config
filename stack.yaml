@@ -41,6 +41,7 @@ packages:
 #
 extra-deps:
 - iwlib-0.1.0
+- fdo-notify-0.3.1
 - github: ndwarshuis/xmobar
   commit: 4d750adcdecf5c1085ff583cf69392fcaf5dfaf7
 
