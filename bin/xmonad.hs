@@ -342,10 +342,17 @@ runCalc = spawnCmd myTerm ["-e", "R"]
 myDmenuCmd :: String
 myDmenuCmd = "rofi"
 
--- TODO simplify the convoluted garbage heap...to be fair, this is
--- going to be ugly simply because rofi uses xrandr and xmonad uses
--- xinerama to get screen information...and apparently these index
--- differently.
+-- | Focus rofi on the current workspace always
+-- Apparently xrandr and xinerama order monitors differently, which
+-- means they have different indices. Since rofi uses the former and
+-- xmonad uses the latter, this function is to figure out the xrandr
+-- screen name based on the xinerama screen that is currently in
+-- focus. The steps to do this:
+-- 1) get the coordinates of the currently focuses xinerama screen
+-- 2) get list of Xrandr outputs and filter which ones are connected
+-- 3) match the coordinates of the xinerama screen with the xrandr
+--    output and return the latter's name (eg "DP-0") which can be
+--    fed to Rofi
 getMonitorName :: X (Maybe String)
 getMonitorName = do
   dpy <- asks display
@@ -375,21 +382,25 @@ getMonitorName = do
       (Rectangle x y _ _) <- getFocusedScreen
       return (fromIntegral x, fromIntegral y)
 
-spawnDmenuCmd :: [String] -> X ()
-spawnDmenuCmd args = do
+
+spawnDmenuCmd :: String -> [String] -> X ()
+spawnDmenuCmd cmd args = do
   name <- getMonitorName
   case name of
-    Just n -> spawnCmd myDmenuCmd $ ["-m", n] ++ args
+    Just n -> spawnCmd cmd $ ["-m", n] ++ args
     Nothing -> io $ putStrLn "fail"
 
+spawnDmenuCmd' :: [String] -> X ()
+spawnDmenuCmd' = spawnDmenuCmd myDmenuCmd
+
 runCmdMenu :: X ()
-runCmdMenu = spawnDmenuCmd ["-show", "run"]
+runCmdMenu = spawnDmenuCmd' ["-show", "run"]
 
 runAppMenu :: X ()
-runAppMenu = spawnDmenuCmd ["-show", "drun"]
+runAppMenu = spawnDmenuCmd' ["-show", "drun"]
 
 runClipMenu :: X ()
-runClipMenu = spawnDmenuCmd 
+runClipMenu = spawnDmenuCmd' 
   [ "-modi", "\"clipboard:greenclip print\""
   , "-show", "clipboard"
   , "-run-command", "'{cmd}'"
@@ -397,21 +408,13 @@ runClipMenu = spawnDmenuCmd
   ]
 
 runWinMenu :: X ()
-runWinMenu = spawnDmenuCmd ["-show", "window"]
+runWinMenu = spawnDmenuCmd' ["-show", "window"]
 
 runNetMenu :: X ()
-runNetMenu = do
-  name <- getMonitorName
-  case name of
-    Just n -> spawnCmd "networkmanager_dmenu" ["-m", n]
-    Nothing -> io $ putStrLn "fail"
+runNetMenu = spawnDmenuCmd "networkmanager_dmenu" []
 
 runDevMenu :: X ()
-runDevMenu = do
-  name <- getMonitorName
-  case name of
-    Just n -> spawnCmd "rofi-devices" ["-m", n]
-    Nothing -> io $ putStrLn "fail"
+runDevMenu = spawnDmenuCmd "rofi-devices" []
 
 runBrowser :: X ()
 runBrowser = spawn "brave"
