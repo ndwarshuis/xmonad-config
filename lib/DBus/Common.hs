@@ -23,6 +23,5 @@ stopXMonadService :: Client -> IO ()
 stopXMonadService client = do
   reply <- releaseName client "org.xmonad"
   disconnect client
-  print reply
   return ()
 
