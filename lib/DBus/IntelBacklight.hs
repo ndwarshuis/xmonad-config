@@ -1,9 +1,8 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-{- |
-  DBus module for backlight control
--}
+--------------------------------------------------------------------------------
+-- | DBus module for Intel Backlight control
 
 module DBus.IntelBacklight
   ( callDecBrightness
@@ -28,6 +27,28 @@ import Data.Text.IO as T (readFile, writeFile)
 import DBus
 import DBus.Client
 
+--------------------------------------------------------------------------------
+-- | Low level sysfs functions
+--
+-- Distinguish between "raw" brightness "normalized" brightness with two type
+-- synonyms. The former is the value read directly in sysfs and generally goes
+-- from 1 (min brightness) to some multiple 1000's number (note that raw values
+-- of 0 turn the monitor off). The latter is the raw brightness scaled from 0 to
+-- 10000 (which can easily be converted to a percent).
+
+-- TODO this is hacky but not sure if there is a cleaner way to enforce type
+-- checking between these without making two new types and adding Integral
+-- instances to both of them
+type Brightness = Int16
+
+type RawBrightness = Int32
+
+maxBrightness :: Brightness
+maxBrightness = 10000
+
+steps :: Brightness
+steps = 16
+
 backlightDir :: FilePath
 backlightDir = "/sys/class/backlight/intel_backlight/"
 
@@ -37,22 +58,8 @@ maxFile = backlightDir ++ "max_brightness"
 curFile :: String
 curFile = backlightDir ++ "brightness"
 
-steps :: Brightness
-steps = 16
-
--- TODO this is hacky but not sure if there is a cleaner way to
--- enforce type checking between these without making two new types
--- and adding Integral instances to both of them
-type Brightness = Int16
-type RawBrightness = Int32
-
-maxBrightness :: Brightness
-maxBrightness = 10000
-
 readFileInt :: FilePath -> IO RawBrightness
-readFileInt file = do
-  contents <- T.readFile file
-  return $ read $ takeWhile isDigit $ unpack contents
+readFileInt file = read . takeWhile isDigit . unpack <$> T.readFile file
 
 getMaxRawBrightness :: IO RawBrightness
 getMaxRawBrightness = readFileInt maxFile
@@ -70,9 +77,9 @@ rawToNorm maxRaw curRaw = fromIntegral
     maxNorm = fromIntegral maxBrightness :: Int32
 
 normToRaw :: RawBrightness -> Brightness -> RawBrightness
-normToRaw maxRaw = normalize . fromIntegral
+normToRaw maxRaw curNorm = curNorm' * (maxRaw - 1) `div` maxNorm + 1
   where
-    normalize c = c * (maxRaw - 1) `div` maxNorm + 1
+    curNorm' = fromIntegral curNorm :: Int32
     maxNorm = fromIntegral maxBrightness :: Int32
 
 truncateNorm :: Brightness -> Brightness
@@ -91,20 +98,13 @@ setBrightness maxRaw newNorm = do
   setRawBrightness $ normToRaw maxRaw newNorm'
   return newNorm'
 
-exportIntelBacklight :: Client -> IO ()
-exportIntelBacklight client = do
-  maxval <- getMaxRawBrightness -- assume the max value will never change
-  let stepsize = maxBrightness `div` steps
-  export client brPath defaultInterface
-    { interfaceName = brInterface
-    , interfaceMethods =
-      [ autoMethod brMaxBrightness (setBrightness maxval maxBrightness)
-      , autoMethod brMinBrightness (setBrightness maxval 0)
-      , autoMethod brIncBrightness (changeBrightness maxval stepsize)
-      , autoMethod brDecBrightness (changeBrightness maxval (-stepsize))
-      , autoMethod brGetBrightness (getBrightness maxval)
-      ]
-    }
+--------------------------------------------------------------------------------
+-- | DBus interface
+--
+-- Define four methods to increase, decrease, maximize, or minimize the
+-- brightness. These methods will all return the current brightness as a 32-bit
+-- integer and emit a signal with the same brightness value. Additionally, there
+-- is one method to get the current brightness.
 
 brPath :: ObjectPath
 brPath = "/intelbacklight"
@@ -169,6 +169,23 @@ emitBrightness client body =
 signalBrightness :: [Variant] -> Maybe Brightness
 signalBrightness [b] = fromVariant b :: Maybe Brightness
 signalBrightness _   = Nothing
+
+-- | Exported haskell API
+
+exportIntelBacklight :: Client -> IO ()
+exportIntelBacklight client = do
+  maxval <- getMaxRawBrightness -- assume the max value will never change
+  let stepsize = maxBrightness `div` steps
+  export client brPath defaultInterface
+    { interfaceName = brInterface
+    , interfaceMethods =
+      [ autoMethod brMaxBrightness (setBrightness maxval maxBrightness)
+      , autoMethod brMinBrightness (setBrightness maxval 0)
+      , autoMethod brIncBrightness (changeBrightness maxval stepsize)
+      , autoMethod brDecBrightness (changeBrightness maxval (-stepsize))
+      , autoMethod brGetBrightness (getBrightness maxval)
+      ]
+    }
 
 callMaxBrightness :: IO (Maybe Brightness)
 callMaxBrightness = callBacklight' brMaxBrightness
