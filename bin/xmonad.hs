@@ -9,8 +9,8 @@ import Notify
 import SendXMsg
 import Shell
 
-import DBus.Backlight
 import DBus.Common
+import DBus.IntelBacklight
 
 import qualified Theme as T
 
@@ -521,18 +521,17 @@ runToggleBluetooth = spawn
   #!>> fmtCmd "bluetoothctl" ["power", "$a", ">", "/dev/null"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
--- TODO write these in haskell
 runIncBacklight :: X ()
-runIncBacklight = spawnCmd "adj_backlight" ["up"]
+runIncBacklight = io $ void callIncBrightness
 
 runDecBacklight :: X ()
-runDecBacklight = spawnCmd "adj_backlight" ["down"]
+runDecBacklight = io $ void callDecBrightness
 
 runMinBacklight :: X ()
-runMinBacklight = io callMinBrightness
+runMinBacklight = io $ void callMinBrightness
 
 runMaxBacklight :: X ()
-runMaxBacklight = io callMaxBrightness
+runMaxBacklight = io $ void callMaxBrightness
 
 showWorkspace :: WorkspaceId -> X ()
 showWorkspace tag = windows $ W.view tag

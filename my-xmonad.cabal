@@ -11,9 +11,9 @@ library
                    , Notify
                    , Shell
                    , DBus.Common
-                   , DBus.Backlight
-                   , Xmobar.Screensaver
-                   , Xmobar.Backlight
+                   , DBus.IntelBacklight
+                   , Xmobar.Plugins.Screensaver
+                   , Xmobar.Plugins.IntelBacklight
     build-depends: base
                  , X11 >= 1.9.1
                  , colour >= 2.3.5

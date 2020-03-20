@@ -1,12 +1,12 @@
--- import Xmobar.Backlight
-import           Xmobar.Screensaver
+import Xmobar.Plugins.IntelBacklight
+import Xmobar.Plugins.Screensaver
 
-import qualified Theme              as T
+import qualified Theme as T
 
-import           Data.List
+import Data.List
 
-import           Xmobar
-import           XMonad             (getXMonadDir)
+import Xmobar
+import XMonad (getXMonadDir)
 
 wrapColor :: String -> String -> String
 wrapColor c s = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
@@ -25,8 +25,7 @@ myTemplate = formatTemplate left right
     right = [ "%wlp0s20f3wi%"
             , "%alsa:default:Master%"
             , "%battery%"
-            , "%bright%"
-            -- , "%betterbacklight%"
+            , "%intelbacklight%"
             , "%screensaver%"
             , "%locks%"
             , "%date%"
@@ -100,12 +99,7 @@ config confDir = defaultConfig
                     , "-i" , "<fn=1>\xf1e6</fn>"
                     ] 50
 
-      , Run $ Brightness ["-t", "<fn=1>\xf185</fn><percent>%"
-                       , "--"
-                       , "-D", "intel_backlight"
-                       ] 10
-
-      -- , Run $ Backlight ("", "")
+      , Run $ IntelBacklight "<fn=1>\xf185</fn>"
 
       , Run $ Wireless "wlp0s20f3"
         [ "-t", "<qualityipat><essid>"

@@ -1,4 +1,4 @@
-module Xmobar.Screensaver where
+module Xmobar.Plugins.Screensaver where
 
 import Graphics.X11.Xlib.Display
 import Graphics.X11.XScreenSaver
@@ -6,7 +6,7 @@ import Graphics.X11.XScreenSaver
 import Xmobar
 
 data Screensaver = Screensaver (String, String, String) Int
-  deriving (Read, Show)
+    deriving (Read, Show)
 
 instance Exec Screensaver where
     alias (Screensaver _ _) = "screensaver"
@@ -23,9 +23,9 @@ run' (text, colorOn, colorOff) = do
     Just x -> wrapColor text
       $ case xssi_state x of
           ScreenSaverDisabled -> colorOff
-          _ -> colorOn
+          _                   -> colorOn
     Nothing -> "N/A"
   where
     -- TODO not DRY
     wrapColor s c = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
-  
+

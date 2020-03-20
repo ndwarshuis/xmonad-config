@@ -2,16 +2,9 @@
 
 module DBus.Common where
 
--- import Control.Concurrent
--- import Control.Monad
+import DBus.IntelBacklight
 
-import DBus.Backlight
-
--- import DBus
 import DBus.Client
-
-onFoo :: IO String
-onFoo = return "testicle"
 
 startXMonadService :: IO Client
 startXMonadService = do
@@ -23,11 +16,7 @@ startXMonadService = do
     putStrLn "Another service owns \"org.xmonad\""
   else do
     putStrLn "Started xmonad dbus client"
-    exportBrightness client
-    export client "/test" defaultInterface
-      { interfaceName = "test.iface"
-      , interfaceMethods = [ autoMethod "foo" onFoo ]
-      }
+    exportIntelBacklight client
   return client
 
 stopXMonadService :: Client -> IO ()
