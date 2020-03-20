@@ -1,3 +1,4 @@
+-- import Xmobar.Backlight
 import Xmobar.Screensaver
 
 import qualified Theme as T
@@ -25,6 +26,7 @@ myTemplate = formatTemplate left right
             , "%alsa:default:Master%"
             , "%battery%"
             , "%bright%"
+            -- , "%betterbacklight%"
             , "%screensaver%"
             , "%locks%"
             , "%date%"
@@ -52,8 +54,8 @@ blockFont = T.fmtFontXFT T.font
   }
 
 config :: String -> Config
-config confDir = defaultConfig { 
-  font = barFont
+config confDir = defaultConfig
+  { font = barFont
   , additionalFonts = [ iconFont, blockFont ]
   , textOffset = 16
   , textOffsets = [ 16, 17 ]
@@ -102,6 +104,8 @@ config confDir = defaultConfig {
                        , "--"
                        , "-D", "intel_backlight"
                        ] 10
+
+      -- , Run $ Backlight ("", "")
 
       , Run $ Wireless "wlp0s20f3"
         [ "-t", "<qualityipat><essid>"

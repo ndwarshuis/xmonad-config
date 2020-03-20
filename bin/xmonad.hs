@@ -7,6 +7,10 @@ import ACPI
 import SendXMsg
 import Notify
 import Shell
+import DBus.Client (Client)
+
+import DBus.Common
+import DBus.Backlight
 
 import qualified Theme as T
 
@@ -75,11 +79,12 @@ import XMonad.Util.Run
 import qualified XMonad.StackSet as W
 
 main = do
+  dbClient <- startXMonadService
   (barPID, h) <- spawnPipe' "xmobar"
   pwrPID <- spawnPID "powermon"
   launch
     $ ewmh
-    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [pwrPID, barPID])
+    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [pwrPID, barPID] dbClient)
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
@@ -436,8 +441,10 @@ runVBox = spawnCmdOwnWS "vbox-start win8raw" [] myVMWorkspace
 runGimp :: X ()
 runGimp = spawnCmdOwnWS "gimp" [] myGimpWorkspace
 
-runCleanup :: [ProcessID] -> X ()
-runCleanup ps = io $ mapM_ killPID ps
+runCleanup :: [ProcessID] -> Client -> X ()
+runCleanup ps client = io $ do
+  mapM_ killPID ps
+  stopXMonadService client
 
 killPID :: ProcessID -> IO ()
 killPID pID = do
@@ -509,10 +516,10 @@ runDecBacklight :: X ()
 runDecBacklight = spawnCmd "adj_backlight" ["down"]
 
 runMinBacklight :: X ()
-runMinBacklight = spawnCmd "adj_backlight" ["min"]
+runMinBacklight = io callMinBrightness
 
 runMaxBacklight :: X ()
-runMaxBacklight = spawnCmd "adj_backlight" ["max"]
+runMaxBacklight = io callMaxBrightness
 
 showWorkspace tag = windows $ W.view tag
 
@@ -557,8 +564,8 @@ mkNamedSubmap c sectionName bindings =
 
 -- NOTE: the following bindings are used by dunst:
 -- "M-~", "M-<esc>", "M-S-<esc>", "M-S-."
-myKeys :: [ProcessID] -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
-myKeys hs c =
+myKeys :: [ProcessID] -> Client -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
+myKeys hs client c =
   mkNamedSubmap c "Window Layouts"
   [ ("M-j", addName "focus down" $ windows W.focusDown)
   , ("M-k", addName "focus up" $ windows W.focusUp)
@@ -640,7 +647,7 @@ myKeys hs c =
   , ("M-M1-.", addName "backlight max" runMaxBacklight)
   , ("M-M1-=", addName "enable screensaver" enableDPMS)
   , ("M-M1--", addName "disable screensaver" disableDPMS)
-  , ("M-<F2>", addName "restart xmonad" $ runCleanup hs >> runRestart)
+  , ("M-<F2>", addName "restart xmonad" $ runCleanup hs client >> runRestart)
   , ("M-S-<F2>", addName "recompile xmonad" runRecompile)
   , ("M-<End>", addName "power menu" myPowerPrompt)
   , ("M-<Home>", addName "quit xmonad" myQuitPrompt)
