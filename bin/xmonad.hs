@@ -1,46 +1,47 @@
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Main (main) where
 
 import ACPI
-import SendXMsg
-import Notify
-import Shell
 import DBus.Client (Client)
+import Notify
+import SendXMsg
+import Shell
 
-import DBus.Common
 import DBus.Backlight
+import DBus.Common
 
 import qualified Theme as T
 
-import Control.Monad (mapM_, forM, forM_, void, when)
+import Control.Monad (forM, forM_, mapM_, void, when)
 
-import Data.List (find, sortBy, sortOn)
+import           Data.List     (find, sortBy, sortOn)
 import qualified Data.Map.Lazy as M
-import Data.Maybe (catMaybes, isJust)
-import Data.Monoid (All(..))
+import           Data.Maybe    (catMaybes, isJust)
+import           Data.Monoid   (All (..))
 
+import Graphics.X11.Types
 import Graphics.X11.Xlib.Atom
 import Graphics.X11.Xlib.Extras
-import Graphics.X11.Types
 import Graphics.X11.Xrandr
 
-import Control.Arrow (first)
+import Control.Arrow     (first)
 import Control.Exception
 
 import System.Directory
 import System.Exit
 import System.IO
-import System.Process (waitForProcess)
-import System.Process.Internals
-  ( ProcessHandle__(ClosedHandle, OpenHandle)
-  , withProcessHandle
-  , mkProcessHandle)
 import System.Posix.IO
 import System.Posix.Process
 import System.Posix.Signals
 import System.Posix.Types
+import System.Process           (waitForProcess)
+import System.Process.Internals
+    ( ProcessHandle__ (ClosedHandle, OpenHandle)
+    , mkProcessHandle
+    , withProcessHandle
+    )
 
 import Text.Read (readMaybe)
 
@@ -99,15 +100,15 @@ main = do
 
 spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)
 spawnPipe' x = io $ do
-    (rd, wr) <- createPipe
-    setFdOption wr CloseOnExec True
-    h <- fdToHandle wr
-    hSetBuffering h LineBuffering
-    p <- xfork $ do
-          _ <- dupTo rd stdInput
-          executeFile "/bin/sh" False ["-c", x] Nothing
-    closeFd rd
-    return (p, h)
+  (rd, wr) <- createPipe
+  setFdOption wr CloseOnExec True
+  h <- fdToHandle wr
+  hSetBuffering h LineBuffering
+  p <- xfork $ do
+    _ <- dupTo rd stdInput
+    executeFile "/bin/sh" False ["-c", x] Nothing
+  closeFd rd
+  return (p, h)
 
 myWorkspaces = map show [1..10 :: Int]
 
@@ -373,7 +374,7 @@ spawnDmenuCmd :: String -> [String] -> X ()
 spawnDmenuCmd cmd args = do
   name <- getMonitorName
   case name of
-    Just n -> spawnCmd cmd $ ["-m", n] ++ args
+    Just n  -> spawnCmd cmd $ ["-m", n] ++ args
     Nothing -> io $ putStrLn "fail"
 
 spawnDmenuCmd' :: [String] -> X ()
@@ -386,7 +387,7 @@ runAppMenu :: X ()
 runAppMenu = spawnDmenuCmd' ["-show", "drun"]
 
 runClipMenu :: X ()
-runClipMenu = spawnDmenuCmd' 
+runClipMenu = spawnDmenuCmd'
   [ "-modi", "\"clipboard:greenclip print\""
   , "-show", "clipboard"
   , "-run-command", "'{cmd}'"
@@ -559,7 +560,7 @@ mkNamedSubmap
      -> String
      -> [(String, NamedAction)]
      -> [((KeyMask, KeySym), NamedAction)]
-mkNamedSubmap c sectionName bindings = 
+mkNamedSubmap c sectionName bindings =
   (subtitle sectionName:) $ mkNamedKeymap c bindings
 
 -- NOTE: the following bindings are used by dunst:

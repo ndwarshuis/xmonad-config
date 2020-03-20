@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import SendXMsg
 import ACPI
+import SendXMsg
 
 import Control.Monad
 
@@ -9,22 +9,22 @@ import Data.ByteString
 import Data.ByteString.Char8 as C
 import Data.Connection
 
-import System.IO.Streams.Internal as S (read)
+import System.IO.Streams.Internal   as S (read)
 import System.IO.Streams.UnixSocket
 
 splitLine :: ByteString -> [ByteString]
 splitLine = C.words . C.reverse . C.dropWhile (== '\n') . C.reverse
 
 parseLine :: ByteString -> Maybe ACPIEvent
-parseLine line = 
+parseLine line =
   -- TODO what if we don't have a list this long (we crash)
   case (line' !! 1, line' !! 2) of
-    ("PBTN", _) -> Just Power
-    ("PWRF", _) -> Just Power
-    ("SLPB", _) -> Just Sleep
-    ("SBTN", _) -> Just Sleep
+    ("PBTN", _)      -> Just Power
+    ("PWRF", _)      -> Just Power
+    ("SLPB", _)      -> Just Sleep
+    ("SBTN", _)      -> Just Sleep
     ("LID", "close") -> Just LidClose
-    _ -> Nothing
+    _                -> Nothing
   where
     line' = splitLine line
 

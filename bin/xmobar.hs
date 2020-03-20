@@ -1,12 +1,12 @@
 -- import Xmobar.Backlight
-import Xmobar.Screensaver
+import           Xmobar.Screensaver
 
-import qualified Theme as T
+import qualified Theme              as T
 
-import Data.List
+import           Data.List
 
-import Xmobar
-import XMonad (getXMonadDir)
+import           Xmobar
+import           XMonad             (getXMonadDir)
 
 wrapColor :: String -> String -> String
 wrapColor c s = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
@@ -77,7 +77,7 @@ config confDir = defaultConfig
   , persistent = True
   , iconRoot = confDir ++ "/icons"
 
-  , commands = 
+  , commands =
       [ Run $ Alsa "default" "Master"
         [ "-t", "<status><volume>%"
         , "--"

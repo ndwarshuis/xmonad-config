@@ -19,4 +19,4 @@ main = getArgs >>= parse
 
 parse :: [String] -> IO ()
 parse [magic, tag] = sendXMsg magic tag >> exitSuccess
-parse _ = exitFailure
+parse _            = exitFailure
