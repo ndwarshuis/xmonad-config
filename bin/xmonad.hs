@@ -79,6 +79,7 @@ import XMonad.Util.Run
 
 import qualified XMonad.StackSet as W
 
+main :: IO ()
 main = do
   dbClient <- startXMonadService
   (barPID, h) <- spawnPipe' "xmobar"
@@ -110,9 +111,13 @@ spawnPipe' x = io $ do
   closeFd rd
   return (p, h)
 
+myWorkspaces :: [String]
 myWorkspaces = map show [1..10 :: Int]
 
+myVMWorkspace :: String
 myVMWorkspace = "VM"
+
+myGimpWorkspace :: String
 myGimpWorkspace = "GIMP"
 
 myLayouts = onWorkspace myVMWorkspace (noBorders Full)
@@ -144,8 +149,12 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
 -- in the brackets is currently visible and the order reflects the
 -- physical location of each screen. The "<>" is the workspace
 -- that currently has focus
+myLoghook :: Handle -> X ()
 myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 
+myWindowSetXinerama
+  :: LayoutClass layout a1 =>
+     W.StackSet String (layout a1) a2 ScreenId ScreenDetail -> String
 myWindowSetXinerama ws = wsString ++ sep ++ layout
   where
     wsString = xmobarColor T.backdropFgColor "" $ onscreen ++ offscreen'
@@ -176,6 +185,7 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
 getFocusedScreen :: X Rectangle
 getFocusedScreen = withWindowSet $ return . screenRect . W.screenDetail . W.current
 
+myManageHook :: ManageHook
 myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
   -- as this makes a new window that confusingly must go over the
@@ -216,6 +226,7 @@ myManageHook = composeOne
 -- BITMAP atom (which should do nothing) and a "magic string" in the
 -- data field that can be intercepted here. When this event is
 -- registered here, close the dynamic workspaces that are empty.
+myEventHook :: Event -> X All
 myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (magic, tag) = splitXMsg d
@@ -236,6 +247,7 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   -- return (All True)
 myEventHook _ = return (All True)
 
+removeEmptyWorkspaceByTag' :: String -> X ()
 removeEmptyWorkspaceByTag' tag = do
   -- TODO this function works by first hiding the workspace to be
   -- removed and then removing it. This won't work if there are no
@@ -522,6 +534,7 @@ runMinBacklight = io callMinBrightness
 runMaxBacklight :: X ()
 runMaxBacklight = io callMaxBrightness
 
+showWorkspace :: WorkspaceId -> X ()
 showWorkspace tag = windows $ W.view tag
 
 enableDPMS :: X ()
