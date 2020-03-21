@@ -16,7 +16,7 @@ instance Exec IntelBacklight where
   start (IntelBacklight icon) cb = do
     _ <- matchSignal $ cb . formatBrightness
     cb . formatBrightness =<< callGetBrightness
-    forever (threadDelay 5000)
+    forever (threadDelay 5000000)
     where
       formatBrightness = \case
         Just b  -> icon ++ show (b `div` 100) ++ "%"

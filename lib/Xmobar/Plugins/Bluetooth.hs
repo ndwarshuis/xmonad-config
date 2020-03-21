@@ -46,13 +46,10 @@ instance Exec Bluetooth where
     reply <- callBT client
     -- TODO handle errors?
     case reply of
-      Right ret -> cb
-        $ fmtState
-        $ fromVariant
-        =<< fromVariant
+      Right ret -> cb $ fmtState $ fromVariant =<< fromVariant
         =<< listToMaybe (methodReturnBody ret)
       Left _    -> return ()
-    forever (threadDelay 5000)
+    forever (threadDelay 5000000)
     where
       -- Assume that the data in the PropertiesChanged signal has the form
       -- [something, Map, something] where the Map in the middle has the
@@ -61,10 +58,8 @@ instance Exec Bluetooth where
       getProps = \case
         [_, Variant (ValueMap TypeString TypeVariant m), _] -> Just m
         _                                                   -> Nothing
-      lookupState m = fromVariant
-        =<< fromValue
-        =<< M.lookup (AtomText "Powered")
-        =<< m
+      lookupState m = fromVariant =<< fromValue
+        =<< M.lookup (AtomText "Powered") =<< m
       fmtState = \case
         Just s -> wrapColor text $ if s then colorOn else colorOff
         Nothing -> "N/A"

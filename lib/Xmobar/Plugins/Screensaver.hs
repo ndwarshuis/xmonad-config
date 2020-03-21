@@ -17,7 +17,7 @@ instance Exec Screensaver where
     start (Screensaver (text, colorOn, colorOff)) cb = do
       _ <- matchSignal $ cb . fmtState
       cb . fmtState =<< callQuery
-      forever (threadDelay 5000)
+      forever (threadDelay 5000000)
       where
         fmtState = \case
           Just s -> wrapColor text $ if s then colorOn else colorOff
