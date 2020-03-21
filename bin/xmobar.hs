@@ -1,3 +1,4 @@
+import Xmobar.Plugins.Bluetooth
 import Xmobar.Plugins.IntelBacklight
 import Xmobar.Plugins.Screensaver
 
@@ -26,6 +27,7 @@ myTemplate = formatTemplate left right
             , "%alsa:default:Master%"
             , "%battery%"
             , "%intelbacklight%"
+            , "%bluetooth%"
             , "%screensaver%"
             , "%locks%"
             , "%date%"
@@ -120,6 +122,8 @@ config confDir = defaultConfig
       , Run $ Date "%Y-%m-%d %H:%M" "date" 10
 
       , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
+
+      , Run $ Bluetooth ("BT", T.fgColor, T.backdropFgColor)
 
       , Run UnsafeStdinReader
       ]

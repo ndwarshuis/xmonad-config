@@ -14,8 +14,9 @@ library
                    , DBus.IntelBacklight
                    , DBus.Internal
                    , DBus.Screensaver
-                   , Xmobar.Plugins.Screensaver
+                   , Xmobar.Plugins.Bluetooth
                    , Xmobar.Plugins.IntelBacklight
+                   , Xmobar.Plugins.Screensaver
     build-depends: base
                  , X11 >= 1.9.1
                  , colour >= 2.3.5
