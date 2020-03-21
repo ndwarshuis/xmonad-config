@@ -13,7 +13,7 @@ module DBus.IntelBacklight
   , matchSignal
   ) where
 
-import Control.Monad (forM_)
+import Control.Monad (void)
 
 import Data.Char
 
@@ -25,6 +25,7 @@ import Data.Text.IO as T (readFile, writeFile)
 
 import DBus
 import DBus.Client
+import DBus.Internal
 
 --------------------------------------------------------------------------------
 -- | Low level sysfs functions
@@ -69,6 +70,7 @@ getRawBrightness = readFileInt curFile
 setRawBrightness :: RawBrightness -> IO ()
 setRawBrightness = T.writeFile curFile . pack . show
 
+-- TODO this has rounding errors that make the steps uneven
 rawToNorm :: RawBrightness -> RawBrightness -> Brightness
 rawToNorm maxRaw curRaw = fromIntegral
   $ (curRaw - 1) * maxNorm `div` (maxRaw - 1)
@@ -105,69 +107,48 @@ setBrightness maxRaw newNorm = do
 -- integer and emit a signal with the same brightness value. Additionally, there
 -- is one method to get the current brightness.
 
-brPath :: ObjectPath
-brPath = "/intelbacklight"
+path :: ObjectPath
+path = "/intelbacklight"
 
-brInterface :: InterfaceName
-brInterface = "org.xmonad.Brightness"
+interface :: InterfaceName
+interface = "org.xmonad.Brightness"
 
-brCurrentBrightness :: MemberName
-brCurrentBrightness = "CurrentBrightness"
+memCurrentBrightness :: MemberName
+memCurrentBrightness = "CurrentBrightness"
 
-brGetBrightness :: MemberName
-brGetBrightness = "GetBrightness"
+memGetBrightness :: MemberName
+memGetBrightness = "GetBrightness"
 
-brMaxBrightness :: MemberName
-brMaxBrightness = "MaxBrightness"
+memMaxBrightness :: MemberName
+memMaxBrightness = "MaxBrightness"
 
-brMinBrightness :: MemberName
-brMinBrightness = "MinBrightness"
+memMinnBrightness :: MemberName
+memMinnBrightness = "MinBrightness"
 
-brIncBrightness :: MemberName
-brIncBrightness = "IncBrightness"
+memIncBrightness :: MemberName
+memIncBrightness = "IncBrightness"
 
-brDecBrightness :: MemberName
-brDecBrightness = "DecBrightness"
+memDecBrightness :: MemberName
+memDecBrightness = "DecBrightness"
 
 brSignal :: Signal
-brSignal = signal brPath brInterface brCurrentBrightness
+brSignal = signal path interface memCurrentBrightness
   -- { signalDestination = Just "org.xmonad" }
 
 brMatcher :: MatchRule
 brMatcher = matchAny
-  { matchPath = Just brPath
-  , matchInterface = Just brInterface
-  , matchMember = Just brCurrentBrightness
+  { matchPath = Just path
+  , matchInterface = Just interface
+  , matchMember = Just memCurrentBrightness
   }
 
-callBacklight :: Client -> MemberName -> IO (Maybe [Variant])
-callBacklight client method = do
-  -- TODO this will throw a clienterror if it cannot connect at all
-  reply <- call client (methodCall brPath brInterface method)
-    { methodCallDestination = Just "org.xmonad" }
-  return $ case reply of
-    Left _    -> Nothing
-    Right ret -> Just $ methodReturnBody ret
 
-callBacklight' :: MemberName -> IO (Maybe Brightness)
-callBacklight' method = do
-  client <- connectSession
-  body <- callBacklight client method
-  -- TODO this is a bit convoluted...I return the body in the reply of
-  -- the method call and feed that to the signal and then return the
-  -- body (the latter is not really necessary since the only things
-  -- that read the backlight status either use the signal or call
-  -- GetBrightness directly
-  forM_ body $ emitBrightness client
-  return $ body >>= signalBrightness
+callBacklight :: MemberName -> IO ()
+callBacklight method = void $ callMethod $ methodCall path interface method
 
-emitBrightness :: Client -> [Variant] -> IO ()
-emitBrightness client body =
-  emit client $ brSignal { signalBody = body }
-
-signalBrightness :: [Variant] -> Maybe Brightness
-signalBrightness [b] = fromVariant b :: Maybe Brightness
-signalBrightness _   = Nothing
+bodyGetBrightness :: [Variant] -> Maybe Brightness
+bodyGetBrightness [b] = fromVariant b :: Maybe Brightness
+bodyGetBrightness _   = Nothing
 
 -- | Exported haskell API
 
@@ -175,36 +156,39 @@ exportIntelBacklight :: Client -> IO ()
 exportIntelBacklight client = do
   maxval <- getMaxRawBrightness -- assume the max value will never change
   let stepsize = maxBrightness `div` steps
-  export client brPath defaultInterface
-    { interfaceName = brInterface
+  let emit' = emitBrightness client
+  export client path defaultInterface
+    { interfaceName = interface
     , interfaceMethods =
-      [ autoMethod brMaxBrightness (setBrightness maxval maxBrightness)
-      , autoMethod brMinBrightness (setBrightness maxval 0)
-      , autoMethod brIncBrightness (changeBrightness maxval stepsize)
-      , autoMethod brDecBrightness (changeBrightness maxval (-stepsize))
-      , autoMethod brGetBrightness (getBrightness maxval)
+      [ autoMethod memMaxBrightness $ emit' =<< setBrightness maxval maxBrightness
+      , autoMethod memMinnBrightness $ emit' =<< setBrightness maxval 0
+      , autoMethod memIncBrightness $ emit' =<< changeBrightness maxval stepsize
+      , autoMethod memDecBrightness $ emit' =<< changeBrightness maxval (-stepsize)
+      , autoMethod memGetBrightness $ getBrightness maxval
       ]
     }
 
-callMaxBrightness :: IO (Maybe Brightness)
-callMaxBrightness = callBacklight' brMaxBrightness
+emitBrightness :: Client -> Brightness -> IO ()
+emitBrightness client cur = emit client $ brSignal { signalBody = [toVariant cur] }
 
-callMinBrightness :: IO (Maybe Brightness)
-callMinBrightness = callBacklight' brMinBrightness
+callMaxBrightness :: IO ()
+callMaxBrightness = callBacklight memMaxBrightness
 
-callIncBrightness :: IO (Maybe Brightness)
-callIncBrightness = callBacklight' brIncBrightness
+callMinBrightness :: IO ()
+callMinBrightness = callBacklight memMinnBrightness
 
-callDecBrightness :: IO (Maybe Brightness)
-callDecBrightness = callBacklight' brDecBrightness
+callIncBrightness :: IO ()
+callIncBrightness = callBacklight memIncBrightness
+
+callDecBrightness :: IO ()
+callDecBrightness = callBacklight memDecBrightness
 
 callGetBrightness :: IO (Maybe Brightness)
 callGetBrightness = do
-  client <- connectSession
-  body <- callBacklight client brGetBrightness
-  return $ body >>= signalBrightness
+  reply <- callMethod $ methodCall path interface memGetBrightness
+  return $ reply >>= bodyGetBrightness
 
 matchSignal :: (Maybe Brightness -> IO ()) -> IO SignalHandler
 matchSignal cb = do
   client <- connectSession
-  addMatch client brMatcher $ cb . signalBrightness . signalBody
+  addMatch client brMatcher $ cb . bodyGetBrightness . signalBody

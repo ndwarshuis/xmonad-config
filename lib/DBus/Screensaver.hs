@@ -3,7 +3,14 @@
 --------------------------------------------------------------------------------
 -- | DBus module for X11 screensave/DPMS control
 
-module DBus.Screensaver where
+module DBus.Screensaver
+  ( exportScreensaver
+  , callToggle
+  , callQuery
+  , matchSignal
+  ) where
+
+import Control.Monad (void)
 
 import DBus
 import DBus.Client
@@ -46,59 +53,61 @@ query = do
 --------------------------------------------------------------------------------
 -- | DBus Interface
 --
--- Define two methods to enable/disable the screensaver. These methods will
--- emit signals with the state when called. Define another method to get the
--- current state.
+-- Define a methods to toggle the screensaver. This methods will emit signal
+-- with the new state when called. Define another method to get the current
+-- state.
 
-ssPath :: ObjectPath
-ssPath = "/screensaver"
+path :: ObjectPath
+path = "/screensaver"
 
-ssInterface :: InterfaceName
-ssInterface = "org.xmonad.Screensaver"
+interface :: InterfaceName
+interface = "org.xmonad.Screensaver"
 
-ssState :: MemberName
-ssState = "State"
+memState :: MemberName
+memState = "State"
 
-ssToggle :: MemberName
-ssToggle = "Toggle"
+memToggle :: MemberName
+memToggle = "Toggle"
 
-ssQuery :: MemberName
-ssQuery = "Query"
+memQuery :: MemberName
+memQuery = "Query"
 
-ssSignal :: Signal
-ssSignal = signal ssPath ssInterface ssState
+sigCurrentState :: Signal
+sigCurrentState = signal path interface memState
 
-ssMatcher :: MatchRule
-ssMatcher = matchAny
-  { matchPath = Just ssPath
-  , matchInterface = Just ssInterface
-  , matchMember = Just ssState
+ruleCurrentState :: MatchRule
+ruleCurrentState = matchAny
+  { matchPath = Just path
+  , matchInterface = Just interface
+  , matchMember = Just memState
   }
+
+emitState :: Client -> SSState -> IO ()
+emitState client sss = emit client $ sigCurrentState { signalBody = [toVariant sss] }
+
+bodyGetCurrentState :: [Variant] -> Maybe SSState
+bodyGetCurrentState [b] = fromVariant b :: Maybe SSState
+bodyGetCurrentState _   = Nothing
+
+-- | Exported haskell API
 
 exportScreensaver :: Client -> IO ()
 exportScreensaver client =
-  export client ssPath defaultInterface
-    { interfaceName = ssInterface
+  export client path defaultInterface
+    { interfaceName = interface
     , interfaceMethods =
-      [ autoMethod ssToggle toggle
-      , autoMethod ssQuery query
+      [ autoMethod memToggle $ emitState client =<< toggle
+      , autoMethod memQuery query
       ]
     }
 
-callToggle :: IO (Maybe SSState)
-callToggle = callMethodEmit mc bodyState sig
-  where
-    mc = methodCall ssPath ssInterface ssToggle
-    sig b = ssSignal { signalBody = b }
-
-bodyState :: [Variant] -> Maybe SSState
-bodyState [b] = fromVariant b :: Maybe SSState
-bodyState _   = Nothing
+callToggle :: IO ()
+callToggle = void $ callMethod $ methodCall path interface memToggle
 
 callQuery :: IO (Maybe SSState)
-callQuery = callMethod mc bodyState
-  where
-    mc = methodCall ssPath ssInterface ssQuery
+callQuery = do
+  reply <- callMethod $ methodCall path interface memQuery
+  return $ reply >>= bodyGetCurrentState
 
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler
-matchSignal cb = addMatchCallback ssMatcher $ cb . bodyState
+matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
