@@ -16,6 +16,7 @@ library
                    , DBus.Screensaver
                    , Xmobar.Plugins.Bluetooth
                    , Xmobar.Plugins.IntelBacklight
+                   , Xmobar.Plugins.NetworkManager
                    , Xmobar.Plugins.Screensaver
     build-depends: base
                  , X11 >= 1.9.1

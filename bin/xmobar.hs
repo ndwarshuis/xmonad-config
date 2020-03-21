@@ -1,5 +1,6 @@
 import Xmobar.Plugins.Bluetooth
 import Xmobar.Plugins.IntelBacklight
+import Xmobar.Plugins.NetworkManager
 import Xmobar.Plugins.Screensaver
 
 import qualified Theme as T
@@ -29,6 +30,7 @@ myTemplate = formatTemplate left right
             , "%intelbacklight%"
             , "%bluetooth%"
             , "%screensaver%"
+            , "%networkmanager%"
             , "%locks%"
             , "%date%"
             ]
@@ -126,6 +128,8 @@ config confDir = defaultConfig
       , Run $ Bluetooth ("<fn=1>\xf293</fn>", T.fgColor, T.backdropFgColor)
 
       , Run UnsafeStdinReader
+
+      , Run $ NetworkManager ("VPN", T.fgColor, T.backdropFgColor)
       ]
   }
 
