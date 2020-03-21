@@ -123,7 +123,7 @@ config confDir = defaultConfig
 
       , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
 
-      , Run $ Bluetooth ("BT", T.fgColor, T.backdropFgColor)
+      , Run $ Bluetooth ("<fn=1>\xf293</fn>", T.fgColor, T.backdropFgColor)
 
       , Run UnsafeStdinReader
       ]

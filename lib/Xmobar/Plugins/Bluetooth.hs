@@ -6,43 +6,65 @@ module Xmobar.Plugins.Bluetooth where
 import Control.Concurrent
 import Control.Monad
 
-import Data.List  (find)
-import Data.Maybe (mapMaybe)
+import qualified Data.Map.Lazy as M
+import           Data.Maybe
 
 import DBus
 import DBus.Client
+import DBus.Internal.Types
 
 import Xmobar
 
 newtype Bluetooth = Bluetooth (String, String, String) deriving (Read, Show)
 
+path :: ObjectPath
+path = "/org/bluez/hci0"
+
+interface :: InterfaceName
+interface = "org.freedesktop.DBus.Properties"
+
 rule :: MatchRule
 rule = matchAny
-  { matchPath = Just "/org/bluez/hci0"
-  , matchInterface = Just "org.freedesktop.DBus.Properties"
+  { matchPath = Just path
+  , matchInterface = Just interface
   , matchMember = Just "PropertiesChanged"
   }
+
+callBT :: Client -> IO (Either MethodError MethodReturn)
+callBT client =
+  call client (methodCall path interface "Get")
+    { methodCallDestination = Just "org.bluez", methodCallBody = body }
+  where
+    body = map toVariant ["org.bluez.Adapter1", "Powered" :: String]
 
 instance Exec Bluetooth where
   alias (Bluetooth _) = "bluetooth"
   start (Bluetooth (text, colorOn, colorOff)) cb = do
     client <- connectSystem
-    _ <- addMatch client rule $ cb . fmtState . stateFromSignal
-    -- TODO initialize here
-    -- cb . formatBrightness =<< callGetBrightness
+    _ <- addMatch client rule $
+      cb . fmtState . lookupState . getProps . signalBody
+    reply <- callBT client
+    -- TODO handle errors?
+    case reply of
+      Right ret -> cb
+        $ fmtState
+        $ fromVariant
+        =<< fromVariant
+        =<< listToMaybe (methodReturnBody ret)
+      Left _    -> return ()
     forever (threadDelay 5000)
     where
-      -- TODO this is total utter garbage...but it works...
-      stateFromSignal sig = join
-          $ fmap (fromVariant :: (Variant -> Maybe Bool))
-          $ join
-          $ fmap (fromVariant :: (Variant -> Maybe Variant))
-          $ fmap snd
-          $ find (\(k, _) -> (fromVariant k :: Maybe String) == Just "Powered")
-          $ concatMap dictionaryItems
-          $ mapMaybe fromVariant
-          $ filter (\v -> variantType v == TypeDictionary TypeString TypeVariant)
-          $ signalBody sig
+      -- Assume that the data in the PropertiesChanged signal has the form
+      -- [something, Map, something] where the Map in the middle has the
+      -- "Powered" text key that we care about (among other things that change
+      -- when the bluetooth interface is powered on)
+      getProps = \case
+        [_, Variant (ValueMap TypeString TypeVariant m), _] -> Just m
+        _                                                   -> Nothing
+      lookupState m = fromVariant
+        =<< fromValue
+        =<< M.lookup (AtomText "Powered")
+        =<< m
       fmtState = \case
         Just s -> wrapColor text $ if s then colorOn else colorOff
         Nothing -> "N/A"
