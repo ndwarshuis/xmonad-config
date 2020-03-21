@@ -3,6 +3,7 @@
 module DBus.Common where
 
 import DBus.IntelBacklight
+import DBus.Screensaver
 
 import DBus.Client
 
@@ -17,6 +18,7 @@ startXMonadService = do
   else do
     putStrLn "Started xmonad dbus client"
     exportIntelBacklight client
+    exportScreensaver client
   return client
 
 stopXMonadService :: Client -> IO ()

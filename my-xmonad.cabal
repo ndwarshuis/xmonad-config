@@ -12,6 +12,8 @@ library
                    , Shell
                    , DBus.Common
                    , DBus.IntelBacklight
+                   , DBus.Internal
+                   , DBus.Screensaver
                    , Xmobar.Plugins.Screensaver
                    , Xmobar.Plugins.IntelBacklight
     build-depends: base

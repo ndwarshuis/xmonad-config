@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 --------------------------------------------------------------------------------
@@ -208,8 +207,4 @@ callGetBrightness = do
 matchSignal :: (Maybe Brightness -> IO ()) -> IO SignalHandler
 matchSignal cb = do
   client <- connectSession
-  addMatch client brMatcher $ cb . pullBrightness . signalBody
-  where
-    pullBrightness = \case
-      [b] -> fromVariant b :: Maybe Brightness
-      _   -> Nothing
+  addMatch client brMatcher $ cb . signalBrightness . signalBody

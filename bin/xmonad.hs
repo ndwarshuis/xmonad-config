@@ -11,6 +11,7 @@ import Shell
 
 import DBus.Common
 import DBus.IntelBacklight
+import DBus.Screensaver
 
 import qualified Theme as T
 
@@ -536,11 +537,8 @@ runMaxBacklight = io $ void callMaxBrightness
 showWorkspace :: WorkspaceId -> X ()
 showWorkspace tag = windows $ W.view tag
 
-enableDPMS :: X ()
-enableDPMS = spawnCmd "xset" ["s", "on", "+dpms"]
-
-disableDPMS :: X ()
-disableDPMS = spawnCmd "xset" ["s", "off", "-dpms"]
+toggleDPMS :: X ()
+toggleDPMS = io $ void callToggle
 
 -- keybindings
 
@@ -658,8 +656,7 @@ myKeys hs client c =
   , ("M-,", addName "backlight down" runDecBacklight)
   , ("M-M1-,", addName "backlight min" runMinBacklight)
   , ("M-M1-.", addName "backlight max" runMaxBacklight)
-  , ("M-M1-=", addName "enable screensaver" enableDPMS)
-  , ("M-M1--", addName "disable screensaver" disableDPMS)
+  , ("M-M1-=", addName "toggle screensaver" toggleDPMS)
   , ("M-<F2>", addName "restart xmonad" $ runCleanup hs client >> runRestart)
   , ("M-S-<F2>", addName "recompile xmonad" runRecompile)
   , ("M-<End>", addName "power menu" myPowerPrompt)

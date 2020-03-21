@@ -119,7 +119,7 @@ config confDir = defaultConfig
 
       , Run $ Date "%Y-%m-%d %H:%M" "date" 10
 
-      , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.fgColor) 10
+      , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
 
       , Run UnsafeStdinReader
       ]

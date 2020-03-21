@@ -1,31 +1,26 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Xmobar.Plugins.Screensaver where
 
-import Graphics.X11.Xlib.Display
-import Graphics.X11.XScreenSaver
+import Control.Concurrent
+import Control.Monad
+
+import DBus.Screensaver
 
 import Xmobar
 
-data Screensaver = Screensaver (String, String, String) Int
+data Screensaver = Screensaver (String, String, String)
     deriving (Read, Show)
 
 instance Exec Screensaver where
-    alias (Screensaver _ _) = "screensaver"
-    run   (Screensaver opts _) = run' opts
-    rate  (Screensaver _ r) = r
-
--- TODO make this respond to events rather than polling
-run' :: (String, String, String) -> IO String
-run' (text, colorOn, colorOff) = do
-  dpy <- openDisplay ""
-  xssi <- xScreenSaverQueryInfo dpy
-  closeDisplay dpy
-  return $ case xssi of
-    Just x -> wrapColor text
-      $ case xssi_state x of
-          ScreenSaverDisabled -> colorOff
-          _                   -> colorOn
-    Nothing -> "N/A"
-  where
-    -- TODO not DRY
-    wrapColor s c = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
+    alias (Screensaver _) = "screensaver"
+    start (Screensaver (text, colorOn, colorOff)) cb = do
+      _ <- matchSignal $ cb . fmtState
+      cb . fmtState =<< callQuery
+      forever (threadDelay 5000)
+      where
+        fmtState = \case
+          Just s -> wrapColor text $ if s then colorOn else colorOff
+          Nothing -> "N/A"
+        wrapColor s c = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
 
