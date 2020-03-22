@@ -98,6 +98,8 @@ main = do
           , logHook = myLoghook h
           , clickJustFocuses = False
           , focusFollowsMouse = False
+          , normalBorderColor = T.bordersColor
+          , focusedBorderColor = T.selectedBordersColor
           }
 
 spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)

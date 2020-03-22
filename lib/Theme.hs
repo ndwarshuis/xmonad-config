@@ -10,7 +10,7 @@ import Data.Colour.SRGB
 import Data.List
 
 import qualified XMonad.Layout.Decoration as D
-import qualified XMonad.Prompt as P
+import qualified XMonad.Prompt            as P
 
 -- Colors
 
@@ -24,7 +24,7 @@ fgColor :: String
 fgColor = "#2c2c2c"
 
 bordersColor :: String
-bordersColor = darken' 0.85 bgColor
+bordersColor = darken' 0.3 bgColor
 
 warningColor :: String
 warningColor = "#ffca28"
@@ -37,6 +37,9 @@ selectedFgColor = "#ffffff"
 
 selectedBgColor :: String
 selectedBgColor = "#3399ff"
+
+selectedBordersColor :: String
+selectedBordersColor = "#006cd9"
 
 backdropBaseColor :: String
 backdropBaseColor = baseColor
@@ -57,18 +60,26 @@ darken' wt = sRGB24show . darken wt . sRGB24read
 
 -- Fonts
 
-data Slant = Roman | Italic | Oblique deriving (Eq, Show)
+data Slant = Roman
+    | Italic
+    | Oblique
+    deriving (Eq, Show)
 
-data Weight = Light | Medium | Demibold | Bold | Black deriving (Eq, Show)
+data Weight = Light
+    | Medium
+    | Demibold
+    | Bold
+    | Black
+    deriving (Eq, Show)
 
-data ThemeFont = ThemeFont 
-  { family    :: String
-  , weight    :: Maybe Weight
-  , slant     :: Maybe Slant
-  , size      :: Maybe Int
-  , pixelsize :: Maybe Int
-  , antialias :: Maybe Bool
-  }
+data ThemeFont = ThemeFont
+    { family    :: String
+    , weight    :: Maybe Weight
+    , slant     :: Maybe Slant
+    , size      :: Maybe Int
+    , pixelsize :: Maybe Int
+    , antialias :: Maybe Bool
+    }
 
 fmtFontXFT :: ThemeFont -> String
 fmtFontXFT ThemeFont
@@ -86,7 +97,7 @@ fmtFontXFT ThemeFont
             , fmt "slant" l
             , fmt "size" s
             , fmt "pixelsize" i
-            , fmt "antialias" a] 
+            , fmt "antialias" a]
     fmt :: Show a => String -> Maybe a -> String
     fmt e = \case
       Just d -> e ++ "=" ++ map toLower (show d)
