@@ -125,11 +125,11 @@ config confDir = defaultConfig
 
       , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
 
-      , Run $ Bluetooth ("<fn=1>\xf293</fn>", T.fgColor, T.backdropFgColor)
+      , Run $ Bluetooth ("<fn=1>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
 
       , Run UnsafeStdinReader
 
-      , Run $ NetworkManager ("VPN", T.fgColor, T.backdropFgColor)
+      , Run $ NetworkManager ("VPN", T.fgColor, T.backdropFgColor) 5
       ]
   }
 
