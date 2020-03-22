@@ -16,8 +16,8 @@ library
                    , DBus.Screensaver
                    , Xmobar.Plugins.Bluetooth
                    , Xmobar.Plugins.IntelBacklight
-                   , Xmobar.Plugins.NetworkManager
                    , Xmobar.Plugins.Screensaver
+                   , Xmobar.Plugins.VPN
     build-depends: base
                  , X11 >= 1.9.1
                  , colour >= 2.3.5

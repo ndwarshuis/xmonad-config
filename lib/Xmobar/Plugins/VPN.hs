@@ -1,14 +1,14 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Xmobar.Plugins.NetworkManager where
+module Xmobar.Plugins.VPN where
 
 import DBus
 import DBus.Client
 
 import Xmobar
 
-data NetworkManager = NetworkManager (String, String, String) Int
+data VPN = VPN (String, String, String) Int
     deriving (Read, Show)
 
 callConnectionType :: Client -> IO (Either MethodError Variant)
@@ -17,10 +17,10 @@ callConnectionType client =
                       "org.freedesktop.NetworkManager" "PrimaryConnectionType")
     { methodCallDestination = Just "org.freedesktop.NetworkManager" }
 
-instance Exec NetworkManager where
-  alias (NetworkManager _ _) = "networkmanager"
-  rate  (NetworkManager _ r) = r
-  run   (NetworkManager (text, colorOn, colorOff) _) = do
+instance Exec VPN where
+  alias (VPN _ _) = "vpn"
+  rate  (VPN _ r) = r
+  run   (VPN (text, colorOn, colorOff) _) = do
     client <- connectSystem
     reply <- callConnectionType client
     disconnect client

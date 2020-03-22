@@ -1,7 +1,7 @@
 import Xmobar.Plugins.Bluetooth
 import Xmobar.Plugins.IntelBacklight
-import Xmobar.Plugins.NetworkManager
 import Xmobar.Plugins.Screensaver
+import Xmobar.Plugins.VPN
 
 import qualified Theme as T
 
@@ -25,12 +25,12 @@ myTemplate = formatTemplate left right
       ++ " "
     left = [ "%UnsafeStdinReader%" ]
     right = [ "%wlp0s20f3wi%"
+            , "%vpn%"
+            , "%bluetooth%"
             , "%alsa:default:Master%"
             , "%battery%"
             , "%intelbacklight%"
-            , "%bluetooth%"
             , "%screensaver%"
-            , "%networkmanager%"
             , "%locks%"
             , "%date%"
             ]
@@ -49,6 +49,13 @@ iconFont = T.fmtFontXFT T.font
   , T.pixelsize = Just 13
   }
 
+iconFontLarge :: String
+iconFontLarge = T.fmtFontXFT T.font
+  { T.family = "FontAwesome"
+  , T.size = Nothing
+  , T.pixelsize = Just 15
+  }
+
 blockFont :: String
 blockFont = T.fmtFontXFT T.font
   { T.family = "Symbola"
@@ -59,9 +66,13 @@ blockFont = T.fmtFontXFT T.font
 config :: String -> Config
 config confDir = defaultConfig
   { font = barFont
-  , additionalFonts = [ iconFont, blockFont ]
+  , additionalFonts =
+    [ iconFont
+    , iconFontLarge
+    , blockFont
+    ]
   , textOffset = 16
-  , textOffsets = [ 16, 17 ]
+  , textOffsets = [ 16, 17, 17 ]
   , bgColor = T.bgColor
   , fgColor = T.fgColor
   , position = BottomSize C 100 24
@@ -112,24 +123,24 @@ config confDir = defaultConfig
         ] 5
 
       , Run $ Locks
-        [ "-N", "<fn=2>\x1f13d</fn>"
-        , "-n", wrapColor T.backdropFgColor "<fn=2>\x1f13d</fn>"
-        , "-C", "<fn=2>\x1f132</fn>"
-        , "-c", wrapColor T.backdropFgColor "<fn=2>\x1f132</fn>"
+        [ "-N", "<fn=3>\x1f13d</fn>"
+        , "-n", wrapColor T.backdropFgColor "<fn=3>\x1f13d</fn>"
+        , "-C", "<fn=3>\x1f132</fn>"
+        , "-c", wrapColor T.backdropFgColor "<fn=3>\x1f132</fn>"
         , "-s", ""
         , "-S", ""
-        , "-d", "<fn=2> </fn>"
+        , "-d", "<fn=3> </fn>"
         ]
 
       , Run $ Date "%Y-%m-%d %H:%M" "date" 10
 
       , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
 
-      , Run $ Bluetooth ("<fn=1>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
+      , Run $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
 
       , Run UnsafeStdinReader
 
-      , Run $ NetworkManager ("VPN", T.fgColor, T.backdropFgColor) 5
+      , Run $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor) 5
       ]
   }
 
