@@ -27,6 +27,9 @@ library
                  , dbus >= 1.2.7
                  , text >= 1.2.3.1
                  , containers >= 0.6.0.1
+                 , tcp-streams >= 1.0.1.1
+                 , io-streams >= 1.5.1.0
+                 , bytestring >= 0.10.8.2
                  , xmobar
     ghc-options: -Wall -Werror -fno-warn-missing-signatures
     default-language: Haskell2010
@@ -61,16 +64,6 @@ executable xit-event
     main-is: bin/xit-event.hs
     build-depends: base
                  , X11 >= 1.9.1
-                 , my-xmonad
-    default-language: Haskell2010
-    ghc-options: -Wall -Werror -fno-warn-missing-signatures -threaded
-
-executable powermon
-    main-is: bin/powermon.hs
-    build-depends: base
-                 , tcp-streams >= 1.0.1.1
-                 , io-streams >= 1.5.1.0
-                 , bytestring >= 0.10.8.2
                  , my-xmonad
     default-language: Haskell2010
     ghc-options: -Wall -Werror -fno-warn-missing-signatures -threaded

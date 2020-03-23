@@ -15,7 +15,8 @@ import DBus.Screensaver
 
 import qualified Theme as T
 
-import Control.Monad (forM, forM_, mapM_, void, when)
+import Control.Concurrent
+import Control.Monad      (forM, forM_, mapM_, void, when)
 
 import           Data.List     (find, sortBy, sortOn)
 import qualified Data.Map.Lazy as M
@@ -84,10 +85,10 @@ main :: IO ()
 main = do
   dbClient <- startXMonadService
   (barPID, h) <- spawnPipe' "xmobar"
-  pwrPID <- spawnPID "powermon"
+  _ <- forkIO runPowermon
   launch
     $ ewmh
-    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [pwrPID, barPID] dbClient)
+    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [barPID] dbClient)
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
@@ -235,7 +236,7 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
     let (magic, tag) = splitXMsg d
     if | magic == magicStringWS -> removeEmptyWorkspaceByTag' tag
        | magic == acpiMagic -> do
-         let acpiTag = readMaybe tag :: Maybe ACPIEvent
+         let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
          forM_ acpiTag $ \case
            Power -> myPowerPrompt
            Sleep -> confirmPrompt T.promptTheme "suspend?" runSuspend
