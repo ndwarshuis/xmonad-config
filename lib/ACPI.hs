@@ -7,17 +7,17 @@ module ACPI
   , runPowermon
   ) where
 
-import SendXMsg
+import           SendXMsg
 
-import Control.Exception
-import Control.Monad
+import           Control.Exception
+import           Control.Monad
 
-import Data.ByteString       hiding (readFile)
-import Data.ByteString.Char8 as C hiding (readFile)
-import Data.Connection
+import           Data.ByteString              hiding (readFile)
+import           Data.ByteString.Char8        as C hiding (readFile)
+import           Data.Connection
 
-import System.IO.Streams.Internal   as S (read)
-import System.IO.Streams.UnixSocket
+import           System.IO.Streams.Internal   as S (read)
+import           System.IO.Streams.UnixSocket
 
 data ACPIEvent = Power
     | Sleep
@@ -28,7 +28,7 @@ instance Enum ACPIEvent where
   toEnum 0 = Power
   toEnum 1 = Sleep
   toEnum 2 = LidClose
-  toEnum _ = errorWithoutStackTrace "ACPI.Enum.ACPIEvent.toEnum"
+  toEnum _ = errorWithoutStackTrace "ACPI.Enum.ACPIEvent.toEnum: bad argument"
 
   fromEnum Power    = 0
   fromEnum Sleep    = 1

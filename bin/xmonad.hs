@@ -276,6 +276,24 @@ runHibernate = spawn "systemctl hibernate"
 runReboot :: X ()
 runReboot = spawn "systemctl reboot"
 
+data PowerAction = Poweroff
+    | Shutdown
+    | Hibernate
+    | Reboot
+    deriving (Eq)
+
+instance Enum PowerAction where
+  toEnum 0 = Poweroff
+  toEnum 1 = Shutdown
+  toEnum 2 = Hibernate
+  toEnum 3 = Reboot
+  toEnum _ = errorWithoutStackTrace "Main.Enum.PowerAction.toEnum: bad argument"
+
+  fromEnum Poweroff  = 0
+  fromEnum Shutdown  = 1
+  fromEnum Hibernate = 2
+  fromEnum Reboot    = 3
+
 myPowerPrompt :: X ()
 myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
   where
@@ -284,20 +302,19 @@ myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
     keymap = M.fromList
       $ ((controlMask, xK_g), quit) :
       map (first $ (,) 0)
-      [ (xK_p, sendAction "p")
-      , (xK_s, sendAction "s")
-      , (xK_h, sendAction "h")
-      , (xK_r, sendAction "r")
+      [ (xK_p, sendAction Poweroff)
+      , (xK_s, sendAction Shutdown)
+      , (xK_h, sendAction Hibernate)
+      , (xK_r, sendAction Reboot)
       , (xK_Return, quit)
       , (xK_Escape, quit)
       ]
-    sendAction a = setInput a >> setSuccess True >> setDone True
-    executeAction a
-      | a == "p" = runPowerOff
-      | a == "s" = runScreenLock >> runSuspend
-      | a == "h" = runScreenLock >> runHibernate
-      | a == "r" = runReboot
-      | otherwise = return () -- should never happen
+    sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
+    executeAction a = case toEnum $ read a of
+      Poweroff  -> runPowerOff
+      Shutdown  -> runScreenLock >> runSuspend
+      Hibernate -> runScreenLock >> runHibernate
+      Reboot    -> runReboot
 
 myQuitPrompt :: X ()
 myQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
