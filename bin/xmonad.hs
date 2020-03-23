@@ -3,83 +3,78 @@
 
 module Main (main) where
 
-import ACPI
-import DBus.Client (Client)
-import Notify
-import SendXMsg
-import Shell
+import           ACPI
+import           DBus.Client                      (Client)
+import           Notify
+import           SendXMsg
+import           Shell
 
-import DBus.Common
-import DBus.IntelBacklight
-import DBus.Screensaver
+import           DBus.Common
+import           DBus.IntelBacklight
+import           DBus.Screensaver
 
-import qualified Theme as T
+import qualified Theme                            as T
 
-import Control.Concurrent
-import Control.Monad      (forM, forM_, mapM_, void, when)
+import           Control.Concurrent
+import           Control.Monad
+    ( forM
+    , forM_
+    , mapM_
+    , void
+    , when
+    )
 
-import           Data.List     (find, sortBy, sortOn)
-import qualified Data.Map.Lazy as M
-import           Data.Maybe    (catMaybes, isJust)
-import           Data.Monoid   (All (..))
+import           Data.List                        (find, sortBy, sortOn)
+import qualified Data.Map.Lazy                    as M
+import           Data.Maybe                       (catMaybes, isJust)
+import           Data.Monoid                      (All (..))
 
-import Graphics.X11.Types
-import Graphics.X11.Xlib.Atom
-import Graphics.X11.Xlib.Extras
-import Graphics.X11.Xrandr
+import           Graphics.X11.Types
+import           Graphics.X11.Xlib.Atom
+import           Graphics.X11.Xlib.Extras
+import           Graphics.X11.Xrandr
 
-import Control.Arrow     (first)
-import Control.Exception
+import           Control.Arrow                    (first)
+import           Control.Exception
 
-import System.Directory
-import System.Exit
-import System.IO
-import System.Posix.IO
-import System.Posix.Process
-import System.Posix.Signals
-import System.Posix.Types
-import System.Process           (waitForProcess)
-import System.Process.Internals
+import           System.Directory
+import           System.Exit
+import           System.IO
+import           System.Posix.IO
+import           System.Posix.Process
+import           System.Posix.Signals
+import           System.Posix.Types
+import           System.Process                   (waitForProcess)
+import           System.Process.Internals
     ( ProcessHandle__ (ClosedHandle, OpenHandle)
     , mkProcessHandle
     , withProcessHandle
     )
 
-import Text.Read (readMaybe)
+import           Text.Read                        (readMaybe)
 
-import XMonad
-import XMonad.Actions.CopyWindow
-import XMonad.Actions.CycleWS
-import XMonad.Actions.DynamicWorkspaces
-import XMonad.Actions.PhysicalScreens
-import XMonad.Actions.Volume
--- import XMonad.Config.Desktop
-import XMonad.Hooks.DynamicLog
-import XMonad.Hooks.EwmhDesktops
-import XMonad.Hooks.ManageDocks
--- import XMonad.Layout.IndependentScreens
-import XMonad.Hooks.ManageHelpers
--- import XMonad.Layout.BinarySpacePartition (emptyBSP)
--- import XMonad.Layout.DragPane
--- import XMonad.Layout.IM
--- import XMonad.Layout.LayoutCombinators hiding ((|||))
-import XMonad.Layout.Named
-import XMonad.Layout.NoBorders
-import XMonad.Layout.NoFrillsDecoration
-import XMonad.Layout.PerWorkspace
--- import XMonad.Layout.ResizableTile
-import XMonad.Layout.Tabbed
--- import XMonad.Layout.ToggleLayouts (ToggleLayout(..), toggleLayouts)
-import XMonad.Prompt
-import XMonad.Prompt.ConfirmPrompt
--- import XMonad.Prompt.XMonad
--- import XMonad.Prompt.Shell
-import XMonad.Util.EZConfig
-import XMonad.Util.NamedActions
-import XMonad.Util.Run
--- import XMonad.Util.WindowProperties
+import           XMonad
+import           XMonad.Actions.CopyWindow
+import           XMonad.Actions.CycleWS
+import           XMonad.Actions.DynamicWorkspaces
+import           XMonad.Actions.PhysicalScreens
+import           XMonad.Actions.Volume
+import           XMonad.Hooks.DynamicLog
+import           XMonad.Hooks.EwmhDesktops
+import           XMonad.Hooks.ManageDocks
+import           XMonad.Hooks.ManageHelpers
+import           XMonad.Layout.Named
+import           XMonad.Layout.NoBorders
+import           XMonad.Layout.NoFrillsDecoration
+import           XMonad.Layout.PerWorkspace
+import           XMonad.Layout.Tabbed
+import           XMonad.Prompt
+import           XMonad.Prompt.ConfirmPrompt
+import           XMonad.Util.EZConfig
+import           XMonad.Util.NamedActions
+import           XMonad.Util.Run
 
-import qualified XMonad.StackSet as W
+import qualified XMonad.StackSet                  as W
 
 main :: IO ()
 main = do
