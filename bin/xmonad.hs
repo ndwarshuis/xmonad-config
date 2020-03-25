@@ -8,6 +8,7 @@ import           DBus.Client                      (Client)
 import           Notify
 import           SendXMsg
 import           Shell
+import           WorkspaceMon
 
 import           DBus.Common
 import           DBus.IntelBacklight
@@ -81,6 +82,7 @@ main = do
   dbClient <- startXMonadService
   (barPID, h) <- spawnPipe' "xmobar"
   _ <- forkIO runPowermon
+  _ <- forkIO runWorkspaceMon
   launch
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [barPID] dbClient)
