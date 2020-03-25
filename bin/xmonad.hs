@@ -82,8 +82,8 @@ main = do
   dbClient <- startXMonadService
   (barPID, h) <- spawnPipe' "xmobar"
   _ <- forkIO runPowermon
-  _ <- forkIO $ runWorkspaceMon $ fromList [ ("Gimp", myGimpWorkspace)
-                                           , ("VirtualBoxVM", myVMWorkspace)
+  _ <- forkIO $ runWorkspaceMon $ fromList [ (myGimpClass, myGimpWorkspace)
+                                           , (myVMClass, myVMWorkspace)
                                            ]
   launch
     $ ewmh
@@ -120,8 +120,14 @@ myWorkspaces = map show [1..10 :: Int]
 myVMWorkspace :: String
 myVMWorkspace = "VM"
 
+myVMClass :: String
+myVMClass = "VirtualBoxVM"
+
 myGimpWorkspace :: String
 myGimpWorkspace = "GIMP"
+
+myGimpClass :: String
+myGimpClass = "Gimp"
 
 myLayouts = onWorkspace myVMWorkspace (noBorders Full)
   -- $ onWorkspace myGimpWorkspace gimpLayout
@@ -193,7 +199,7 @@ myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
   -- as this makes a new window that confusingly must go over the
   -- actual VM window
-  [ className =? "VirtualBoxVM" -?> doShift myVMWorkspace
+  [ className =? myVMClass -?> doShift myVMWorkspace
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
   -- gnucash
@@ -201,7 +207,7 @@ myManageHook = composeOne
   -- xsane
   , className =? "Xsane" -?> doFloat
   -- all of GIMP
-  , className =? "Gimp" -?> doFloat >> doShift myGimpWorkspace
+  , className =? myGimpClass -?> doFloat >> doShift myGimpWorkspace
   -- , title =? "GIMP Startup" -?> doIgnore
   -- plots and graphics created by R
   , className =? "R_x11" -?> doFloat
@@ -345,11 +351,6 @@ runOptimusPrompt = do
 magicStringWS :: String
 magicStringWS = "%%%%%"
 
--- spawnCmdOwnWS :: String -> [String] -> String -> X ()
--- spawnCmdOwnWS cmd args ws = spawn
---   $ fmtCmd cmd args
---   #!&& fmtCmd "xit-event" [magicStringWS, ws]
-
 myTerm :: String
 myTerm = "urxvt"
 
@@ -469,7 +470,7 @@ runDesktopCapture :: X ()
 runDesktopCapture = runFlameshot "full"
 
 runVBox :: X ()
-runVBox = spawnCmd "vbox-start win8raw" []
+runVBox = spawnCmd "vbox-start" ["win8raw"]
 
 runGimp :: X ()
 runGimp = spawnCmd "gimp" []
