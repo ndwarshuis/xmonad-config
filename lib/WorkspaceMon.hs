@@ -97,9 +97,7 @@ waitAndKill tag pid = waitUntilExit pidDir
 withUniquePid :: WatchedPIDs -> Pid -> IO () -> IO ()
 withUniquePid curPIDs pid f = do
   pids <- readMVar curPIDs
-  if pid `elem` pids
-    then return ()
-    else do
-      modifyMVar_ curPIDs (return . (pid:))
-      f
-      modifyMVar_ curPIDs (return . filter (/=pid))
+  unless (pid `elem` pids) $ do
+    modifyMVar_ curPIDs (return . (pid:))
+    f
+    modifyMVar_ curPIDs (return . filter (/=pid))
