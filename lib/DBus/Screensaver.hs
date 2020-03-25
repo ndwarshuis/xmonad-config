@@ -10,18 +10,18 @@ module DBus.Screensaver
   , matchSignal
   ) where
 
-import Control.Monad (void)
+import           Control.Monad             (void)
 
-import DBus
-import DBus.Client
-import DBus.Internal
+import           DBus
+import           DBus.Client
+import           DBus.Internal
 
-import Graphics.X11.Xlib.Display
-import Graphics.X11.XScreenSaver
+import           Graphics.X11.Xlib.Display
+import           Graphics.X11.XScreenSaver
 
-import Shell
+import           Shell
 
-import XMonad
+import           XMonad
 
 --------------------------------------------------------------------------------
 -- | Low-level functions
@@ -42,7 +42,6 @@ query :: IO SSState
 query = do
   dpy <- openDisplay ""
   xssi <- xScreenSaverQueryInfo dpy
-  print xssi
   closeDisplay dpy
   return $ case xssi of
     Just XScreenSaverInfo { xssi_state = ScreenSaverDisabled } -> False
