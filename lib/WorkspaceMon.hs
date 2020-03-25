@@ -75,7 +75,7 @@ handle curPIDs MapNotifyEvent { ev_window = w } = do
     case pid of
       -- ASSUMPTION windows will only have one PID at one time
       Just [p] -> let p' = fromIntegral p
-        in withUniquePid curPIDs p' $ waitAndKill t p'
+        in void $ forkIO $ withUniquePid curPIDs p' $ waitAndKill t p'
       _        -> return ()
 
 handle _ _ = return ()
