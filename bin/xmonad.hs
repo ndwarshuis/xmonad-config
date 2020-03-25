@@ -82,7 +82,9 @@ main = do
   dbClient <- startXMonadService
   (barPID, h) <- spawnPipe' "xmobar"
   _ <- forkIO runPowermon
-  _ <- forkIO runWorkspaceMon
+  _ <- forkIO $ runWorkspaceMon $ fromList [ ("Gimp", myGimpWorkspace)
+                                           , ("VirtualBoxVM", myVMWorkspace)
+                                           ]
   launch
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [barPID] dbClient)
@@ -231,6 +233,7 @@ myEventHook :: Event -> X All
 myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (magic, tag) = splitXMsg d
+    io $ print $ magic ++ "; " ++ tag
     if | magic == magicStringWS -> removeEmptyWorkspaceByTag' tag
        | magic == acpiMagic -> do
          let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
@@ -242,7 +245,6 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
              forM_ status $ \s -> runScreenLock >> when s runSuspend
        | otherwise -> return ()
     return (All True)
-  | otherwise = return (All True)
 -- myEventHook DestroyWindowEvent { ev_window = w } = do
 --   io $ print w
   -- return (All True)
@@ -343,10 +345,10 @@ runOptimusPrompt = do
 magicStringWS :: String
 magicStringWS = "%%%%%"
 
-spawnCmdOwnWS :: String -> [String] -> String -> X ()
-spawnCmdOwnWS cmd args ws = spawn
-  $ fmtCmd cmd args
-  #!&& fmtCmd "xit-event" [magicStringWS, ws]
+-- spawnCmdOwnWS :: String -> [String] -> String -> X ()
+-- spawnCmdOwnWS cmd args ws = spawn
+--   $ fmtCmd cmd args
+--   #!&& fmtCmd "xit-event" [magicStringWS, ws]
 
 myTerm :: String
 myTerm = "urxvt"
@@ -467,10 +469,10 @@ runDesktopCapture :: X ()
 runDesktopCapture = runFlameshot "full"
 
 runVBox :: X ()
-runVBox = spawnCmdOwnWS "vbox-start win8raw" [] myVMWorkspace
+runVBox = spawnCmd "vbox-start win8raw" []
 
 runGimp :: X ()
-runGimp = spawnCmdOwnWS "gimp" [] myGimpWorkspace
+runGimp = spawnCmd "gimp" []
 
 runCleanup :: [ProcessID] -> Client -> X ()
 runCleanup ps client = io $ do

@@ -1,4 +1,8 @@
-module WorkspaceMon (runWorkspaceMon) where
+module WorkspaceMon (fromList, runWorkspaceMon) where
+
+import           SendXMsg
+
+import           Data.Map                  as M
 
 import           Control.Concurrent
 import           Control.Monad
@@ -15,8 +19,11 @@ import           Graphics.X11.Xlib.Types
 import           System.Directory
 import           System.Process            (Pid)
 
-runWorkspaceMon :: IO ()
-runWorkspaceMon = do
+-- TODO yes yes I could use a reader monad here...
+type MatchTags = Map String String
+
+runWorkspaceMon :: MatchTags -> IO ()
+runWorkspaceMon mts = do
   dpy <- openDisplay ""
   root <- rootWindow dpy $ defaultScreen dpy
   -- listen only for substructure change events (which includes MapNotify)
@@ -24,29 +31,32 @@ runWorkspaceMon = do
     set_event_mask a substructureNotifyMask
     changeWindowAttributes dpy root cWEventMask a
   _ <- allocaXEvent $ \e ->
-    forever $ handle dpy =<< (nextEvent dpy e >> getEvent e)
+    forever $ handle dpy mts =<< (nextEvent dpy e >> getEvent e)
   return ()
 
-handle :: Display -> Event -> IO ()
+handle :: Display -> MatchTags -> Event -> IO ()
 
 -- | assume this fires at least once when a new window is created (also could
 -- use CreateNotify but that is really noisy)
-handle dpy MapNotifyEvent { ev_window = w } = do
+handle dpy mts MapNotifyEvent { ev_window = w } = do
   hint <- getClassHint dpy w
   -- this will need to eventually accept a conditional argument that
   -- we can change upon initialization
-  when (resName hint == "gimp") $ do
-    a <- internAtom dpy "_NET_WM_PID" False
-    pid <- getWindowProperty32 dpy a w
-    case pid of
-      -- ASSUMPTION windows will only have one PID at one time
-      Just [p] -> waitAndKill $ fromIntegral p
-      _        -> return ()
+  let tag = M.lookup (resClass hint) mts
+  case tag of
+    Just t -> do
+      a <- internAtom dpy "_NET_WM_PID" False
+      pid <- getWindowProperty32 dpy a w
+      case pid of
+        -- ASSUMPTION windows will only have one PID at one time
+        Just [p] -> waitAndKill t $ fromIntegral p
+        _        -> return ()
+    Nothing -> return ()
 
-handle _ _ = return ()
+handle _ _ _ = return ()
 
-waitAndKill :: Pid -> IO ()
-waitAndKill pid = waitUntilExit pidDir
+waitAndKill :: String -> Pid -> IO ()
+waitAndKill tag pid = waitUntilExit pidDir
   where
     pidDir = "/proc/" ++ show pid
     waitUntilExit d = do
@@ -56,6 +66,9 @@ waitAndKill pid = waitUntilExit pidDir
       -- code should work because we can reasonably expect that no processes
       -- will spawn with the same PID within the delay limit
       res <- doesDirectoryExist d
-      when res $ do
-          threadDelay 100000
-          waitUntilExit d
+      if res then do
+        threadDelay 100000
+        waitUntilExit d
+      else do
+        print "sending"
+        sendXMsg "%%%%%" tag
