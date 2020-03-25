@@ -12,3 +12,6 @@ stack.yaml.lock
 
 # files automatically created by xmonad
 xmonad.state
+
+# emacs files
+TAGS
