@@ -15,6 +15,7 @@ library
                    , DBus.IntelBacklight
                    , DBus.Internal
                    , DBus.Screensaver
+                   , Xmobar.Common
                    , Xmobar.Plugins.Bluetooth
                    , Xmobar.Plugins.IntelBacklight
                    , Xmobar.Plugins.Screensaver

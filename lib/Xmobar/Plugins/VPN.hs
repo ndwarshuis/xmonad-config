@@ -3,10 +3,11 @@
 
 module Xmobar.Plugins.VPN where
 
-import DBus
-import DBus.Client
+import           DBus
+import           DBus.Client
 
-import Xmobar
+import           Xmobar
+import           Xmobar.Common
 
 data VPN = VPN (String, String, String) Int
     deriving (Read, Show)
@@ -30,6 +31,5 @@ instance Exec VPN where
         Right r -> (fromVariant r :: Maybe String)
         Left _  -> Nothing
       fmtState = \case
-        Just s -> wrapColor text $ if s == "vpn" then colorOn else colorOff
+        Just s -> wrapColor (if s == "vpn" then colorOn else colorOff) text
         Nothing -> "N/A"
-      wrapColor s c = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"

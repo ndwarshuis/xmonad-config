@@ -54,13 +54,14 @@ import           System.Process.Internals
 
 import           Text.Read                        (readMaybe)
 
+import           Xmobar.Common
+
 import           XMonad
 import           XMonad.Actions.CopyWindow
 import           XMonad.Actions.CycleWS
 import           XMonad.Actions.DynamicWorkspaces
 import           XMonad.Actions.PhysicalScreens
 import           XMonad.Actions.Volume
-import           XMonad.Hooks.DynamicLog
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
@@ -170,17 +171,17 @@ myWindowSetXinerama
      W.StackSet String (layout a1) a2 ScreenId ScreenDetail -> String
 myWindowSetXinerama ws = wsString ++ sep ++ layout
   where
-    wsString = xmobarColor T.backdropFgColor "" $ onscreen ++ offscreen'
+    wsString = wrapColorBg T.backdropFgColor "" $ onscreen ++ offscreen'
     offscreen' = if null offscreen then "" else " " ++ offscreen
-    sep = xmobarColor T.backdropFgColor "" " : "
-    onscreen = xmobarColor hilightFgColor hilightBgColor
-      $ wrap " " " "
+    sep = wrapColorBg T.backdropFgColor "" " : "
+    onscreen = wrapColorBg hilightFgColor hilightBgColor
+      $ (\s -> " " ++ s ++ " ")
       $ unwords
       $ map (fmtTags . W.tag . W.workspace)
       . sortBy compareXCoord
       $ W.current ws : W.visible ws
     fmtTags t = if t == W.currentTag ws
-      then xmobarColor T.fgColor hilightBgColor t
+      then wrapColorBg T.fgColor hilightBgColor t
       else t
     offscreen = unwords
       $ map W.tag

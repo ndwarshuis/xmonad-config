@@ -2,14 +2,15 @@
 
 module Xmobar.Plugins.Screensaver where
 
-import Control.Concurrent
-import Control.Monad
+import           Control.Concurrent
+import           Control.Monad
 
-import DBus.Screensaver
+import           DBus.Screensaver
 
-import Xmobar
+import           Xmobar
+import           Xmobar.Common
 
-data Screensaver = Screensaver (String, String, String)
+newtype Screensaver = Screensaver (String, String, String)
     deriving (Read, Show)
 
 instance Exec Screensaver where
@@ -20,7 +21,6 @@ instance Exec Screensaver where
       forever (threadDelay 5000000)
       where
         fmtState = \case
-          Just s -> wrapColor text $ if s then colorOn else colorOff
+          Just s -> wrapColor (if s then colorOn else colorOff) text
           Nothing -> "N/A"
-        wrapColor s c = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
 

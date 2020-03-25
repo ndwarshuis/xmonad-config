@@ -1,17 +1,18 @@
-import Xmobar.Plugins.Bluetooth
-import Xmobar.Plugins.IntelBacklight
-import Xmobar.Plugins.Screensaver
-import Xmobar.Plugins.VPN
+import           Xmobar.Plugins.Bluetooth
+import           Xmobar.Plugins.IntelBacklight
+import           Xmobar.Plugins.Screensaver
+import           Xmobar.Plugins.VPN
 
-import qualified Theme as T
+import qualified Theme                         as T
 
-import Data.List
+import           Data.List
 
-import Xmobar
-import XMonad (getXMonadDir)
+import           Xmobar
+import           Xmobar.Common
+import           XMonad                        (getXMonadDir)
 
-wrapColor :: String -> String -> String
-wrapColor c s = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
+-- wrapColor :: String -> String -> String
+-- wrapColor c s = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
 
 sep :: String
 sep = wrapColor T.backdropFgColor " : "
