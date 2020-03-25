@@ -82,9 +82,7 @@ main = do
   dbClient <- startXMonadService
   (barPID, h) <- spawnPipe' "xmobar"
   _ <- forkIO runPowermon
-  _ <- forkIO $ runWorkspaceMon $ fromList [ (myGimpClass, myGimpWorkspace)
-                                           , (myVMClass, myVMWorkspace)
-                                           ]
+  _ <- forkIO runWorkspaceMon'
   launch
     $ ewmh
     $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [barPID] dbClient)
@@ -101,6 +99,12 @@ main = do
           , normalBorderColor = T.bordersColor
           , focusedBorderColor = T.selectedBordersColor
           }
+
+runWorkspaceMon' :: IO ()
+runWorkspaceMon' = runWorkspaceMon
+  $ fromList [ (myGimpClass, myGimpWorkspace)
+             , (myVMClass, myVMWorkspace)
+             ]
 
 spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)
 spawnPipe' x = io $ do
@@ -221,27 +225,13 @@ myManageHook = composeOne
   , isDialog              -?> doCenterFloat
   ]
 
--- This is a giant hack to "listen" for applications that close. Some
--- apps like Virtualbox go on their own workspace which is dynamically
--- created. But I want said workspace to disappear when the app
--- closes. This is actually hard. We can't just listen to
--- DestroyWindow events as VBox will "destroy" windows when it
--- switches to fullscreen and back. We also can't just monitor the
--- process from the window since WindowDestroy events don't have PIDs
--- attached to them. Therefore, the hack to make this all work is to
--- make a script fire when VirtualBox (and other apps that I want to
--- control in this manner) close. This script fires a bogus
--- ClientMessage event to the root window. This event will have a
--- BITMAP atom (which should do nothing) and a "magic string" in the
--- data field that can be intercepted here. When this event is
--- registered here, close the dynamic workspaces that are empty.
 myEventHook :: Event -> X All
 myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
-    let (magic, tag) = splitXMsg d
-    io $ print $ magic ++ "; " ++ tag
-    if | magic == magicStringWS -> removeEmptyWorkspaceByTag' tag
-       | magic == acpiMagic -> do
+    let (xtype, tag) = splitXMsg d
+    case xtype of
+      Workspace -> removeEmptyWorkspaceByTag tag
+      ACPI -> do
          let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
          forM_ acpiTag $ \case
            Power -> myPowerPrompt
@@ -249,22 +239,8 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
            LidClose -> do
              status <- io isDischarging
              forM_ status $ \s -> runScreenLock >> when s runSuspend
-       | otherwise -> return ()
     return (All True)
--- myEventHook DestroyWindowEvent { ev_window = w } = do
---   io $ print w
-  -- return (All True)
 myEventHook _ = return (All True)
-
-removeEmptyWorkspaceByTag' :: String -> X ()
-removeEmptyWorkspaceByTag' tag = do
-  -- TODO this function works by first hiding the workspace to be
-  -- removed and then removing it. This won't work if there are no
-  -- other hidden workspaces to take it's place. So, need to scan
-  -- through the list of workspaces and swap the first one that is
-  -- empty with the workspace to be removed. If it actually is empty,
-  -- this will be enough to make it disappear.
-  removeEmptyWorkspaceByTag tag
 
 data PowerPrompt = PowerPrompt
 
@@ -347,9 +323,6 @@ runOptimusPrompt = do
       >> io exitSuccess
 
 -- shell commands
-
-magicStringWS :: String
-magicStringWS = "%%%%%"
 
 myTerm :: String
 myTerm = "urxvt"

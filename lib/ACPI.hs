@@ -2,7 +2,6 @@
 
 module ACPI
   ( ACPIEvent(..)
-  , acpiMagic
   , isDischarging
   , runPowermon
   ) where
@@ -35,7 +34,7 @@ instance Enum ACPIEvent where
   fromEnum LidClose = 2
 
 sendACPIEvent :: ACPIEvent -> IO ()
-sendACPIEvent = sendXMsg acpiMagic . show . fromEnum
+sendACPIEvent = sendXMsg ACPI . show . fromEnum
 
 parseLine :: ByteString -> Maybe ACPIEvent
 parseLine line =
@@ -56,10 +55,6 @@ isDischarging = do
   case status of
     Left _  -> return Nothing
     Right s -> return $ Just (s == "Discharging")
-
--- TODO use a data type that enforces strings of max length 5
-acpiMagic :: String
-acpiMagic = "%acpi"
 
 runPowermon :: IO ()
 runPowermon = do

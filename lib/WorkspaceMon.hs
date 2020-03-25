@@ -88,4 +88,4 @@ waitAndKill tag pid = waitUntilExit pidDir
       -- will spawn with the same PID within the delay limit
       res <- doesDirectoryExist d
       if res then threadDelay 100000 >> waitUntilExit d
-      else sendXMsg "%%%%%" tag
+      else sendXMsg Workspace tag
