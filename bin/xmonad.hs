@@ -76,7 +76,7 @@ main = do
   _ <- forkIO runWorkspaceMon'
   launch
     $ ewmh
-    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (myKeys [barPID] dbClient)
+    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (mkKeys [barPID] dbClient)
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
@@ -537,99 +537,100 @@ myModMask = mod4Mask
 mkNamedSubmap
   :: XConfig l
      -> String
-     -> [(String, NamedAction)]
+     -> [(String, String, X ())]
      -> [((KeyMask, KeySym), NamedAction)]
 mkNamedSubmap c sectionName bindings =
-  (subtitle sectionName:) $ mkNamedKeymap c bindings
+  (subtitle sectionName:) $ mkNamedKeymap c
+  $ map (\(key, name, cmd) -> (key, addName name cmd)) bindings
 
 -- NOTE: the following bindings are used by dunst:
 -- "M-~", "M-<esc>", "M-S-<esc>", "M-S-."
-myKeys :: [ProcessID] -> Client -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
-myKeys hs client c =
+mkKeys :: [ProcessID] -> Client -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
+mkKeys hs client c =
   mkNamedSubmap c "Window Layouts"
-  [ ("M-j", addName "focus down" $ windows W.focusDown)
-  , ("M-k", addName "focus up" $ windows W.focusUp)
-  , ("M-m", addName "focus master" $ windows W.focusMaster)
-  , ("M-S-j", addName "swap down" $ windows W.swapDown)
-  , ("M-S-k", addName "swap up" $ windows W.swapUp)
-  , ("M-S-m", addName "swap master" $ windows W.swapMaster)
+  [ ("M-j", "focus down",  windows W.focusDown)
+  , ("M-k", "focus up",  windows W.focusUp)
+  , ("M-m", "focus master",  windows W.focusMaster)
+  , ("M-S-j", "swap down",  windows W.swapDown)
+  , ("M-S-k", "swap up",  windows W.swapUp)
+  , ("M-S-m", "swap master",  windows W.swapMaster)
   -- TODO this will decrement past 0?
-  , ("M-C-j", addName "remove master window" $ sendMessage (IncMasterN (-1)))
-  , ("M-C-k", addName "add master window" $ sendMessage (IncMasterN 1))
-  , ("M-<Return>", addName "next layout" $ sendMessage NextLayout)
-  , ("M-S-<Return>", addName "reset layout" $ setLayout $ XMonad.layoutHook c)
-  , ("M-t", addName "sink tiling" $ withFocused $ windows . W.sink)
-  , ("M--", addName "shrink" $ sendMessage Shrink)
-  , ("M-=", addName "expand" $ sendMessage Expand)
+  , ("M-C-j", "remove master window",  sendMessage (IncMasterN (-1)))
+  , ("M-C-k", "add master window",  sendMessage (IncMasterN 1))
+  , ("M-<Return>", "next layout",  sendMessage NextLayout)
+  , ("M-S-<Return>", "reset layout",  setLayout $ XMonad.layoutHook c)
+  , ("M-t", "sink tiling",  withFocused $ windows . W.sink)
+  , ("M--", "shrink",  sendMessage Shrink)
+  , ("M-=", "expand",  sendMessage Expand)
   ] ++
 
   mkNamedSubmap c "Workspaces"
   -- NOTE this assumes that there are workspaces bound to numbers
-  ([ (mods ++ show i, addName (msg ++ " " ++ show i) $ windows $ f w)
+  ([ (mods ++ show i, msg ++ " " ++ show i,  windows $ f w)
     | (w, i) <- zip (XMonad.workspaces c) [1..] :: [(String, Int)]
     , (mods, msg, f) <-
       [ ("M-", "switch to workspace", W.view)
       , ("M-S-", "move client to workspace", W.shift)]
   ] ++
-  [ ("M-v", addName "switch to VM workspace" $ showWorkspace myVMWorkspace)
-  , ("M-M1-g", addName "switch to Gimp workspace" $ showWorkspace myGimpWorkspace)
+  [ ("M-v", "switch to VM workspace", showWorkspace myVMWorkspace)
+  , ("M-M1-g", "switch to Gimp workspace", showWorkspace myGimpWorkspace)
   ]) ++
 
   mkNamedSubmap c "Screens"
-  [ ("M-l", addName "move up screen" nextScreen)
-  , ("M-h", addName "move down screen" prevScreen)
-  , ("M-C-l", addName "move client up screen" $ shiftNextScreen >> nextScreen)
-  , ("M-C-h", addName "move client down screen" $ shiftPrevScreen >> prevScreen)
-  , ("M-S-l", addName "shift up screen" $ swapNextScreen >> nextScreen)
-  , ("M-S-h", addName "shift down screen" $ swapPrevScreen >> prevScreen)
+  [ ("M-l", "move up screen", nextScreen)
+  , ("M-h", "move down screen", prevScreen)
+  , ("M-C-l", "move client up screen",  shiftNextScreen >> nextScreen)
+  , ("M-C-h", "move client down screen",  shiftPrevScreen >> prevScreen)
+  , ("M-S-l", "shift up screen",  swapNextScreen >> nextScreen)
+  , ("M-S-h", "shift down screen",  swapPrevScreen >> prevScreen)
   ] ++
 
   mkNamedSubmap c "Actions"
-  [ ("M-q", addName "close window" kill1)
-  , ("M-r", addName "run program" runCmdMenu)
-  , ("M-C-s", addName "capture area" runAreaCapture)
-  , ("M-C-S-s", addName "capture screen" runScreenCapture)
-  , ("M-C-d", addName "capture desktop" runDesktopCapture)
-  -- , ("M-C-S-s", addName "capture focused window" $ spawn myWindowCap)
-  , ("M-<Delete>", addName "lock screen" runScreenLock)
+  [ ("M-q", "close window", kill1)
+  , ("M-r", "run program", runCmdMenu)
+  , ("M-C-s", "capture area", runAreaCapture)
+  , ("M-C-S-s", "capture screen", runScreenCapture)
+  , ("M-C-d", "capture desktop", runDesktopCapture)
+  -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
+  , ("M-<Delete>", "lock screen", runScreenLock)
   ] ++
 
   mkNamedSubmap c "Launchers"
-  [ ("<XF86Search>", addName "select/launch app" runAppMenu)
-  , ("M-g", addName "launch clipboard manager" runClipMenu)
-  , ("M-a", addName "launch network selector" runNetMenu)
-  , ("M-w", addName "launch window selector" runWinMenu)
-  , ("M-u", addName "launch device selector" runDevMenu)
-  , ("M-C-e", addName "launch editor" runEditor)
-  , ("M-C-w", addName "launch browser" runBrowser)
-  , ("M-C-t", addName "launch terminal" runTerm)
-  , ("M-C-q", addName "launch calc" runCalc)
-  , ("M-C-f", addName "launch file manager" runFileManager)
+  [ ("<XF86Search>", "select/launch app", runAppMenu)
+  , ("M-g", "launch clipboard manager", runClipMenu)
+  , ("M-a", "launch network selector", runNetMenu)
+  , ("M-w", "launch window selector", runWinMenu)
+  , ("M-u", "launch device selector", runDevMenu)
+  , ("M-C-e", "launch editor", runEditor)
+  , ("M-C-w", "launch browser", runBrowser)
+  , ("M-C-t", "launch terminal", runTerm)
+  , ("M-C-q", "launch calc", runCalc)
+  , ("M-C-f", "launch file manager", runFileManager)
   -- TODO shoudn't these be flipped?
-  , ("M-C-v", addName "launch windows VM" $ runVBox >> appendWorkspace myVMWorkspace)
-  , ("M-C-g", addName "launch GIMP" $ runGimp >> appendWorkspace myGimpWorkspace)
+  , ("M-C-v", "launch windows VM", runVBox >> appendWorkspace myVMWorkspace)
+  , ("M-C-g", "launch GIMP", runGimp >> appendWorkspace myGimpWorkspace)
   ] ++
 
   mkNamedSubmap c "Multimedia"
-  [ ("<XF86AudioPlay>", addName "toggle play/pause" runTogglePlay)
-  , ("<XF86AudioPrev>", addName "previous track" runPrevTrack)
-  , ("<XF86AudioNext>", addName "next track" runNextTrack)
-  , ("<XF86AudioStop>", addName "stop" runStopPlay)
-  , ("<XF86AudioLowerVolume>", addName "volume down" runVolumeDown)
-  , ("<XF86AudioRaiseVolume>", addName "volume up" runVolumeUp)
-  , ("<XF86AudioMute>", addName "volume mute" runVolumeMute)
-  , ("M-C-b", addName "toggle bluetooth" runToggleBluetooth)
+  [ ("<XF86AudioPlay>", "toggle play/pause", runTogglePlay)
+  , ("<XF86AudioPrev>", "previous track", runPrevTrack)
+  , ("<XF86AudioNext>", "next track", runNextTrack)
+  , ("<XF86AudioStop>", "stop", runStopPlay)
+  , ("<XF86AudioLowerVolume>", "volume down", runVolumeDown)
+  , ("<XF86AudioRaiseVolume>", "volume up", runVolumeUp)
+  , ("<XF86AudioMute>", "volume mute", runVolumeMute)
+  , ("M-C-b", "toggle bluetooth", runToggleBluetooth)
   ] ++
 
   mkNamedSubmap c "System"
-  [ ("M-.", addName "backlight up" runIncBacklight)
-  , ("M-,", addName "backlight down" runDecBacklight)
-  , ("M-M1-,", addName "backlight min" runMinBacklight)
-  , ("M-M1-.", addName "backlight max" runMaxBacklight)
-  , ("M-M1-=", addName "toggle screensaver" toggleDPMS)
-  , ("M-<F2>", addName "restart xmonad" $ runCleanup hs client >> runRestart)
-  , ("M-S-<F2>", addName "recompile xmonad" runRecompile)
-  , ("M-<End>", addName "power menu" runPowerPrompt)
-  , ("M-<Home>", addName "quit xmonad" runQuitPrompt)
-  , ("M-<Esc>", addName "switch gpu" runOptimusPrompt)
+  [ ("M-.", "backlight up", runIncBacklight)
+  , ("M-,", "backlight down", runDecBacklight)
+  , ("M-M1-,", "backlight min", runMinBacklight)
+  , ("M-M1-.", "backlight max", runMaxBacklight)
+  , ("M-M1-=", "toggle screensaver", toggleDPMS)
+  , ("M-<F2>", "restart xmonad", runCleanup hs client >> runRestart)
+  , ("M-S-<F2>", "recompile xmonad", runRecompile)
+  , ("M-<End>", "power menu", runPowerPrompt)
+  , ("M-<Home>", "quit xmonad", runQuitPrompt)
+  , ("M-<Esc>", "switch gpu", runOptimusPrompt)
   ]
