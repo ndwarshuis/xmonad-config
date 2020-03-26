@@ -2,6 +2,7 @@
 
 module WorkspaceMon (M.fromList, runWorkspaceMon) where
 
+import           Process
 import           SendXMsg
 
 import qualified Data.Map                  as M
@@ -19,7 +20,6 @@ import           Graphics.X11.Xlib.Extras
 import           Graphics.X11.Xlib.Misc
 import           Graphics.X11.Xlib.Types
 
-import           System.Directory
 import           System.Process            (Pid)
 
 -- TOOD it would be really nice if the manner we used to match windows was
@@ -81,18 +81,8 @@ handle curPIDs MapNotifyEvent { ev_window = w } = do
 handle _ _ = return ()
 
 waitAndKill :: String -> Pid -> IO ()
-waitAndKill tag pid = waitUntilExit pidDir
-  where
-    pidDir = "/proc/" ++ show pid
-    waitUntilExit d = do
-      -- TODO this will not work if the process is a zombie (maybe I care...)
-      -- ASSUMPTION on linux PIDs will always increase until they overflow, in
-      -- which case they will start to recycle. Barring any fork bombs, this
-      -- code should work because we can reasonably expect that no processes
-      -- will spawn with the same PID within the delay limit
-      res <- doesDirectoryExist d
-      if res then threadDelay 100000 >> waitUntilExit d
-      else sendXMsg Workspace tag
+waitAndKill tag pid = waitUntilExit pid >> sendXMsg Workspace tag
+
 
 withUniquePid :: WatchedPIDs -> Pid -> IO () -> IO ()
 withUniquePid curPIDs pid f = do

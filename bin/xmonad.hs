@@ -4,18 +4,17 @@
 module Main (main) where
 
 import           ACPI
-import           DBus.Client                      (Client)
-import           Notify
-import           SendXMsg
-import           Shell
-import           WorkspaceMon
-
 import           DBus.Common
 import           DBus.IntelBacklight
 import           DBus.Screensaver
-
+import           Notify
+import           Process
+import           SendXMsg
+import           Shell
 import qualified Theme                            as T
+import           WorkspaceMon
 
+import           Control.Arrow                    (first)
 import           Control.Concurrent
 import           Control.Monad
     ( forM
@@ -30,27 +29,19 @@ import qualified Data.Map.Lazy                    as M
 import           Data.Maybe                       (catMaybes, isJust)
 import           Data.Monoid                      (All (..))
 
+import           DBus.Client                      (Client)
+
 import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
 import           Graphics.X11.Xrandr
-
-import           Control.Arrow                    (first)
-import           Control.Exception
 
 import           System.Directory
 import           System.Exit
 import           System.IO
 import           System.Posix.IO
 import           System.Posix.Process
-import           System.Posix.Signals
 import           System.Posix.Types
-import           System.Process                   (waitForProcess)
-import           System.Process.Internals
-    ( ProcessHandle__ (ClosedHandle, OpenHandle)
-    , mkProcessHandle
-    , withProcessHandle
-    )
 
 import           Text.Read                        (readMaybe)
 
@@ -72,11 +63,10 @@ import           XMonad.Layout.PerWorkspace
 import           XMonad.Layout.Tabbed
 import           XMonad.Prompt
 import           XMonad.Prompt.ConfirmPrompt
+import qualified XMonad.StackSet                  as W
 import           XMonad.Util.EZConfig
 import           XMonad.Util.NamedActions
 import           XMonad.Util.Run
-
-import qualified XMonad.StackSet                  as W
 
 main :: IO ()
 main = do
@@ -196,9 +186,6 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
         (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
         (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
 
-getFocusedScreen :: X Rectangle
-getFocusedScreen = withWindowSet $ return . screenRect . W.screenDetail . W.current
-
 myManageHook :: ManageHook
 myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
@@ -235,7 +222,7 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
       ACPI -> do
          let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
          forM_ acpiTag $ \case
-           Power -> myPowerPrompt
+           Power -> runPowerPrompt
            Sleep -> confirmPrompt T.promptTheme "suspend?" runSuspend
            LidClose -> do
              status <- io isDischarging
@@ -281,8 +268,8 @@ instance Enum PowerAction where
   fromEnum Hibernate = 2
   fromEnum Reboot    = 3
 
-myPowerPrompt :: X ()
-myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
+runPowerPrompt :: X ()
+runPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
   where
     comp = mkComplFunFromList []
     theme = T.promptTheme { promptKeymap = keymap }
@@ -303,8 +290,8 @@ myPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
       Hibernate -> runScreenLock >> runHibernate
       Reboot    -> runReboot
 
-myQuitPrompt :: X ()
-myQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
+runQuitPrompt :: X ()
+runQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
 
 -- TODO for some reason the screen never wakes up after suspend when
 -- the nvidia card is up, so block suspend if nvidia card is running
@@ -376,6 +363,9 @@ getMonitorName = do
     getCoords = do
       (Rectangle x y _ _) <- getFocusedScreen
       return (fromIntegral x, fromIntegral y)
+
+getFocusedScreen :: X Rectangle
+getFocusedScreen = withWindowSet $ return . screenRect . W.screenDetail . W.current
 
 spawnDmenuCmd :: String -> [String] -> X ()
 spawnDmenuCmd cmd args = do
@@ -453,21 +443,6 @@ runCleanup :: [ProcessID] -> Client -> X ()
 runCleanup ps client = io $ do
   mapM_ killPID ps
   stopXMonadService client
-
-killPID :: ProcessID -> IO ()
-killPID pID = do
-  h <- mkProcessHandle pID False
-  -- this may fail of the PID does not exist
-  _ <- try $ sendSIGTERM h :: IO (Either IOException ())
-  -- this may fail if the process exits instantly and the handle
-  -- is destroyed by the time we get to this line (I think?)
-  _ <- try $ waitForProcess h :: IO (Either IOException ExitCode)
-  return ()
-  where
-    sendSIGTERM h = withProcessHandle h $ \case
-      OpenHandle _ -> signalProcess sigTERM pID
-      ClosedHandle _ -> return ()
-      _ -> return () -- this should never happen
 
 runRestart :: X ()
 runRestart = restart "xmonad" True
@@ -630,6 +605,7 @@ myKeys hs client c =
   , ("M-C-t", addName "launch terminal" runTerm)
   , ("M-C-q", addName "launch calc" runCalc)
   , ("M-C-f", addName "launch file manager" runFileManager)
+  -- TODO shoudn't these be flipped?
   , ("M-C-v", addName "launch windows VM" $ runVBox >> appendWorkspace myVMWorkspace)
   , ("M-C-g", addName "launch GIMP" $ runGimp >> appendWorkspace myGimpWorkspace)
   ] ++
@@ -653,7 +629,7 @@ myKeys hs client c =
   , ("M-M1-=", addName "toggle screensaver" toggleDPMS)
   , ("M-<F2>", addName "restart xmonad" $ runCleanup hs client >> runRestart)
   , ("M-S-<F2>", addName "recompile xmonad" runRecompile)
-  , ("M-<End>", addName "power menu" myPowerPrompt)
-  , ("M-<Home>", addName "quit xmonad" myQuitPrompt)
+  , ("M-<End>", addName "power menu" runPowerPrompt)
+  , ("M-<Home>", addName "quit xmonad" runQuitPrompt)
   , ("M-<Esc>", addName "switch gpu" runOptimusPrompt)
   ]
