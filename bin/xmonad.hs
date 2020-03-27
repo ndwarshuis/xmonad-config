@@ -630,6 +630,15 @@ mkKeys hs client c =
   , ("<XF86AudioMute>", "volume mute", runVolumeMute)
   ] ++
 
+  -- dummy map for dunst commands (defined separately but this makes them show
+  -- up in the help menu)
+  mkNamedSubmap c "Dunst"
+  [ ("M-`", "dunst history", return ())
+  , ("M-S-`", "dunst close", return ())
+  , ("M-M1-`", "dunst context menu", return ())
+  , ("M-C-`", "dunst close all", return ())
+  ] ++
+
   mkNamedSubmap c "System"
   [ ("M-.", "backlight up", runIncBacklight)
   , ("M-,", "backlight down", runDecBacklight)
