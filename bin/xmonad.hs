@@ -574,18 +574,26 @@ mkKeys hs client c =
   mkNamedSubmap c "Workspaces"
   -- ASSUME standard workspaces only use numbers 0-9 (otherwise we won't get
   -- valid keysyms)
-  [ (mods ++ n, msg ++ n, windows $ f n) | n <- myWorkspaces
-    , (mods, msg, f) <- [ ("M-", "switch to workspace ", W.view)
-                        , ("M-S-", "move client to workspace ", W.shift)]
-  ] ++
+  ([ (mods ++ n, msg ++ n, f n) | n <- myWorkspaces
+    , (mods, msg, f) <-
+      [ ("M-", "switch to workspace ", windows . W.view)
+      , ("M-S-", "move client to workspace ", windows . W.shift)
+      , ("M-C-", "follow client to workspace ", \n' -> do
+            windows $ W.shift n'
+            windows $ W.view n')
+      ]
+   ] ++
+   [ ("M-M1-l", "move up workspace", moveTo Next HiddenNonEmptyWS)
+   , ("M-M1-h", "move down workspace", moveTo Prev HiddenNonEmptyWS)
+   ]) ++
 
   mkNamedSubmap c "Screens"
   [ ("M-l", "move up screen", nextScreen)
   , ("M-h", "move down screen", prevScreen)
-  , ("M-C-l", "move client up screen", shiftNextScreen >> nextScreen)
-  , ("M-C-h", "move client down screen", shiftPrevScreen >> prevScreen)
-  , ("M-S-l", "shift up screen", swapNextScreen >> nextScreen)
-  , ("M-S-h", "shift down screen", swapPrevScreen >> prevScreen)
+  , ("M-C-l", "follow client up screen", shiftNextScreen >> nextScreen)
+  , ("M-C-h", "follow client down screen", shiftPrevScreen >> prevScreen)
+  , ("M-S-l", "shift workspace up screen", swapNextScreen >> nextScreen)
+  , ("M-S-h", "shift workspace down screen", swapPrevScreen >> prevScreen)
   ] ++
 
   mkNamedSubmap c "Actions"
