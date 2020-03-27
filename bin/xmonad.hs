@@ -556,41 +556,39 @@ mkNamedSubmap c sectionName bindings =
 mkKeys :: [ProcessID] -> Client -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
 mkKeys hs client c =
   mkNamedSubmap c "Window Layouts"
-  [ ("M-j", "focus down",  windows W.focusDown)
-  , ("M-k", "focus up",  windows W.focusUp)
-  , ("M-m", "focus master",  windows W.focusMaster)
-  , ("M-S-j", "swap down",  windows W.swapDown)
-  , ("M-S-k", "swap up",  windows W.swapUp)
-  , ("M-S-m", "swap master",  windows W.swapMaster)
-  -- TODO this will decrement past 0?
-  , ("M-C-j", "remove master window",  sendMessage (IncMasterN (-1)))
-  , ("M-C-k", "add master window",  sendMessage (IncMasterN 1))
-  , ("M-<Return>", "next layout",  sendMessage NextLayout)
-  , ("M-S-<Return>", "reset layout",  setLayout $ XMonad.layoutHook c)
-  , ("M-t", "sink tiling",  withFocused $ windows . W.sink)
-  , ("M--", "shrink",  sendMessage Shrink)
-  , ("M-=", "expand",  sendMessage Expand)
+  [ ("M-j", "focus down", windows W.focusDown)
+  , ("M-k", "focus up", windows W.focusUp)
+  , ("M-m", "focus master", windows W.focusMaster)
+  , ("M-S-j", "swap down", windows W.swapDown)
+  , ("M-S-k", "swap up", windows W.swapUp)
+  , ("M-S-m", "swap master", windows W.swapMaster)
+  , ("M-<Return>", "next layout", sendMessage NextLayout)
+  , ("M-S-<Return>", "reset layout", setLayout $ XMonad.layoutHook c)
+  , ("M-t", "sink tiling", withFocused $ windows . W.sink)
+  , ("M--", "shrink", sendMessage Shrink)
+  , ("M-=", "expand", sendMessage Expand)
+  , ("M-S--", "remove master window", sendMessage (IncMasterN (-1)))
+  , ("M-S-=", "add master window", sendMessage (IncMasterN 1))
   ] ++
 
   mkNamedSubmap c "Workspaces"
-  -- NOTE this assumes that there are workspaces bound to numbers
-  ([ (mods ++ show i, msg ++ " " ++ show i,  windows $ f w)
-    | (w, i) <- zip (XMonad.workspaces c) [1..] :: [(String, Int)]
-    , (mods, msg, f) <-
-      [ ("M-", "switch to workspace", W.view)
-      , ("M-S-", "move client to workspace", W.shift)]
+  -- ASSUME standard workspaces include numbers 0-9 (otherwise we won't get
+  -- valid keysyms)
+  [ (mods ++ n, msg ++ n, windows $ f n) | n <- myWorkspaces
+    , (mods, msg, f) <- [ ("M-", "switch to workspace ", W.view)
+                        , ("M-S-", "move client to workspace ", W.shift)]
   ] ++
-  [ ("M-v", "switch to VM workspace", showWorkspace myVMWorkspace)
-  , ("M-M1-g", "switch to Gimp workspace", showWorkspace myGimpWorkspace)
-  ]) ++
+  -- [ ("M-v", "switch to VM workspace", showWorkspace myVMWorkspace)
+  -- , ("M-g", "switch to Gimp workspace", showWorkspace myGimpWorkspace)
+  -- ]) ++
 
   mkNamedSubmap c "Screens"
   [ ("M-l", "move up screen", nextScreen)
   , ("M-h", "move down screen", prevScreen)
-  , ("M-C-l", "move client up screen",  shiftNextScreen >> nextScreen)
-  , ("M-C-h", "move client down screen",  shiftPrevScreen >> prevScreen)
-  , ("M-S-l", "shift up screen",  swapNextScreen >> nextScreen)
-  , ("M-S-h", "shift down screen",  swapPrevScreen >> prevScreen)
+  , ("M-C-l", "move client up screen", shiftNextScreen >> nextScreen)
+  , ("M-C-h", "move client down screen", shiftPrevScreen >> prevScreen)
+  , ("M-S-l", "shift up screen", swapNextScreen >> nextScreen)
+  , ("M-S-h", "shift down screen", swapPrevScreen >> prevScreen)
   ] ++
 
   mkNamedSubmap c "Actions"
