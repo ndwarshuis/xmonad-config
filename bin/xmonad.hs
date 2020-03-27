@@ -551,8 +551,6 @@ mkNamedSubmap c sectionName bindings =
   (subtitle sectionName:) $ mkNamedKeymap c
   $ map (\(key, name, cmd) -> (key, addName name cmd)) bindings
 
--- NOTE: the following bindings are used by dunst:
--- "M-~", "M-<esc>", "M-S-<esc>", "M-S-."
 mkKeys :: [ProcessID] -> Client -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
 mkKeys hs client c =
   mkNamedSubmap c "Window Layouts"
