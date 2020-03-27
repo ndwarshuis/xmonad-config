@@ -19,6 +19,7 @@ import           Control.Concurrent
 import           Control.Monad
     ( forM
     , forM_
+    , liftM2
     , mapM_
     , void
     , when
@@ -112,18 +113,6 @@ spawnPipe' x = io $ do
 myWorkspaces :: [String]
 myWorkspaces = map show [1..10 :: Int]
 
-myVMWorkspace :: String
-myVMWorkspace = "VM"
-
-myVMClass :: String
-myVMClass = "VirtualBoxVM"
-
-myGimpWorkspace :: String
-myGimpWorkspace = "GIMP"
-
-myGimpClass :: String
-myGimpClass = "Gimp"
-
 myLayouts = onWorkspace myVMWorkspace (noBorders Full)
   -- $ onWorkspace myGimpWorkspace gimpLayout
   $ tall ||| single ||| full
@@ -186,12 +175,16 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
         (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
         (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
 
+viewShift = doF . liftM2 (.) W.view W.shift
+
+appendViewShift tag = liftX (appendWorkspace tag) >> viewShift tag
+
 myManageHook :: ManageHook
 myManageHook = composeOne
   -- assume virtualbox is not run with the toolbar in fullscreen mode
   -- as this makes a new window that confusingly must go over the
   -- actual VM window
-  [ className =? myVMClass -?> doShift myVMWorkspace
+  [ className =? myVMClass -?> appendViewShift myVMWorkspace
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
   -- gnucash
@@ -199,7 +192,7 @@ myManageHook = composeOne
   -- xsane
   , className =? "Xsane" -?> doFloat
   -- all of GIMP
-  , className =? myGimpClass -?> doFloat >> doShift myGimpWorkspace
+  , className =? myGimpClass -?> doFloat >> appendViewShift myGimpWorkspace
   -- , title =? "GIMP Startup" -?> doIgnore
   -- plots and graphics created by R
   , className =? "R_x11" -?> doFloat
@@ -433,12 +426,6 @@ runScreenCapture = runFlameshot "screen"
 runDesktopCapture :: X ()
 runDesktopCapture = runFlameshot "full"
 
-runVBox :: X ()
-runVBox = spawnCmd "vbox-start" ["win8raw"]
-
-runGimp :: X ()
-runGimp = spawnCmd "gimp" []
-
 runCleanup :: [ProcessID] -> Client -> X ()
 runCleanup ps client = io $ do
   mapM_ killPID ps
@@ -528,16 +515,38 @@ showKeybindings x = addName "Show Keybindings" $ do
           , "'#element.selected.normal { background-color: #a200ff; }'"
           ]
 
-appendOrSwitch :: WorkspaceId -> X () -> X ()
-appendOrSwitch tag cmd = do
-  occupied <- withWindowSet $ \ws ->
-    return $ elem tag
-      $ map W.tag
-      -- list of all workspaces with windows on them
-      $ W.workspace (W.current ws)
-        : W.hidden ws
-        ++ map W.workspace (W.visible ws)
-  if occupied then windows $ W.view tag else appendWorkspace tag >> cmd
+myVMWorkspace :: String
+myVMWorkspace = "VM"
+
+myVMClass :: String
+myVMClass = "VirtualBoxVM"
+
+myGimpWorkspace :: String
+myGimpWorkspace = "GIMP"
+
+-- TODO I don't feel like changing the version long term
+myGimpClass :: String
+myGimpClass = "Gimp-2.10"
+
+wsOccupied :: Eq a1 => a1 -> W.StackSet a1 l a2 sid sd -> Bool
+wsOccupied tag ws = elem tag
+  $ map W.tag
+  -- TODO there is likely a much better way to do this...
+  $ filter (\w -> case W.stack w of { Nothing -> False; _ -> True } )
+  -- list of all workspaces with windows on them
+  -- TODO is there not a better way to do this?
+  $ W.workspace (W.current ws) : W.hidden ws ++ map W.workspace (W.visible ws)
+
+spawnOrSwitch :: WorkspaceId -> X () -> X ()
+spawnOrSwitch tag cmd = do
+  occupied <- withWindowSet $ return . wsOccupied tag
+  if occupied then windows $ W.view tag else cmd
+
+runVBox :: X ()
+runVBox = spawnOrSwitch myVMWorkspace $ spawnCmd "vbox-start" ["win8raw"]
+
+runGimp :: X ()
+runGimp = spawnOrSwitch myGimpWorkspace $ spawnCmd "gimp-2.10" []
 
 myModMask :: KeyMask
 myModMask = mod4Mask
@@ -614,8 +623,8 @@ mkKeys hs client c =
   , ("M-C-t", "launch terminal", runTerm)
   , ("M-C-q", "launch calc", runCalc)
   , ("M-C-f", "launch file manager", runFileManager)
-  , ("M-C-v", "launch windows VM", appendOrSwitch myVMWorkspace runVBox)
-  , ("M-C-g", "launch GIMP", appendOrSwitch myGimpWorkspace runGimp)
+  , ("M-C-v", "launch windows VM", runVBox)
+  , ("M-C-g", "launch GIMP", runGimp)
   ] ++
 
   mkNamedSubmap c "Multimedia"
