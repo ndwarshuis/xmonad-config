@@ -563,24 +563,21 @@ mkKeys hs client c =
   , ("M-S-k", "swap up", windows W.swapUp)
   , ("M-S-m", "swap master", windows W.swapMaster)
   , ("M-<Return>", "next layout", sendMessage NextLayout)
-  , ("M-S-<Return>", "reset layout", setLayout $ XMonad.layoutHook c)
+  , ("M-S-<Return>", "reset layout", setLayout $ layoutHook c)
   , ("M-t", "sink tiling", withFocused $ windows . W.sink)
   , ("M--", "shrink", sendMessage Shrink)
   , ("M-=", "expand", sendMessage Expand)
-  , ("M-S--", "remove master window", sendMessage (IncMasterN (-1)))
-  , ("M-S-=", "add master window", sendMessage (IncMasterN 1))
+  , ("M-S--", "remove master window", sendMessage $ IncMasterN (-1))
+  , ("M-S-=", "add master window", sendMessage $ IncMasterN 1)
   ] ++
 
   mkNamedSubmap c "Workspaces"
-  -- ASSUME standard workspaces include numbers 0-9 (otherwise we won't get
+  -- ASSUME standard workspaces only use numbers 0-9 (otherwise we won't get
   -- valid keysyms)
   [ (mods ++ n, msg ++ n, windows $ f n) | n <- myWorkspaces
     , (mods, msg, f) <- [ ("M-", "switch to workspace ", W.view)
                         , ("M-S-", "move client to workspace ", W.shift)]
   ] ++
-  -- [ ("M-v", "switch to VM workspace", showWorkspace myVMWorkspace)
-  -- , ("M-g", "switch to Gimp workspace", showWorkspace myGimpWorkspace)
-  -- ]) ++
 
   mkNamedSubmap c "Screens"
   [ ("M-l", "move up screen", nextScreen)
@@ -612,7 +609,6 @@ mkKeys hs client c =
   , ("M-C-t", "launch terminal", runTerm)
   , ("M-C-q", "launch calc", runCalc)
   , ("M-C-f", "launch file manager", runFileManager)
-  -- TODO shoudn't these be flipped?
   , ("M-C-v", "launch windows VM", appendOrSwitch myVMWorkspace runVBox)
   , ("M-C-g", "launch GIMP", appendOrSwitch myGimpWorkspace runGimp)
   ] ++
