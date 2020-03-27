@@ -503,9 +503,6 @@ runMinBacklight = io $ void callMinBrightness
 runMaxBacklight :: X ()
 runMaxBacklight = io $ void callMaxBrightness
 
-showWorkspace :: WorkspaceId -> X ()
-showWorkspace tag = windows $ W.view tag
-
 toggleDPMS :: X ()
 toggleDPMS = io $ void callToggle
 
@@ -530,6 +527,17 @@ showKeybindings x = addName "Show Keybindings" $ do
           , "-theme-str"
           , "'#element.selected.normal { background-color: #a200ff; }'"
           ]
+
+appendOrSwitch :: WorkspaceId -> X () -> X ()
+appendOrSwitch tag cmd = do
+  occupied <- withWindowSet $ \ws ->
+    return $ elem tag
+      $ map W.tag
+      -- list of all workspaces with windows on them
+      $ W.workspace (W.current ws)
+        : W.hidden ws
+        ++ map W.workspace (W.visible ws)
+  if occupied then windows $ W.view tag else appendWorkspace tag >> cmd
 
 myModMask :: KeyMask
 myModMask = mod4Mask
@@ -607,8 +615,8 @@ mkKeys hs client c =
   , ("M-C-q", "launch calc", runCalc)
   , ("M-C-f", "launch file manager", runFileManager)
   -- TODO shoudn't these be flipped?
-  , ("M-C-v", "launch windows VM", runVBox >> appendWorkspace myVMWorkspace)
-  , ("M-C-g", "launch GIMP", runGimp >> appendWorkspace myGimpWorkspace)
+  , ("M-C-v", "launch windows VM", appendOrSwitch myVMWorkspace runVBox)
+  , ("M-C-g", "launch GIMP", appendOrSwitch myGimpWorkspace runGimp)
   ] ++
 
   mkNamedSubmap c "Multimedia"
