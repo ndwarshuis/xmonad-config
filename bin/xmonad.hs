@@ -603,7 +603,6 @@ mkKeys hs client c =
   , ("M-C-S-s", "capture screen", runScreenCapture)
   , ("M-C-d", "capture desktop", runDesktopCapture)
   -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
-  , ("M-<Delete>", "lock screen", runScreenLock)
   ] ++
 
   mkNamedSubmap c "Launchers"
@@ -629,7 +628,6 @@ mkKeys hs client c =
   , ("<XF86AudioLowerVolume>", "volume down", runVolumeDown)
   , ("<XF86AudioRaiseVolume>", "volume up", runVolumeUp)
   , ("<XF86AudioMute>", "volume mute", runVolumeMute)
-  , ("M-C-b", "toggle bluetooth", runToggleBluetooth)
   ] ++
 
   mkNamedSubmap c "System"
@@ -637,10 +635,13 @@ mkKeys hs client c =
   , ("M-,", "backlight down", runDecBacklight)
   , ("M-M1-,", "backlight min", runMinBacklight)
   , ("M-M1-.", "backlight max", runMaxBacklight)
-  , ("M-M1-=", "toggle screensaver", toggleDPMS)
-  , ("M-<F2>", "restart xmonad", runCleanup hs client >> runRestart)
-  , ("M-S-<F2>", "recompile xmonad", runRecompile)
   , ("M-<End>", "power menu", runPowerPrompt)
   , ("M-<Home>", "quit xmonad", runQuitPrompt)
-  , ("M-<Esc>", "switch gpu", runOptimusPrompt)
+  , ("M-<Delete>", "lock screen", runScreenLock)
+  -- M-<F1> reserved for showing the keymap
+  , ("M-<F2>", "restart xmonad", runCleanup hs client >> runRestart)
+  , ("M-<F3>", "recompile xmonad", runRecompile)
+  , ("M-<F10>", "toggle bluetooth", runToggleBluetooth)
+  , ("M-<F11>", "toggle screensaver", toggleDPMS)
+  , ("M-<F12>", "switch gpu", runOptimusPrompt)
   ]
