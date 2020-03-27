@@ -503,8 +503,8 @@ runMinBacklight = io $ void callMinBrightness
 runMaxBacklight :: X ()
 runMaxBacklight = io $ void callMaxBrightness
 
-toggleDPMS :: X ()
-toggleDPMS = io $ void callToggle
+runToggleDPMS :: X ()
+runToggleDPMS = io $ void callToggle
 
 -- keybindings
 
@@ -649,6 +649,6 @@ mkKeys hs client c =
   , ("M-<F2>", "restart xmonad", runCleanup hs client >> runRestart)
   , ("M-<F3>", "recompile xmonad", runRecompile)
   , ("M-<F10>", "toggle bluetooth", runToggleBluetooth)
-  , ("M-<F11>", "toggle screensaver", toggleDPMS)
+  , ("M-<F11>", "toggle screensaver", runToggleDPMS)
   , ("M-<F12>", "switch gpu", runOptimusPrompt)
   ]
