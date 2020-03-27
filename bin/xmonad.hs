@@ -529,10 +529,7 @@ myGimpClass :: String
 myGimpClass = "Gimp-2.10"
 
 wsOccupied :: Eq a1 => a1 -> W.StackSet a1 l a2 sid sd -> Bool
-wsOccupied tag ws = elem tag
-  $ map W.tag
-  -- TODO there is likely a much better way to do this...
-  $ filter (\w -> case W.stack w of { Nothing -> False; _ -> True } )
+wsOccupied tag ws = elem tag $ map W.tag $ filter (isJust .  W.stack)
   -- list of all workspaces with windows on them
   -- TODO is there not a better way to do this?
   $ W.workspace (W.current ws) : W.hidden ws ++ map W.workspace (W.visible ws)
