@@ -25,7 +25,12 @@ import           Control.Monad
     , when
     )
 
-import           Data.List                        (find, sortBy, sortOn)
+import           Data.List
+    ( find
+    , isPrefixOf
+    , sortBy
+    , sortOn
+    )
 import qualified Data.Map.Lazy                    as M
 import           Data.Maybe                       (catMaybes, isJust)
 import           Data.Monoid                      (All (..))
@@ -57,10 +62,13 @@ import           XMonad.Actions.Volume
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
+-- import           XMonad.Layout.LayoutCombinators  hiding ((|||))
+-- import           XMonad.Layout.Master
 import           XMonad.Layout.Named
 import           XMonad.Layout.NoBorders
 import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
+-- import           XMonad.Layout.Simplest
 import           XMonad.Layout.Tabbed
 import           XMonad.Prompt
 import           XMonad.Prompt.ConfirmPrompt
@@ -113,8 +121,8 @@ spawnPipe' x = io $ do
 myWorkspaces :: [String]
 myWorkspaces = map show [1..10 :: Int]
 
-myLayouts = onWorkspace myVMWorkspace (noBorders Full)
-  -- $ onWorkspace myGimpWorkspace gimpLayout
+myLayouts = onWorkspace myVMWorkspace vmLayout
+  $ onWorkspace myGimpWorkspace gimpLayout
   $ tall ||| single ||| full
   where
     addTopBar = noFrillsDeco shrinkText T.tabbedTheme
@@ -130,11 +138,15 @@ myLayouts = onWorkspace myVMWorkspace (noBorders Full)
       $ tabbedAlways shrinkText T.tabbedTheme
     full = named "Full"
       $ noBorders Full
-    -- gimpLayout = named "Gimp Layout"
-    --   $ avoidStruts
-    --   $ (tabbedAlways shrinkText defaultTheme) ****||* Full
-    --   -- $ withIM (11/64) (Or (Title "Toolbox") (Title "Tool Options"))
-    --   -- $ (tabbedAlways shrinkText defaultTheme)
+    vmLayout = noBorders Full
+    -- TODO use a tabbed layout for multiple master windows
+    gimpLayout = named "Gimp Layout"
+      $ avoidStruts
+      $ noBorders
+      $ addTopBar
+      $ Tall 1 0.025 0.8
+      -- $ withIM (11/64) (Or (Title "Toolbox") (Title "Tool Options"))
+      -- $ (tabbedAlways shrinkText defaultTheme)
 
 -- | Format workspace and layout in loghook
 -- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
@@ -179,21 +191,31 @@ viewShift = doF . liftM2 (.) W.view W.shift
 
 appendViewShift tag = liftX (appendWorkspace tag) >> viewShift tag
 
+($?) :: Query a -> (a -> Bool) -> Query Bool
+($?) q f = f <$> q
+
+matchGimp :: String -> Query Bool
+matchGimp role = stringProperty "WM_WINDOW_ROLE" $? isPrefixOf role
+  <&&> className =? myGimpClass
+
+moveBottom :: W.StackSet i l a s sd -> W.StackSet i l a s sd
+moveBottom = W.modify' $ \(W.Stack f t b) -> W.Stack f (reverse b ++ t) []
+
 myManageHook :: ManageHook
 myManageHook = composeOne
-  -- assume virtualbox is not run with the toolbar in fullscreen mode
-  -- as this makes a new window that confusingly must go over the
-  -- actual VM window
+  -- VM window
   [ className =? myVMClass -?> appendViewShift myVMWorkspace
+  -- GIMP
+  , matchGimp "gimp-image-window" -?> appendViewShift myGimpWorkspace
+  , matchGimp "gimp-dock" -?> doF (moveBottom . W.focusMaster)
+  , matchGimp "gimp-toolbox" -?> doF (moveBottom . W.focusMaster)
+  , className =? myGimpClass -?> appendViewShift myGimpWorkspace
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
   -- gnucash
   , (className =? "Gnucash" <&&> title =? "Transaction Import Assistant") -?> doFloat
   -- xsane
   , className =? "Xsane" -?> doFloat
-  -- all of GIMP
-  , className =? myGimpClass -?> doFloat >> appendViewShift myGimpWorkspace
-  -- , title =? "GIMP Startup" -?> doIgnore
   -- plots and graphics created by R
   , className =? "R_x11" -?> doFloat
   , className =? "mpv"    -?> doFloat
