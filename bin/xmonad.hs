@@ -1,27 +1,23 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 
 module Main (main) where
 
+import           Capture
+import           General
 import           Internal.DMenu
+import           Power
 
 import           ACPI
 import           DBus.Common
-import           DBus.IntelBacklight
-import           DBus.Screensaver
-import           Notify
 import           Process
 import           SendXMsg
 import           Shell
 import qualified Theme                            as T
 import           WorkspaceMon
 
-import           Control.Arrow                    (first)
 import           Control.Concurrent
-import           Control.Monad                    (forM_, mapM_, void, when)
 
 import           Data.List                        (isPrefixOf, sortBy, sortOn)
-import qualified Data.Map.Lazy                    as M
 import           Data.Maybe                       (isJust)
 import           Data.Monoid                      (All (..))
 
@@ -29,12 +25,8 @@ import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
 
-import           System.Directory
-import           System.Exit
 import           System.IO
 import           System.Process
-
-import           Text.Read                        (readMaybe)
 
 import           Xmobar.Common
 
@@ -42,7 +34,6 @@ import           XMonad
 import           XMonad.Actions.CopyWindow
 import           XMonad.Actions.CycleWS
 import           XMonad.Actions.PhysicalScreens
-import           XMonad.Actions.Volume
 import           XMonad.Actions.Warp
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
@@ -52,8 +43,6 @@ import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
 import           XMonad.Layout.Renamed
 import           XMonad.Layout.Tabbed
-import           XMonad.Prompt
-import           XMonad.Prompt.ConfirmPrompt
 import qualified XMonad.StackSet                  as W
 import           XMonad.Util.EZConfig
 import           XMonad.Util.NamedActions
@@ -86,13 +75,19 @@ main = do
           , focusedBorderColor = T.selectedBordersColor
           }
 
--- Data structure to hold the dbus client, threadIDs, and process IDs started
--- outside the main Xmonad thread. Maybe I could use a ReaderT here but I'm lazy
+-- | Multithread setup
+
 data ThreadState = ThreadState
     { client       :: Client
     , childPIDs    :: [Pid]
     , childHandles :: [Handle]
     }
+
+-- TODO shouldn't this be run by a signal handler?
+runCleanup :: ThreadState -> X ()
+runCleanup ts = io $ do
+  mapM_ killPID $ childPIDs ts
+  stopXMonadService $ client ts
 
 -- | Startuphook configuration
 
@@ -242,215 +237,17 @@ manageApps = composeOne $ concatMap dwHook allDWs ++
 -- | Eventhook configuration
 
 myEventHook :: Event -> X All
-myEventHook = monitorEventHook <+> docksEventHook <+> handleEventHook def
+myEventHook = xMsgEventHook <+> docksEventHook <+> handleEventHook def
 
-monitorEventHook :: Event -> X All
-monitorEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
+xMsgEventHook :: Event -> X All
+xMsgEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (xtype, tag) = splitXMsg d
     case xtype of
       Workspace -> removeDynamicWorkspace tag
-      ACPI -> do
-         let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
-         forM_ acpiTag $ \case
-           Power -> runPowerPrompt
-           Sleep -> confirmPrompt T.promptTheme "suspend?" runSuspend
-           LidClose -> do
-             status <- io isDischarging
-             forM_ status $ \s -> runScreenLock >> when s runSuspend
+      ACPI      -> handleACPI tag
     return (All True)
-monitorEventHook _ = return (All True)
-
-data PowerPrompt = PowerPrompt
-
-instance XPrompt PowerPrompt where
-    showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
-
-runScreenLock :: X ()
-runScreenLock = spawn "screenlock"
-
-runPowerOff :: X ()
-runPowerOff = spawn "systemctl poweroff"
-
-runSuspend :: X ()
-runSuspend = spawn "systemctl suspend"
-
-runHibernate :: X ()
-runHibernate = spawn "systemctl hibernate"
-
-runReboot :: X ()
-runReboot = spawn "systemctl reboot"
-
-data PowerAction = Poweroff
-    | Shutdown
-    | Hibernate
-    | Reboot
-    deriving (Eq)
-
-instance Enum PowerAction where
-  toEnum 0 = Poweroff
-  toEnum 1 = Shutdown
-  toEnum 2 = Hibernate
-  toEnum 3 = Reboot
-  toEnum _ = errorWithoutStackTrace "Main.Enum.PowerAction.toEnum: bad argument"
-
-  fromEnum Poweroff  = 0
-  fromEnum Shutdown  = 1
-  fromEnum Hibernate = 2
-  fromEnum Reboot    = 3
-
-runPowerPrompt :: X ()
-runPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
-  where
-    comp = mkComplFunFromList []
-    theme = T.promptTheme { promptKeymap = keymap }
-    keymap = M.fromList
-      $ ((controlMask, xK_g), quit) :
-      map (first $ (,) 0)
-      [ (xK_p, sendAction Poweroff)
-      , (xK_s, sendAction Shutdown)
-      , (xK_h, sendAction Hibernate)
-      , (xK_r, sendAction Reboot)
-      , (xK_Return, quit)
-      , (xK_Escape, quit)
-      ]
-    sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
-    executeAction a = case toEnum $ read a of
-      Poweroff  -> runPowerOff
-      Shutdown  -> runScreenLock >> runSuspend
-      Hibernate -> runScreenLock >> runHibernate
-      Reboot    -> runReboot
-
-runQuitPrompt :: X ()
-runQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
-
--- TODO for some reason the screen never wakes up after suspend when
--- the nvidia card is up, so block suspend if nvidia card is running
--- and warn user
-isUsingNvidia :: IO Bool
-isUsingNvidia = doesDirectoryExist "/sys/module/nvidia"
-
-runOptimusPrompt :: X ()
-runOptimusPrompt = do
-  nvidiaOn <- io isUsingNvidia
-  switch $ if nvidiaOn then "intel" else "nvidia"
-  where
-    switch mode = confirmPrompt T.promptTheme (prompt mode) (cmd mode)
-    prompt mode = "gpu switch to " ++ mode ++ "?"
-    cmd mode = spawnCmd "optimus-manager"
-      ["--switch", mode, "--no-confirm"]
-      >> io exitSuccess
-
--- shell commands
-
-myTerm :: String
-myTerm = "urxvt"
-
-runTerm :: X ()
-runTerm = spawn myTerm
-
-runCalc :: X ()
-runCalc = spawnCmd myTerm ["-e", "R"]
-
-runBrowser :: X ()
-runBrowser = spawn "brave"
-
-runEditor :: X ()
-runEditor = spawnCmd "emacsclient"
-  ["-c", "-e", "\"(select-frame-set-input-focus (selected-frame))\""]
-
-runFileManager :: X ()
-runFileManager = spawn "pcmanfm"
-
-getScreenshotDir :: IO FilePath
-getScreenshotDir = do
-  h <- getHomeDirectory
-  return $ h ++ "/Pictures/screenshots"
-
-runFlameshot :: String -> X ()
-runFlameshot mode = do
-  ssDir <- io getScreenshotDir
-  spawnCmd "flameshot" $ mode : ["-p", ssDir]
-
--- TODO this will steal focus from the current window (and puts it
--- in the root window?) ...need to fix
-runAreaCapture :: X ()
-runAreaCapture = runFlameshot "gui"
-
--- myWindowCap = "screencap -w" --external script
-
-runScreenCapture :: X ()
-runScreenCapture = runFlameshot "screen"
-
-runDesktopCapture :: X ()
-runDesktopCapture = runFlameshot "full"
-
-runCleanup :: ThreadState -> X ()
-runCleanup ts = io $ do
-  mapM_ killPID $ childPIDs ts
-  stopXMonadService $ client ts
-
-runRestart :: X ()
-runRestart = restart "xmonad" True
-
-runRecompile :: X ()
-runRecompile = do
-  -- assume that the conf directory contains a valid stack project
-  -- TODO this is hacky AF
-  confDir <- getXMonadDir
-  spawn $ cmd confDir
-  where
-    cmd c = fmtCmd "cd" [c]
-      #!&& fmtCmd "stack" ["install", ":xmonad"]
-      #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "compilation succeeded" }
-      #!|| fmtNotifyCmd defNoteError { body = Just $ Text "compilation failed" }
-
-myMultimediaCtl :: String
-myMultimediaCtl = "playerctl"
-
-runTogglePlay :: X ()
-runTogglePlay = spawnCmd myMultimediaCtl ["play-pause"]
-
-runPrevTrack :: X ()
-runPrevTrack = spawnCmd myMultimediaCtl ["previous"]
-
-runNextTrack :: X ()
-runNextTrack = spawnCmd myMultimediaCtl ["next"]
-
-runStopPlay :: X ()
-runStopPlay = spawnCmd myMultimediaCtl ["stop"]
-
-runVolumeDown :: X ()
-runVolumeDown = void (lowerVolume 2)
-
-runVolumeUp :: X ()
-runVolumeUp = void (raiseVolume 2)
-
-runVolumeMute :: X ()
-runVolumeMute = void toggleMute
-
-runToggleBluetooth :: X ()
-runToggleBluetooth = spawn
-  $ "bluetoothctl show | grep -q \"Powered: no\""
-  #!&& "a=on"
-  #!|| "a=off"
-  #!>> fmtCmd "bluetoothctl" ["power", "$a", ">", "/dev/null"]
-  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
-
-runIncBacklight :: X ()
-runIncBacklight = io $ void callIncBrightness
-
-runDecBacklight :: X ()
-runDecBacklight = io $ void callDecBrightness
-
-runMinBacklight :: X ()
-runMinBacklight = io $ void callMinBrightness
-
-runMaxBacklight :: X ()
-runMaxBacklight = io $ void callMaxBrightness
-
-runToggleDPMS :: X ()
-runToggleDPMS = io $ void callToggle
+xMsgEventHook _ = return (All True)
 
 -- | Keymap configuration
 

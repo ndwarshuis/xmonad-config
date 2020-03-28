@@ -1,11 +1,14 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module ACPI
   ( ACPIEvent(..)
   , isDischarging
   , runPowermon
+  , handleACPI
   ) where
 
+import           Power
 import           SendXMsg
 
 import           Control.Exception
@@ -17,6 +20,10 @@ import           Data.Connection
 
 import           System.IO.Streams.Internal   as S (read)
 import           System.IO.Streams.UnixSocket
+
+import           Text.Read                    (readMaybe)
+
+import           XMonad.Core
 
 data ACPIEvent = Power
     | Sleep
@@ -65,3 +72,13 @@ runPowermon = do
     readStream s = do
       out <- S.read s
       mapM_ sendACPIEvent $ parseLine =<< out
+
+handleACPI :: String -> X ()
+handleACPI tag = do
+  let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
+  forM_ acpiTag $ \case
+    Power -> runPowerPrompt
+    Sleep -> runSuspendPrompt
+    LidClose -> do
+      status <- io isDischarging
+      forM_ status $ \s -> runScreenLock >> when s runSuspend
