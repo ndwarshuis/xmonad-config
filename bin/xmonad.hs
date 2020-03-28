@@ -1,4 +1,6 @@
-{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiWayIf            #-}
 
 module Main (main) where
 
@@ -38,6 +40,7 @@ import           XMonad.Actions.Warp
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
+import           XMonad.Layout.MultiToggle
 import           XMonad.Layout.NoBorders
 import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
@@ -150,7 +153,8 @@ allDWs = [xsaneDynamicWorkspace, wmDynamicWorkspace, gimpDynamicWorkspace]
 
 myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
   $ onWorkspace (dwTag gimpDynamicWorkspace) gimpLayout
-  $ tall ||| single ||| full
+  $ mkToggle (single HIDE)
+  $ tall ||| fulltab ||| full
   where
     addTopBar = noFrillsDeco shrinkText T.tabbedTheme
     tall = renamed [Replace "Tall"]
@@ -158,7 +162,7 @@ myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
       $ addTopBar
       $ noBorders
       $ Tall 1 0.03 0.5
-    single = renamed [Replace "Tabbed"]
+    fulltab = renamed [Replace "Tabbed"]
       $ avoidStruts
       $ noBorders
       $ tabbedAlways shrinkText T.tabbedTheme
@@ -171,6 +175,22 @@ myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
       $ noBorders
       $ addTopBar
       $ Tall 1 0.025 0.8
+
+data EmptyLayout a = EmptyLayout
+    deriving (Show, Read)
+
+instance LayoutClass EmptyLayout a where
+  doLayout a b _ = emptyLayout a b
+  description _ = "Desktop"
+
+data HIDE = HIDE
+    deriving (Read, Show, Eq, Typeable)
+
+instance Transformer HIDE Window where
+  transform _ x k = k EmptyLayout (\EmptyLayout -> x)
+
+runHide :: X ()
+runHide = sendMessage $ Toggle HIDE
 
 -- | Loghook configuration
 -- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
@@ -263,6 +283,7 @@ mkKeys ts c =
   [ ("M-j", "focus down", windows W.focusDown)
   , ("M-k", "focus up", windows W.focusUp)
   , ("M-m", "focus master", windows W.focusMaster)
+  , ("M-d", "focus master", runHide)
   , ("M-S-j", "swap down", windows W.swapDown)
   , ("M-S-k", "swap up", windows W.swapUp)
   , ("M-S-m", "swap master", windows W.swapMaster)
