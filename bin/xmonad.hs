@@ -3,6 +3,8 @@
 
 module Main (main) where
 
+import           Internal.DMenu
+
 import           ACPI
 import           DBus.Common
 import           DBus.IntelBacklight
@@ -17,37 +19,27 @@ import           WorkspaceMon
 import           Control.Arrow                    (first)
 import           Control.Concurrent
 import           Control.Monad
-    ( forM
-    , forM_
+    ( forM_
     , liftM2
     , mapM_
     , void
     , when
     )
 
-import           Data.List
-    ( find
-    , isPrefixOf
-    , sortBy
-    , sortOn
-    )
+import           Data.List                        (isPrefixOf, sortBy, sortOn)
 import qualified Data.Map.Lazy                    as M
-import           Data.Maybe                       (catMaybes, isJust)
+import           Data.Maybe                       (isJust)
 import           Data.Monoid                      (All (..))
-
-import           DBus.Client                      (Client)
 
 import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
-import           Graphics.X11.Xrandr
+
 
 import           System.Directory
 import           System.Exit
 import           System.IO
-import           System.Posix.IO
-import           System.Posix.Process
-import           System.Posix.Types
+import           System.Process
 
 import           Text.Read                        (readMaybe)
 
@@ -63,36 +55,38 @@ import           XMonad.Actions.Warp
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
--- import           XMonad.Layout.LayoutCombinators  hiding ((|||))
--- import           XMonad.Layout.Master
 import           XMonad.Layout.NoBorders
 import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
 import           XMonad.Layout.Renamed
--- import           XMonad.Layout.Simplest
 import           XMonad.Layout.Tabbed
 import           XMonad.Prompt
 import           XMonad.Prompt.ConfirmPrompt
 import qualified XMonad.StackSet                  as W
 import           XMonad.Util.EZConfig
 import           XMonad.Util.NamedActions
-import           XMonad.Util.Run
+
 
 main :: IO ()
 main = do
-  dbClient <- startXMonadService
-  (barPID, h) <- spawnPipe' "xmobar"
+  cl <- startXMonadService
+  (p, h) <- spawnPipe' "xmobar"
   _ <- forkIO runPowermon
-  _ <- forkIO runWorkspaceMon'
+  _ <- forkIO $ runWorkspaceMon matchPatterns
+  let ts = ThreadState
+        { client = cl
+        , childPIDs = [p]
+        , childHandles = [h]
+        }
   launch
     $ ewmh
-    $ addDescrKeys' ((myModMask, xK_F1), showKeybindings) (mkKeys [barPID] dbClient)
+    $ addKeymap ts
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
-          , manageHook = myManageHook <+> manageDocks <+> manageHook def
-          , handleEventHook = myEventHook <+> docksEventHook <+> handleEventHook def
-          , startupHook = docksStartupHook <+> startupHook def
+          , manageHook = myManageHook
+          , handleEventHook = myEventHook
+          , startupHook = myStartupHook
           , workspaces = myWorkspaces
           , logHook = myLoghook h
           , clickJustFocuses = False
@@ -101,24 +95,21 @@ main = do
           , focusedBorderColor = T.selectedBordersColor
           }
 
-runWorkspaceMon' :: IO ()
-runWorkspaceMon' = runWorkspaceMon
-  $ fromList [ (myGimpClass, myGimpWorkspace)
-             , (myVMClass, myVMWorkspace)
-             , (myXSaneClass, myXSaneWorkspace)
-             ]
+myStartupHook :: X ()
+myStartupHook = docksStartupHook <+> startupHook def
 
-spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)
-spawnPipe' x = io $ do
-  (rd, wr) <- createPipe
-  setFdOption wr CloseOnExec True
-  h <- fdToHandle wr
-  hSetBuffering h LineBuffering
-  p <- xfork $ do
-    _ <- dupTo rd stdInput
-    executeFile "/bin/sh" False ["-c", x] Nothing
-  closeFd rd
-  return (p, h)
+data ThreadState = ThreadState
+    { client       :: Client
+    , childPIDs    :: [Pid]
+    , childHandles :: [Handle]
+    }
+
+matchPatterns :: M.Map String String
+matchPatterns = fromList
+  [ (myGimpClass, myGimpWorkspace)
+  , (myVMClass, myVMWorkspace)
+  , (myXSaneClass, myXSaneWorkspace)
+  ]
 
 myWorkspaces :: [String]
 myWorkspaces = map show [1..10 :: Int]
@@ -201,7 +192,10 @@ moveBottom :: W.StackSet i l a s sd -> W.StackSet i l a s sd
 moveBottom = W.modify' $ \(W.Stack f t b) -> W.Stack f (reverse b ++ t) []
 
 myManageHook :: ManageHook
-myManageHook = composeOne
+myManageHook = manageApps <+> manageDocks <+> manageHook def
+
+manageApps :: ManageHook
+manageApps = composeOne
   [ isDialog -?> doCenterFloat
   -- VM window
   , className =? myVMClass -?> appendViewShift myVMWorkspace
@@ -228,7 +222,10 @@ myManageHook = composeOne
   ]
 
 myEventHook :: Event -> X All
-myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
+myEventHook = monitorEventHook <+> docksEventHook <+> handleEventHook def
+
+monitorEventHook :: Event -> X All
+monitorEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (xtype, tag) = splitXMsg d
     case xtype of
@@ -242,7 +239,7 @@ myEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
              status <- io isDischarging
              forM_ status $ \s -> runScreenLock >> when s runSuspend
     return (All True)
-myEventHook _ = return (All True)
+monitorEventHook _ = return (All True)
 
 data PowerPrompt = PowerPrompt
 
@@ -335,85 +332,6 @@ runTerm = spawn myTerm
 runCalc :: X ()
 runCalc = spawnCmd myTerm ["-e", "R"]
 
-myDmenuCmd :: String
-myDmenuCmd = "rofi"
-
--- | Focus rofi on the current workspace always
--- Apparently xrandr and xinerama order monitors differently, which
--- means they have different indices. Since rofi uses the former and
--- xmonad uses the latter, this function is to figure out the xrandr
--- screen name based on the xinerama screen that is currently in
--- focus. The steps to do this:
--- 1) get the coordinates of the currently focuses xinerama screen
--- 2) get list of Xrandr outputs and filter which ones are connected
--- 3) match the coordinates of the xinerama screen with the xrandr
---    output and return the latter's name (eg "DP-0") which can be
---    fed to Rofi
-getMonitorName :: X (Maybe String)
-getMonitorName = do
-  dpy <- asks display
-  root <- asks theRoot
-  -- these are the focused screen coordinates according to xinerama
-  (sx, sy) <- getCoords
-  io $ do
-    res <- xrrGetScreenResourcesCurrent dpy root
-    outputs <- forM res $ \res' ->
-      forM (xrr_sr_outputs res') $ \output -> do
-        oi <- xrrGetOutputInfo dpy res' output
-        case oi of
-          -- connection: 0 == connected, 1 == disconnected
-          Just XRROutputInfo { xrr_oi_connection = 0
-                             , xrr_oi_name = name
-                             , xrr_oi_crtc = crtc
-                             } -> do
-            ci <- xrrGetCrtcInfo dpy res' crtc
-            return $ (\ci' -> Just (name, xrr_ci_x ci', xrr_ci_y ci'))
-              =<< ci
-          _ -> return Nothing
-    return $ (\(name, _, _) -> Just name)
-      =<< find (\(_, x, y) -> x == sx && y == sy) . catMaybes
-      =<< outputs
-  where
-    getCoords = do
-      (Rectangle x y _ _) <- getFocusedScreen
-      return (fromIntegral x, fromIntegral y)
-
-getFocusedScreen :: X Rectangle
-getFocusedScreen = withWindowSet $ return . screenRect . W.screenDetail . W.current
-
-spawnDmenuCmd :: String -> [String] -> X ()
-spawnDmenuCmd cmd args = do
-  name <- getMonitorName
-  case name of
-    Just n  -> spawnCmd cmd $ ["-m", n] ++ args
-    Nothing -> io $ putStrLn "fail"
-
-spawnDmenuCmd' :: [String] -> X ()
-spawnDmenuCmd' = spawnDmenuCmd myDmenuCmd
-
-runCmdMenu :: X ()
-runCmdMenu = spawnDmenuCmd' ["-show", "run"]
-
-runAppMenu :: X ()
-runAppMenu = spawnDmenuCmd' ["-show", "drun"]
-
-runClipMenu :: X ()
-runClipMenu = spawnDmenuCmd'
-  [ "-modi", "\"clipboard:greenclip print\""
-  , "-show", "clipboard"
-  , "-run-command", "'{cmd}'"
-  , "-theme-str", "'#element.selected.normal { background-color: #00c44e; }'"
-  ]
-
-runWinMenu :: X ()
-runWinMenu = spawnDmenuCmd' ["-show", "window"]
-
-runNetMenu :: X ()
-runNetMenu = spawnDmenuCmd "networkmanager_dmenu" []
-
-runDevMenu :: X ()
-runDevMenu = spawnDmenuCmd "rofi-devices" []
-
 runBrowser :: X ()
 runBrowser = spawn "brave"
 
@@ -447,10 +365,10 @@ runScreenCapture = runFlameshot "screen"
 runDesktopCapture :: X ()
 runDesktopCapture = runFlameshot "full"
 
-runCleanup :: [ProcessID] -> Client -> X ()
-runCleanup ps client = io $ do
-  mapM_ killPID ps
-  stopXMonadService client
+runCleanup :: ThreadState -> X ()
+runCleanup ts = io $ do
+  mapM_ killPID $ childPIDs ts
+  stopXMonadService $ client ts
 
 runRestart :: X ()
 runRestart = restart "xmonad" True
@@ -516,26 +434,6 @@ runToggleDPMS = io $ void callToggle
 
 -- keybindings
 
-showKeybindings :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
-showKeybindings x = addName "Show Keybindings" $ do
-  name <- getMonitorName
-  case name of
-    Just n -> do
-      h <- spawnPipe $ cmd n
-      io $ hPutStr h (unlines $ showKm x)
-      io $ hClose h
-      return ()
-    Nothing -> io $ putStrLn "fail"
-  where cmd name = fmtCmd myDmenuCmd
-          [ "-dmenu"
-          , "-m"
-          , name
-          , "-p"
-          , "commands"
-          , "-theme-str"
-          , "'#element.selected.normal { background-color: #a200ff; }'"
-          ]
-
 myVMWorkspace :: String
 myVMWorkspace = "VM"
 
@@ -578,18 +476,12 @@ runXSane = spawnOrSwitch myXSaneWorkspace $ spawnCmd "xsane" []
 myModMask :: KeyMask
 myModMask = mod4Mask
 
-mkNamedSubmap
-  :: XConfig l
-     -> String
-     -> [(String, String, X ())]
-     -> [((KeyMask, KeySym), NamedAction)]
-mkNamedSubmap c sectionName bindings =
-  (subtitle sectionName:) $ mkNamedKeymap c
-  $ map (\(key, name, cmd) -> (key, addName name cmd)) bindings
+addKeymap :: ThreadState -> XConfig l -> XConfig l
+addKeymap ts = addDescrKeys' ((myModMask, xK_F1), runShowKeys) (mkKeys ts)
 
-mkKeys :: [ProcessID] -> Client -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
-mkKeys hs client c =
-  mkNamedSubmap c "Window Layouts"
+mkKeys :: ThreadState -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
+mkKeys ts c =
+  mkNamedSubmap "Window Layouts"
   [ ("M-j", "focus down", windows W.focusDown)
   , ("M-k", "focus up", windows W.focusUp)
   , ("M-m", "focus master", windows W.focusMaster)
@@ -605,7 +497,7 @@ mkKeys hs client c =
   , ("M-S-=", "add master window", sendMessage $ IncMasterN 1)
   ] ++
 
-  mkNamedSubmap c "Workspaces"
+  mkNamedSubmap "Workspaces"
   -- ASSUME standard workspaces only use numbers 0-9 (otherwise we won't get
   -- valid keysyms)
   ([ (mods ++ n, msg ++ n, f n) | n <- myWorkspaces
@@ -621,7 +513,7 @@ mkKeys hs client c =
    , ("M-M1-h", "move down workspace", moveTo Prev HiddenNonEmptyWS)
    ]) ++
 
-  mkNamedSubmap c "Screens"
+  mkNamedSubmap "Screens"
   [ ("M-l", "move up screen", nextScreen)
   , ("M-h", "move down screen", prevScreen)
   , ("M-C-l", "follow client up screen", shiftNextScreen >> nextScreen)
@@ -630,7 +522,7 @@ mkKeys hs client c =
   , ("M-S-h", "shift workspace down screen", swapPrevScreen >> prevScreen)
   ] ++
 
-  mkNamedSubmap c "Actions"
+  mkNamedSubmap "Actions"
   [ ("M-q", "close window", kill1)
   , ("M-r", "run program", runCmdMenu)
   , ("M-<Space>", "warp pointer", warpToWindow 0.5 0.5)
@@ -640,7 +532,7 @@ mkKeys hs client c =
   -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
   ] ++
 
-  mkNamedSubmap c "Launchers"
+  mkNamedSubmap "Launchers"
   [ ("<XF86Search>", "select/launch app", runAppMenu)
   , ("M-g", "launch clipboard manager", runClipMenu)
   , ("M-a", "launch network selector", runNetMenu)
@@ -656,7 +548,7 @@ mkKeys hs client c =
   , ("M-C-x", "launch XSane", runXSane)
   ] ++
 
-  mkNamedSubmap c "Multimedia"
+  mkNamedSubmap "Multimedia"
   [ ("<XF86AudioPlay>", "toggle play/pause", runTogglePlay)
   , ("<XF86AudioPrev>", "previous track", runPrevTrack)
   , ("<XF86AudioNext>", "next track", runNextTrack)
@@ -668,14 +560,14 @@ mkKeys hs client c =
 
   -- dummy map for dunst commands (defined separately but this makes them show
   -- up in the help menu)
-  mkNamedSubmap c "Dunst"
+  mkNamedSubmap "Dunst"
   [ ("M-`", "dunst history", return ())
   , ("M-S-`", "dunst close", return ())
   , ("M-M1-`", "dunst context menu", return ())
   , ("M-C-`", "dunst close all", return ())
   ] ++
 
-  mkNamedSubmap c "System"
+  mkNamedSubmap "System"
   [ ("M-.", "backlight up", runIncBacklight)
   , ("M-,", "backlight down", runDecBacklight)
   , ("M-M1-,", "backlight min", runMinBacklight)
@@ -684,9 +576,12 @@ mkKeys hs client c =
   , ("M-<Home>", "quit xmonad", runQuitPrompt)
   , ("M-<Delete>", "lock screen", runScreenLock)
   -- M-<F1> reserved for showing the keymap
-  , ("M-<F2>", "restart xmonad", runCleanup hs client >> runRestart)
+  , ("M-<F2>", "restart xmonad", runCleanup ts >> runRestart)
   , ("M-<F3>", "recompile xmonad", runRecompile)
   , ("M-<F10>", "toggle bluetooth", runToggleBluetooth)
   , ("M-<F11>", "toggle screensaver", runToggleDPMS)
   , ("M-<F12>", "switch gpu", runOptimusPrompt)
   ]
+  where
+    mkNamedSubmap header bindings = (subtitle header:) $ mkNamedKeymap c
+      $ map (\(key, name, cmd) -> (key, addName name cmd)) bindings

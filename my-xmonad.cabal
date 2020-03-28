@@ -11,6 +11,7 @@ library
                    , Notify
                    , Shell
                    , WorkspaceMon
+                   , Internal.DMenu
                    , DBus.Common
                    , DBus.IntelBacklight
                    , DBus.Internal
@@ -46,8 +47,8 @@ executable xmonad
     build-depends: X11 >= 1.9.1
                  , base
                  , containers >= 0.6.0.1
-                 , dbus >= 1.2.7
                  , directory >= 1.3.3.0
+                 , process >= 1.6.5.0
                  , my-xmonad
                  , unix >= 2.7.2.2
                  , xmonad >= 0.13

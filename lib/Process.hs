@@ -5,17 +5,23 @@ module Process where
 import           Control.Concurrent
 import           Control.Exception
 import           Control.Monad
+import           Control.Monad.IO.Class
 
 import           System.Directory
 import           System.Exit
+import           System.IO
+import           System.Posix.IO
+import           System.Posix.Process
 import           System.Posix.Signals
 import           System.Posix.Types
-import           System.Process           (waitForProcess)
+import           System.Process           hiding (createPipe)
 import           System.Process.Internals
     ( ProcessHandle__ (ClosedHandle, OpenHandle)
     , mkProcessHandle
     , withProcessHandle
     )
+
+import           XMonad.Core
 
 -- | Block until a PID has exited (in any form)
 -- ASSUMPTION on linux PIDs will always increase until they overflow, in which
@@ -42,3 +48,15 @@ killPID pid = do
       OpenHandle _ -> signalProcess sigTERM pid
       ClosedHandle _ -> return ()
       _ -> return () -- this should never happen
+
+spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)
+spawnPipe' x = liftIO $ do
+  (rd, wr) <- createPipe
+  setFdOption wr CloseOnExec True
+  h <- fdToHandle wr
+  hSetBuffering h LineBuffering
+  p <- xfork $ do
+    _ <- dupTo rd stdInput
+    executeFile "/bin/sh" False ["-c", x] Nothing
+  closeFd rd
+  return (p, h)
