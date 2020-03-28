@@ -104,6 +104,7 @@ runWorkspaceMon' :: IO ()
 runWorkspaceMon' = runWorkspaceMon
   $ fromList [ (myGimpClass, myGimpWorkspace)
              , (myVMClass, myVMWorkspace)
+             , (myXSaneClass, myXSaneWorkspace)
              ]
 
 spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)
@@ -202,19 +203,20 @@ moveBottom = W.modify' $ \(W.Stack f t b) -> W.Stack f (reverse b ++ t) []
 
 myManageHook :: ManageHook
 myManageHook = composeOne
+  [ isDialog -?> doCenterFloat
   -- VM window
-  [ className =? myVMClass -?> appendViewShift myVMWorkspace
+  , className =? myVMClass -?> appendViewShift myVMWorkspace
   -- GIMP
   , matchGimpRole "gimp-image-window" -?> appendViewShift myGimpWorkspace
   , matchGimpRole "gimp-dock" -?> doF (moveBottom . W.focusMaster)
   , matchGimpRole "gimp-toolbox" -?> doF (moveBottom . W.focusMaster)
   , className =? myGimpClass -?> appendViewShift myGimpWorkspace
+  -- XSane
+  , className =? myXSaneClass -?> appendViewShift myXSaneWorkspace >> doFloat
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
   -- gnucash
   , (className =? "Gnucash" <&&> title =? "Transaction Import Assistant") -?> doFloat
-  -- xsane
-  , className =? "Xsane" -?> doFloat
   -- plots and graphics created by R
   , className =? "R_x11" -?> doFloat
   , className =? "mpv"    -?> doFloat
@@ -224,7 +226,6 @@ myManageHook = composeOne
      <&&> className =? "Brave-browser") -?> doFloat
   -- the dialog windows created by the zotero addon in Google Docs
   , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
-  , isDialog              -?> doCenterFloat
   ]
 
 myEventHook :: Event -> X All
@@ -549,6 +550,12 @@ myGimpWorkspace = "GIMP"
 myGimpClass :: String
 myGimpClass = "Gimp-2.10"
 
+myXSaneWorkspace :: String
+myXSaneWorkspace = "XSANE"
+
+myXSaneClass :: String
+myXSaneClass = "Xsane"
+
 wsOccupied :: Eq a1 => a1 -> W.StackSet a1 l a2 sid sd -> Bool
 wsOccupied tag ws = elem tag $ map W.tag $ filter (isJust .  W.stack)
   -- list of all workspaces with windows on them
@@ -565,6 +572,9 @@ runVBox = spawnOrSwitch myVMWorkspace $ spawnCmd "vbox-start" ["win8raw"]
 
 runGimp :: X ()
 runGimp = spawnOrSwitch myGimpWorkspace $ spawnCmd "gimp-2.10" []
+
+runXSane :: X ()
+runXSane = spawnOrSwitch myXSaneWorkspace $ spawnCmd "xsane" []
 
 myModMask :: KeyMask
 myModMask = mod4Mask
@@ -643,6 +653,7 @@ mkKeys hs client c =
   , ("M-C-f", "launch file manager", runFileManager)
   , ("M-C-v", "launch windows VM", runVBox)
   , ("M-C-g", "launch GIMP", runGimp)
+  , ("M-C-x", "launch XSane", runXSane)
   ] ++
 
   mkNamedSubmap c "Multimedia"
