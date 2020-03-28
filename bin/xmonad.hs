@@ -18,13 +18,7 @@ import           WorkspaceMon
 
 import           Control.Arrow                    (first)
 import           Control.Concurrent
-import           Control.Monad
-    ( forM_
-    , liftM2
-    , mapM_
-    , void
-    , when
-    )
+import           Control.Monad                    (forM_, mapM_, void, when)
 
 import           Data.List                        (isPrefixOf, sortBy, sortOn)
 import qualified Data.Map.Lazy                    as M
@@ -34,7 +28,6 @@ import           Data.Monoid                      (All (..))
 import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
-
 
 import           System.Directory
 import           System.Exit
@@ -48,7 +41,6 @@ import           Xmobar.Common
 import           XMonad
 import           XMonad.Actions.CopyWindow
 import           XMonad.Actions.CycleWS
-import           XMonad.Actions.DynamicWorkspaces
 import           XMonad.Actions.PhysicalScreens
 import           XMonad.Actions.Volume
 import           XMonad.Actions.Warp
@@ -66,13 +58,12 @@ import qualified XMonad.StackSet                  as W
 import           XMonad.Util.EZConfig
 import           XMonad.Util.NamedActions
 
-
 main :: IO ()
 main = do
   cl <- startXMonadService
   (p, h) <- spawnPipe' "xmobar"
   _ <- forkIO runPowermon
-  _ <- forkIO $ runWorkspaceMon matchPatterns
+  _ <- forkIO $ runWorkspaceMon allDWs
   let ts = ThreadState
         { client = cl
         , childPIDs = [p]
@@ -95,27 +86,75 @@ main = do
           , focusedBorderColor = T.selectedBordersColor
           }
 
-myStartupHook :: X ()
-myStartupHook = docksStartupHook <+> startupHook def
-
+-- Data structure to hold the dbus client, threadIDs, and process IDs started
+-- outside the main Xmonad thread. Maybe I could use a ReaderT here but I'm lazy
 data ThreadState = ThreadState
     { client       :: Client
     , childPIDs    :: [Pid]
     , childHandles :: [Handle]
     }
 
-matchPatterns :: M.Map String String
-matchPatterns = fromList
-  [ (myGimpClass, myGimpWorkspace)
-  , (myVMClass, myVMWorkspace)
-  , (myXSaneClass, myXSaneWorkspace)
-  ]
+-- | Startuphook configuration
 
-myWorkspaces :: [String]
+myStartupHook :: X ()
+myStartupHook = docksStartupHook <+> startupHook def
+
+-- | Workspace configuration
+
+myWorkspaces :: [WorkspaceId]
 myWorkspaces = map show [1..10 :: Int]
 
-myLayouts = onWorkspace myVMWorkspace vmLayout
-  $ onWorkspace myGimpWorkspace gimpLayout
+gimpDynamicWorkspace :: DynWorkspace
+gimpDynamicWorkspace = DynWorkspace
+  { dwName = "Gimp"
+  , dwTag = t
+  , dwClass = c
+  , dwHook =
+    [ matchGimpRole "gimp-image-window" -?> appendViewShift t
+    , matchGimpRole "gimp-dock" -?> doF (toBottom . W.focusMaster)
+    , matchGimpRole "gimp-toolbox" -?> doF (toBottom . W.focusMaster)
+    , className =? c -?> appendViewShift t
+    ]
+  , dwCmd = Just ("g", spawnCmd "gimp-2.10" [])
+  }
+  where
+    matchGimpRole role = isPrefixOf role <$> stringProperty "WM_WINDOW_ROLE"
+      <&&> className =? c
+    toBottom = W.modify' $ \(W.Stack f tp bt) -> W.Stack f (reverse bt ++ tp) []
+    t = "GIMP"
+    c = "Gimp-2.10" -- TODO I don't feel like changing the version long term
+
+wmDynamicWorkspace :: DynWorkspace
+wmDynamicWorkspace = DynWorkspace
+  { dwName = "Windows VirtualBox"
+  , dwTag = t
+  , dwClass = c
+  , dwHook = [ className =? c -?> appendViewShift t ]
+  , dwCmd = Just ("v", spawnCmd "vbox-start" ["win8raw"])
+  }
+  where
+    t = "VM"
+    c = "VirtualBoxVM"
+
+xsaneDynamicWorkspace :: DynWorkspace
+xsaneDynamicWorkspace = DynWorkspace
+  { dwName = "XSane"
+  , dwTag = t
+  , dwClass = c
+  , dwHook = [ className =? c -?> appendViewShift t >> doFloat ]
+  , dwCmd = Just ("x", spawnCmd "xsane" [])
+  }
+  where
+    t = "XSANE"
+    c = "Xsane"
+
+allDWs :: [DynWorkspace]
+allDWs = [xsaneDynamicWorkspace, wmDynamicWorkspace, gimpDynamicWorkspace]
+
+-- | Layout configuration
+
+myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
+  $ onWorkspace (dwTag gimpDynamicWorkspace) gimpLayout
   $ tall ||| single ||| full
   where
     addTopBar = noFrillsDeco shrinkText T.tabbedTheme
@@ -138,7 +177,7 @@ myLayouts = onWorkspace myVMWorkspace vmLayout
       $ addTopBar
       $ Tall 1 0.025 0.8
 
--- | Format workspace and layout in loghook
+-- | Loghook configuration
 -- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
 -- is the workspace and LAYOUT is the current layout. Each workspace
 -- in the brackets is currently visible and the order reflects the
@@ -177,35 +216,14 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
         (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
         (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
 
-viewShift = doF . liftM2 (.) W.view W.shift
-
-appendViewShift tag = liftX (appendWorkspace tag) >> viewShift tag
-
-($?) :: Query a -> (a -> Bool) -> Query Bool
-($?) q f = f <$> q
-
-matchGimpRole :: String -> Query Bool
-matchGimpRole role = stringProperty "WM_WINDOW_ROLE" $? isPrefixOf role
-  <&&> className =? myGimpClass
-
-moveBottom :: W.StackSet i l a s sd -> W.StackSet i l a s sd
-moveBottom = W.modify' $ \(W.Stack f t b) -> W.Stack f (reverse b ++ t) []
+-- | Managehook configuration
 
 myManageHook :: ManageHook
 myManageHook = manageApps <+> manageDocks <+> manageHook def
 
 manageApps :: ManageHook
-manageApps = composeOne
+manageApps = composeOne $ concatMap dwHook allDWs ++
   [ isDialog -?> doCenterFloat
-  -- VM window
-  , className =? myVMClass -?> appendViewShift myVMWorkspace
-  -- GIMP
-  , matchGimpRole "gimp-image-window" -?> appendViewShift myGimpWorkspace
-  , matchGimpRole "gimp-dock" -?> doF (moveBottom . W.focusMaster)
-  , matchGimpRole "gimp-toolbox" -?> doF (moveBottom . W.focusMaster)
-  , className =? myGimpClass -?> appendViewShift myGimpWorkspace
-  -- XSane
-  , className =? myXSaneClass -?> appendViewShift myXSaneWorkspace >> doFloat
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
   -- gnucash
@@ -221,6 +239,8 @@ manageApps = composeOne
   , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
   ]
 
+-- | Eventhook configuration
+
 myEventHook :: Event -> X All
 myEventHook = monitorEventHook <+> docksEventHook <+> handleEventHook def
 
@@ -229,7 +249,7 @@ monitorEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (xtype, tag) = splitXMsg d
     case xtype of
-      Workspace -> removeEmptyWorkspaceByTag tag
+      Workspace -> removeDynamicWorkspace tag
       ACPI -> do
          let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
          forM_ acpiTag $ \case
@@ -432,46 +452,7 @@ runMaxBacklight = io $ void callMaxBrightness
 runToggleDPMS :: X ()
 runToggleDPMS = io $ void callToggle
 
--- keybindings
-
-myVMWorkspace :: String
-myVMWorkspace = "VM"
-
-myVMClass :: String
-myVMClass = "VirtualBoxVM"
-
-myGimpWorkspace :: String
-myGimpWorkspace = "GIMP"
-
--- TODO I don't feel like changing the version long term
-myGimpClass :: String
-myGimpClass = "Gimp-2.10"
-
-myXSaneWorkspace :: String
-myXSaneWorkspace = "XSANE"
-
-myXSaneClass :: String
-myXSaneClass = "Xsane"
-
-wsOccupied :: Eq a1 => a1 -> W.StackSet a1 l a2 sid sd -> Bool
-wsOccupied tag ws = elem tag $ map W.tag $ filter (isJust .  W.stack)
-  -- list of all workspaces with windows on them
-  -- TODO is there not a better way to do this?
-  $ W.workspace (W.current ws) : W.hidden ws ++ map W.workspace (W.visible ws)
-
-spawnOrSwitch :: WorkspaceId -> X () -> X ()
-spawnOrSwitch tag cmd = do
-  occupied <- withWindowSet $ return . wsOccupied tag
-  if occupied then windows $ W.view tag else cmd
-
-runVBox :: X ()
-runVBox = spawnOrSwitch myVMWorkspace $ spawnCmd "vbox-start" ["win8raw"]
-
-runGimp :: X ()
-runGimp = spawnOrSwitch myGimpWorkspace $ spawnCmd "gimp-2.10" []
-
-runXSane :: X ()
-runXSane = spawnOrSwitch myXSaneWorkspace $ spawnCmd "xsane" []
+-- | Keymap configuration
 
 myModMask :: KeyMask
 myModMask = mod4Mask
@@ -513,6 +494,11 @@ mkKeys ts c =
    , ("M-M1-h", "move down workspace", moveTo Prev HiddenNonEmptyWS)
    ]) ++
 
+  mkNamedSubmap "Dynamic Workspaces"
+  [ ("M-C-" ++ k, "launch/switch to " ++ n, spawnOrSwitch t a)
+  |  DynWorkspace { dwTag = t, dwCmd = Just (k, a), dwName = n } <- allDWs
+  ] ++
+
   mkNamedSubmap "Screens"
   [ ("M-l", "move up screen", nextScreen)
   , ("M-h", "move down screen", prevScreen)
@@ -543,9 +529,6 @@ mkKeys ts c =
   , ("M-C-t", "launch terminal", runTerm)
   , ("M-C-q", "launch calc", runCalc)
   , ("M-C-f", "launch file manager", runFileManager)
-  , ("M-C-v", "launch windows VM", runVBox)
-  , ("M-C-g", "launch GIMP", runGimp)
-  , ("M-C-x", "launch XSane", runXSane)
   ] ++
 
   mkNamedSubmap "Multimedia"
