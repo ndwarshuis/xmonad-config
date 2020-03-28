@@ -64,10 +64,10 @@ import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
 -- import           XMonad.Layout.LayoutCombinators  hiding ((|||))
 -- import           XMonad.Layout.Master
-import           XMonad.Layout.Named
 import           XMonad.Layout.NoBorders
 import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
+import           XMonad.Layout.Renamed
 -- import           XMonad.Layout.Simplest
 import           XMonad.Layout.Tabbed
 import           XMonad.Prompt
@@ -127,26 +127,24 @@ myLayouts = onWorkspace myVMWorkspace vmLayout
   $ tall ||| single ||| full
   where
     addTopBar = noFrillsDeco shrinkText T.tabbedTheme
-    tall = named "Tall"
+    tall = renamed [Replace "Tall"]
       $ avoidStruts
       $ addTopBar
       $ noBorders
       $ Tall 1 0.03 0.5
-    single = named "Tabbed"
+    single = renamed [Replace "Tabbed"]
       $ avoidStruts
       $ noBorders
       $ tabbedAlways shrinkText T.tabbedTheme
-    full = named "Full"
+    full = renamed [Replace "Full"]
       $ noBorders Full
     vmLayout = noBorders Full
     -- TODO use a tabbed layout for multiple master windows
-    gimpLayout = named "Gimp Layout"
+    gimpLayout = renamed [Replace "Gimp Layout"]
       $ avoidStruts
       $ noBorders
       $ addTopBar
       $ Tall 1 0.025 0.8
-      -- $ withIM (11/64) (Or (Title "Toolbox") (Title "Tool Options"))
-      -- $ (tabbedAlways shrinkText defaultTheme)
 
 -- | Format workspace and layout in loghook
 -- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
