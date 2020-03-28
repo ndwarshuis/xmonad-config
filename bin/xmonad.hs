@@ -132,7 +132,6 @@ myLayouts = onWorkspace myVMWorkspace vmLayout
       $ noBorders
       $ Tall 1 0.03 0.5
     single = named "Tabbed"
-      -- $ addTopBar
       $ avoidStruts
       $ noBorders
       $ tabbedAlways shrinkText T.tabbedTheme
@@ -194,8 +193,8 @@ appendViewShift tag = liftX (appendWorkspace tag) >> viewShift tag
 ($?) :: Query a -> (a -> Bool) -> Query Bool
 ($?) q f = f <$> q
 
-matchGimp :: String -> Query Bool
-matchGimp role = stringProperty "WM_WINDOW_ROLE" $? isPrefixOf role
+matchGimpRole :: String -> Query Bool
+matchGimpRole role = stringProperty "WM_WINDOW_ROLE" $? isPrefixOf role
   <&&> className =? myGimpClass
 
 moveBottom :: W.StackSet i l a s sd -> W.StackSet i l a s sd
@@ -206,9 +205,9 @@ myManageHook = composeOne
   -- VM window
   [ className =? myVMClass -?> appendViewShift myVMWorkspace
   -- GIMP
-  , matchGimp "gimp-image-window" -?> appendViewShift myGimpWorkspace
-  , matchGimp "gimp-dock" -?> doF (moveBottom . W.focusMaster)
-  , matchGimp "gimp-toolbox" -?> doF (moveBottom . W.focusMaster)
+  , matchGimpRole "gimp-image-window" -?> appendViewShift myGimpWorkspace
+  , matchGimpRole "gimp-dock" -?> doF (moveBottom . W.focusMaster)
+  , matchGimpRole "gimp-toolbox" -?> doF (moveBottom . W.focusMaster)
   , className =? myGimpClass -?> appendViewShift myGimpWorkspace
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
