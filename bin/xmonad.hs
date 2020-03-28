@@ -59,6 +59,7 @@ import           XMonad.Actions.CycleWS
 import           XMonad.Actions.DynamicWorkspaces
 import           XMonad.Actions.PhysicalScreens
 import           XMonad.Actions.Volume
+import           XMonad.Actions.Warp
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
@@ -632,6 +633,7 @@ mkKeys hs client c =
   mkNamedSubmap c "Actions"
   [ ("M-q", "close window", kill1)
   , ("M-r", "run program", runCmdMenu)
+  , ("M-<Space>", "warp pointer", warpToWindow 0.5 0.5)
   , ("M-C-s", "capture area", runAreaCapture)
   , ("M-C-S-s", "capture screen", runScreenCapture)
   , ("M-C-d", "capture desktop", runDesktopCapture)
