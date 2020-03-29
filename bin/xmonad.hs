@@ -113,7 +113,8 @@ gimpDynamicWorkspace = DynWorkspace
     , matchGimpRole "gimp-toolbox" -?> doF (toBottom . W.focusMaster)
     , className =? c -?> appendViewShift t
     ]
-  , dwCmd = Just ("g", spawnCmd "gimp-2.10" [])
+  , dwKey = 'g'
+  , dwCmd = Just $ spawnCmd "gimp-2.10" []
   }
   where
     matchGimpRole role = isPrefixOf role <$> stringProperty "WM_WINDOW_ROLE"
@@ -128,7 +129,8 @@ wmDynamicWorkspace = DynWorkspace
   , dwTag = t
   , dwClass = c
   , dwHook = [ className =? c -?> appendViewShift t ]
-  , dwCmd = Just ("v", spawnCmd "vbox-start" ["win8raw"])
+  , dwKey = 'v'
+  , dwCmd = Just $ spawnCmd "vbox-start" ["win8raw"]
   }
   where
     t = "VM"
@@ -140,19 +142,41 @@ xsaneDynamicWorkspace = DynWorkspace
   , dwTag = t
   , dwClass = c
   , dwHook = [ className =? c -?> appendViewShift t >> doFloat ]
-  , dwCmd = Just ("x", spawnCmd "xsane" [])
+  , dwKey = 'x'
+  , dwCmd = Just $ spawnCmd "xsane" []
   }
   where
     t = "XSANE"
     c = "Xsane"
 
+steamDynamicWorkspace :: DynWorkspace
+steamDynamicWorkspace = DynWorkspace
+  { dwName = "Steam Game"
+  , dwTag = t
+  , dwClass = c
+  -- TODO not sure why the doSink is needed, windows should tile be default
+  -- since dynamic workspaces are first in the managehook
+  , dwHook = [ className =? c -?> appendViewShift t >> doSink ]
+  , dwKey = 'z'
+  , dwCmd = Nothing
+  }
+  where
+    t = "STEAM"
+    -- TODO this actually needs to be a list to match all games we care about
+    c = "portal2_linux"
+
 allDWs :: [DynWorkspace]
-allDWs = [xsaneDynamicWorkspace, wmDynamicWorkspace, gimpDynamicWorkspace]
+allDWs = [ xsaneDynamicWorkspace
+         , wmDynamicWorkspace
+         , gimpDynamicWorkspace
+         , steamDynamicWorkspace
+         ]
 
 -- | Layout configuration
 
 myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
   $ onWorkspace (dwTag gimpDynamicWorkspace) gimpLayout
+  $ onWorkspace (dwTag steamDynamicWorkspace) steamLayout
   $ mkToggle (single HIDE)
   $ tall ||| fulltab ||| full
   where
@@ -169,6 +193,7 @@ myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
     full = renamed [Replace "Full"]
       $ noBorders Full
     vmLayout = noBorders Full
+    steamLayout = vmLayout
     -- TODO use a tabbed layout for multiple master windows
     gimpLayout = renamed [Replace "Gimp Layout"]
       $ avoidStruts
@@ -313,8 +338,11 @@ mkKeys ts c =
    ]) ++
 
   mkNamedSubmap "Dynamic Workspaces"
-  [ ("M-C-" ++ k, "launch/switch to " ++ n, spawnOrSwitch t a)
-  |  DynWorkspace { dwTag = t, dwCmd = Just (k, a), dwName = n } <- allDWs
+  [ ("M-C-" ++ [k], "launch/switch to " ++ n, cmd)
+  |  DynWorkspace { dwTag = t, dwKey = k, dwCmd = a, dwName = n } <- allDWs,
+     let cmd = case a of
+           Just a' -> spawnOrSwitch t a'
+           Nothing -> windows $ W.view t
   ] ++
 
   mkNamedSubmap "Screens"

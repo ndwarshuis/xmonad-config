@@ -31,6 +31,7 @@ module WorkspaceMon
   , removeDynamicWorkspace
   , runWorkspaceMon
   , spawnOrSwitch
+  , doSink
   )
 where
 
@@ -39,7 +40,6 @@ import           SendXMsg
 
 import qualified Data.Map                         as M
 import           Data.Maybe
-import           Data.Semigroup
 
 import           Control.Concurrent
 import           Control.Monad
@@ -58,8 +58,7 @@ import           System.Process                   (Pid)
 
 import           XMonad.Actions.DynamicWorkspaces
 import           XMonad.Core
-    ( Query
-    , ScreenId
+    ( ManageHook
     , WorkspaceId
     , X
     , withWindowSet
@@ -78,7 +77,8 @@ data DynWorkspace = DynWorkspace
     , dwTag   :: WorkspaceId
     , dwClass :: String
     , dwHook  :: [MaybeManageHook]
-    , dwCmd   :: Maybe (String, X ())
+    , dwKey   :: Char
+    , dwCmd   :: Maybe (X ())
     -- TODO this should also have the layout for this workspace
     }
 
@@ -179,12 +179,18 @@ spawnOrSwitch tag cmd = do
 -- Move windows to new workspace if they are part of a dynamic workspace
 
 viewShift
-  :: WorkspaceId -> Query (Endo (W.StackSet WorkspaceId l Window ScreenId sd))
+  :: WorkspaceId -> ManageHook
 viewShift = doF . liftM2 (.) W.view W.shift
 
 appendViewShift
-  :: String -> Query (Endo (W.StackSet WorkspaceId l Window ScreenId sd))
+  :: String -> ManageHook
 appendViewShift tag = liftX (appendWorkspace tag) >> viewShift tag
+
+-- surprisingly this doesn't exist?
+doSink :: ManageHook
+doSink = doF $ \s -> case W.stack $ W.workspace $ W.current s of
+                       Just s' -> W.sink (W.focus s') s
+                       Nothing -> s
 
 --------------------------------------------------------------------------------
 -- | Eventhook
