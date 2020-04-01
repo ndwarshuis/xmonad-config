@@ -197,5 +197,6 @@ doSink = doF $ \s -> case W.stack $ W.workspace $ W.current s of
 -- When an app is closed, this will respond the event that is sent in the main
 -- XMonad thread
 
+-- TODO this doesn't kill a workspace if it isn't in focus...weird
 removeDynamicWorkspace :: WorkspaceId -> X ()
 removeDynamicWorkspace = removeEmptyWorkspaceByTag

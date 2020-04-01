@@ -229,7 +229,7 @@ myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 myWindowSetXinerama
   :: LayoutClass layout a1 =>
      W.StackSet String (layout a1) a2 ScreenId ScreenDetail -> String
-myWindowSetXinerama ws = wsString ++ sep ++ layout
+myWindowSetXinerama ws = wsString ++ sep ++ layout ++ "(" ++ nWindows ++ ")"
   where
     wsString = wrapColorBg T.backdropFgColor "" $ onscreen ++ offscreen'
     offscreen' = if null offscreen then "" else " " ++ offscreen
@@ -251,6 +251,7 @@ myWindowSetXinerama ws = wsString ++ sep ++ layout
     hilightBgColor = "#8fc7ff"
     hilightFgColor = T.blend' 0.5 hilightBgColor T.fgColor
     layout = description . W.layout . W.workspace . W.current $ ws
+    nWindows = show . length . W.integrate' . W.stack . W.workspace . W.current $ ws
     compareXCoord s0 s1 = compare x0 x1
       where
         (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
