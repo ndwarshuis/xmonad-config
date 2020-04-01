@@ -229,33 +229,42 @@ myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 myWindowSetXinerama
   :: LayoutClass layout a1 =>
      W.StackSet String (layout a1) a2 ScreenId ScreenDetail -> String
-myWindowSetXinerama ws = wsString ++ sep ++ layout ++ "(" ++ nWindows ++ ")"
+myWindowSetXinerama ws = unwords [onScreen, offScreen, sep, layout, nWindows]
   where
-    wsString = wrapColorBg T.backdropFgColor "" $ onscreen ++ offscreen'
-    offscreen' = if null offscreen then "" else " " ++ offscreen
-    sep = wrapColorBg T.backdropFgColor "" " : "
-    onscreen = wrapColorBg hilightFgColor hilightBgColor
+    onScreen = wrapColorBg hilightFgColor hilightBgColor
       $ (\s -> " " ++ s ++ " ")
       $ unwords
       $ map (fmtTags . W.tag . W.workspace)
-      . sortBy compareXCoord
+      $ sortBy compareXCoord
       $ W.current ws : W.visible ws
+    offScreen = wrapColor T.backdropFgColor
+      $ unwords
+      $ map W.tag
+      $ filter (isJust . W.stack)
+      $ sortOn W.tag
+      $ W.hidden ws
+    sep = wrapColor T.backdropFgColor ":"
+    layout = description $ W.layout $ W.workspace $ W.current ws
+    nWindows = (\s -> "(" ++ s ++ ")")
+      $ show
+      $ length
+      $ W.integrate'
+      $ W.stack
+      $ W.workspace
+      $ W.current ws
+    hilightBgColor = "#8fc7ff"
+    hilightFgColor = T.blend' 0.5 hilightBgColor T.fgColor
     fmtTags t = if t == W.currentTag ws
       then wrapColorBg T.fgColor hilightBgColor t
       else t
-    offscreen = unwords
-      $ map W.tag
-      . filter (isJust . W.stack)
-      . sortOn W.tag
-      $ W.hidden ws
-    hilightBgColor = "#8fc7ff"
-    hilightFgColor = T.blend' 0.5 hilightBgColor T.fgColor
-    layout = description . W.layout . W.workspace . W.current $ ws
-    nWindows = show . length . W.integrate' . W.stack . W.workspace . W.current $ ws
-    compareXCoord s0 s1 = compare x0 x1
-      where
-        (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
-        (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
+
+compareXCoord
+  :: W.Screen i1 l1 a1 ScreenId ScreenDetail
+     -> W.Screen i2 l2 a2 ScreenId ScreenDetail -> Ordering
+compareXCoord s0 s1 = compare x0 x1
+  where
+    (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
+    (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
 
 -- | Managehook configuration
 
