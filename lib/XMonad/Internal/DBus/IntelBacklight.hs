@@ -150,6 +150,7 @@ bodyGetBrightness :: [Variant] -> Maybe Brightness
 bodyGetBrightness [b] = fromVariant b :: Maybe Brightness
 bodyGetBrightness _   = Nothing
 
+--------------------------------------------------------------------------------
 -- | Exported haskell API
 
 exportIntelBacklight :: Client -> IO ()

@@ -1,6 +1,11 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+--------------------------------------------------------------------------------
+-- | Bluetooth plugin
+--
+-- Use the bluez interface on DBus to check status
+
 module Xmobar.Plugins.Bluetooth (Bluetooth(..)) where
 
 import           DBus

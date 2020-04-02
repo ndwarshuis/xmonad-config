@@ -2,6 +2,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE MultiWayIf            #-}
 
+--------------------------------------------------------------------------------
+-- | XMonad binary
+
 module Main (main) where
 
 import           Control.Concurrent
@@ -82,7 +85,8 @@ main = do
           , focusedBorderColor = T.selectedBordersColor
           }
 
--- | Multithread setup
+--------------------------------------------------------------------------------
+-- | Concurrency configuration
 
 data ThreadState = ThreadState
     { client       :: Client
@@ -96,11 +100,13 @@ runCleanup ts = io $ do
   mapM_ killPID $ childPIDs ts
   stopXMonadService $ client ts
 
+--------------------------------------------------------------------------------
 -- | Startuphook configuration
 
 myStartupHook :: X ()
 myStartupHook = docksStartupHook <+> startupHook def
 
+--------------------------------------------------------------------------------
 -- | Workspace configuration
 
 myWorkspaces :: [WorkspaceId]
@@ -176,6 +182,7 @@ allDWs = [ xsaneDynamicWorkspace
          , steamDynamicWorkspace
          ]
 
+--------------------------------------------------------------------------------
 -- | Layout configuration
 
 myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
@@ -205,6 +212,8 @@ myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
       $ addTopBar
       $ Tall 1 0.025 0.8
 
+-- | Make a new empty layout and add a message to show/hide it. This is useful
+-- for quickly showing conky.
 data EmptyLayout a = EmptyLayout
     deriving (Show, Read)
 
@@ -221,12 +230,15 @@ instance Transformer HIDE Window where
 runHide :: X ()
 runHide = sendMessage $ Toggle HIDE
 
+--------------------------------------------------------------------------------
 -- | Loghook configuration
--- The format will be like "[<1> 2 3] 4 5 | LAYOUT" where each digit
--- is the workspace and LAYOUT is the current layout. Each workspace
--- in the brackets is currently visible and the order reflects the
--- physical location of each screen. The "<>" is the workspace
--- that currently has focus
+--
+-- The format will be like "[<1> 2 3] 4 5 | LAYOUT (N)" where each digit is the
+-- workspace and LAYOUT is the current layout. Each workspace in the brackets is
+-- currently visible and the order reflects the physical location of each
+-- screen. The "<>" is the workspace that currently has focus. N is the number
+-- of windows on the current workspace.
+
 myLoghook :: Handle -> X ()
 myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 
@@ -270,6 +282,7 @@ compareXCoord s0 s1 = compare x0 x1
     (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
     (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
 
+--------------------------------------------------------------------------------
 -- | Managehook configuration
 
 myManageHook :: ManageHook
@@ -293,11 +306,13 @@ manageApps = composeOne $ concatMap dwHook allDWs ++
   , (className =? "Zotero" <&&> resource =? "Toplevel") -?> doFloat
   ]
 
+--------------------------------------------------------------------------------
 -- | Eventhook configuration
 
 myEventHook :: Event -> X All
 myEventHook = xMsgEventHook <+> docksEventHook <+> handleEventHook def
 
+-- | React to ClientMessage events from concurrent threads
 xMsgEventHook :: Event -> X All
 xMsgEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
@@ -308,6 +323,7 @@ xMsgEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
     return (All True)
 xMsgEventHook _ = return (All True)
 
+--------------------------------------------------------------------------------
 -- | Keymap configuration
 
 myModMask :: KeyMask

@@ -66,7 +66,6 @@ import           XMonad.ManageHook
 import           XMonad.Operations
 import qualified XMonad.StackSet                          as W
 
-
 --------------------------------------------------------------------------------
 -- | Dynamic Workspace datatype
 -- This hold all the data needed to tie an app to a particular dynamic workspace
@@ -177,15 +176,13 @@ spawnOrSwitch tag cmd = do
 -- | Managehook
 -- Move windows to new workspace if they are part of a dynamic workspace
 
-viewShift
-  :: WorkspaceId -> ManageHook
+viewShift :: WorkspaceId -> ManageHook
 viewShift = doF . liftM2 (.) W.view W.shift
 
-appendViewShift
-  :: String -> ManageHook
+appendViewShift :: String -> ManageHook
 appendViewShift tag = liftX (appendWorkspace tag) >> viewShift tag
 
--- surprisingly this doesn't exist?
+-- TODO surprisingly this doesn't exist? We shouldn't need to TBH
 doSink :: ManageHook
 doSink = doF $ \s -> case W.stack $ W.workspace $ W.current s of
                        Just s' -> W.sink (W.focus s') s

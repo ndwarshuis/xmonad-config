@@ -1,6 +1,11 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+--------------------------------------------------------------------------------
+-- | VPN plugin
+--
+-- Use the NetworkManger interface on DBus to check status
+
 module Xmobar.Plugins.VPN (VPN(..)) where
 
 import           DBus

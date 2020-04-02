@@ -1,5 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
 
+--------------------------------------------------------------------------------
+-- | Intel backlight plugin
+--
+-- Use the custom DBus interface exported by the XMonad process so I can react
+-- to signals spawned by commands
+
 module Xmobar.Plugins.IntelBacklight (IntelBacklight(..)) where
 
 import           Control.Concurrent

@@ -1,5 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 
+--------------------------------------------------------------------------------
+-- | Functions for managing processes
+
 module XMonad.Internal.Process
   ( waitUntilExit
   , killPID

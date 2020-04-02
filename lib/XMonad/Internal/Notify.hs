@@ -1,3 +1,11 @@
+--------------------------------------------------------------------------------
+-- | Functions for formatting and sending notifications
+--
+-- NOTE I use the DBus.Notify lib even though I don't actually use the DBus for
+-- notifications (just formation them into 'notify-send' commands and spawn a
+-- shell since that works more consistently with my current commands). If I ever
+-- decide to switch to using the DBus it will be easy.
+
 module XMonad.Internal.Notify
   ( Note(..)
   , Body(..)
@@ -13,6 +21,9 @@ import           DBus.Notify
 
 import           XMonad.Internal.Shell
 
+--------------------------------------------------------------------------------
+-- | Some nice default notes
+
 defNote :: Note
 defNote = blankNote { summary = "\"xmonad\"" }
 
@@ -23,6 +34,9 @@ defNoteInfo = defNote
 defNoteError :: Note
 defNoteError = defNote
   { appImage = Just $ Icon "dialog-error-symbolic" }
+
+--------------------------------------------------------------------------------
+-- | Format a 'notify-send' command to be send to the shell
 
 parseBody :: Body -> Maybe String
 parseBody (Text s) = Just s

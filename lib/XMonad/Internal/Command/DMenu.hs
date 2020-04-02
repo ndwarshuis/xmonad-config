@@ -1,3 +1,6 @@
+--------------------------------------------------------------------------------
+-- | Dmenu (Rofi) Commands
+
 module XMonad.Internal.Command.DMenu
   ( runCmdMenu
   , runAppMenu
@@ -25,17 +28,18 @@ import           XMonad.StackSet
 import           XMonad.Util.NamedActions
 import           XMonad.Util.Run
 
--- | Focus rofi on the current workspace always
--- Apparently xrandr and xinerama order monitors differently, which
--- means they have different indices. Since rofi uses the former and
--- xmonad uses the latter, this function is to figure out the xrandr
--- screen name based on the xinerama screen that is currently in
--- focus. The steps to do this:
+--------------------------------------------------------------------------------
+-- | Fix rofi screen indexing limitations
+--
+-- Apparently xrandr and xinerama order monitors differently, which means they
+-- have different indices. Since rofi uses the former and xmonad uses the
+-- latter, these functions is to figure out the xrandr screen name based on the
+-- xinerama screen that is currently in focus. The steps to do this:
 -- 1) get the coordinates of the currently focuses xinerama screen
 -- 2) get list of Xrandr outputs and filter which ones are connected
--- 3) match the coordinates of the xinerama screen with the xrandr
---    output and return the latter's name (eg "DP-0") which can be
---    fed to Rofi
+-- 3) match the coordinates of the xinerama screen with the xrandr output and
+--    return the latter's name (eg "DP-0") which can be fed to Rofi
+
 getMonitorName :: X (Maybe String)
 getMonitorName = do
   dpy <- asks display
@@ -68,8 +72,24 @@ getMonitorName = do
 getFocusedScreen :: X Rectangle
 getFocusedScreen = withWindowSet $ return . screenRect . screenDetail . current
 
+--------------------------------------------------------------------------------
+-- | Other internal functions
+
 myDmenuCmd :: String
 myDmenuCmd = "rofi"
+
+spawnDmenuCmd :: String -> [String] -> X ()
+spawnDmenuCmd cmd args = do
+  name <- getMonitorName
+  case name of
+    Just n  -> spawnCmd cmd $ ["-m", n] ++ args
+    Nothing -> io $ putStrLn "fail"
+
+spawnDmenuCmd' :: [String] -> X ()
+spawnDmenuCmd' = spawnDmenuCmd myDmenuCmd
+
+--------------------------------------------------------------------------------
+-- | Exported Commands
 
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
@@ -89,16 +109,6 @@ runShowKeys x = addName "Show Keybindings" $ do
           , "-theme-str"
           , "'#element.selected.normal { background-color: #a200ff; }'"
           ]
-
-spawnDmenuCmd :: String -> [String] -> X ()
-spawnDmenuCmd cmd args = do
-  name <- getMonitorName
-  case name of
-    Just n  -> spawnCmd cmd $ ["-m", n] ++ args
-    Nothing -> io $ putStrLn "fail"
-
-spawnDmenuCmd' :: [String] -> X ()
-spawnDmenuCmd' = spawnDmenuCmd myDmenuCmd
 
 runCmdMenu :: X ()
 runCmdMenu = spawnDmenuCmd' ["-show", "run"]

@@ -1,10 +1,11 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+--------------------------------------------------------------------------------
+-- | Concurrent module to handle events from acpid
+
 module XMonad.Internal.Concurrent.ACPIEvent
-  ( ACPIEvent(..)
-  , isDischarging
-  , runPowermon
+  ( runPowermon
   , handleACPI
   ) where
 
@@ -24,6 +25,12 @@ import           XMonad.Core
 import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ClientMessage
 
+--------------------------------------------------------------------------------
+-- | Data structure to hold the ACPI events I care about
+--
+-- Enumerate so these can be converted to strings and back when sent in a
+-- ClientMessage event to X
+
 data ACPIEvent = Power
     | Sleep
     | LidClose
@@ -39,9 +46,11 @@ instance Enum ACPIEvent where
   fromEnum Sleep    = 1
   fromEnum LidClose = 2
 
-sendACPIEvent :: ACPIEvent -> IO ()
-sendACPIEvent = sendXMsg ACPI . show . fromEnum
+--------------------------------------------------------------------------------
+-- | Internal functions
 
+-- | Convert a string to an ACPI event (this string is assumed to come from
+-- the acpid socket)
 parseLine :: ByteString -> Maybe ACPIEvent
 parseLine line =
   case splitLine line of
@@ -54,6 +63,10 @@ parseLine line =
   where
     splitLine = C.words . C.reverse . C.dropWhile (== '\n') . C.reverse
 
+-- | Send an ACPIEvent to the X server as a ClientMessage
+sendACPIEvent :: ACPIEvent -> IO ()
+sendACPIEvent = sendXMsg ACPI . show . fromEnum
+
 isDischarging :: IO (Maybe Bool)
 isDischarging = do
   status <- try $ readFile "/sys/class/power_supply/BAT0/status"
@@ -62,6 +75,11 @@ isDischarging = do
     Left _  -> return Nothing
     Right s -> return $ Just (s == "Discharging")
 
+--------------------------------------------------------------------------------
+-- | Exported API
+
+-- | Spawn a new thread that will listen for ACPI events on the acpid socket
+-- and send ClientMessage events when it receives them
 runPowermon :: IO ()
 runPowermon = do
   -- TODO barf when the socket doesn't exist
@@ -72,6 +90,8 @@ runPowermon = do
       out <- S.read s
       mapM_ sendACPIEvent $ parseLine =<< out
 
+-- | Handle ClientMessage event containing and ACPI event (to be used in
+-- Xmonad's event hook)
 handleACPI :: String -> X ()
 handleACPI tag = do
   let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent

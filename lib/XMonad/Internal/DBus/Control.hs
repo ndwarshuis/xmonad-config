@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+--------------------------------------------------------------------------------
+-- | High-level interface for managing XMonad's DBus
+
 module XMonad.Internal.DBus.Control
   ( Client
   , startXMonadService

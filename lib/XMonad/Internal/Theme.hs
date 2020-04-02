@@ -1,3 +1,6 @@
+--------------------------------------------------------------------------------
+-- | Theme for XMonad and Xmobar
+
 module XMonad.Internal.Theme
   ( baseColor
   , bgColor
@@ -22,7 +25,6 @@ module XMonad.Internal.Theme
   , promptTheme
   ) where
 
-
 import           Data.Char
 import           Data.Colour
 import           Data.Colour.SRGB
@@ -31,7 +33,8 @@ import           Data.List
 import qualified XMonad.Layout.Decoration as D
 import qualified XMonad.Prompt            as P
 
--- Colors
+--------------------------------------------------------------------------------
+-- | Colors - vocabulary roughly based on GTK themes
 
 baseColor :: String
 baseColor = "#f7f7f7"
@@ -69,7 +72,8 @@ backdropTextColor = blend' 0.95 fgColor backdropBaseColor
 backdropFgColor :: String
 backdropFgColor = blend' 0.75 fgColor bgColor
 
--- Color functions
+--------------------------------------------------------------------------------
+-- | Color functions
 
 blend' :: Float -> String -> String -> String
 blend' wt c0 c1 = sRGB24show $ blend wt (sRGB24read c0) (sRGB24read c1)
@@ -77,7 +81,8 @@ blend' wt c0 c1 = sRGB24show $ blend wt (sRGB24read c0) (sRGB24read c1)
 darken' :: Float -> String -> String
 darken' wt = sRGB24show . darken wt . sRGB24read
 
--- Fonts
+--------------------------------------------------------------------------------
+-- | Fonts
 
 data Slant = Roman
     | Italic
@@ -130,7 +135,8 @@ font = ThemeFont
   , pixelsize = Nothing
   }
 
--- Complete themes
+--------------------------------------------------------------------------------
+-- | Complete themes
 
 tabbedTheme :: D.Theme
 tabbedTheme = D.def
