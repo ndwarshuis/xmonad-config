@@ -1,5 +1,16 @@
 module Main (main) where
 
+--------------------------------------------------------------------------------
+-- | Xmobar binary
+--
+-- Features:
+-- * Uses the 'UnsafeStdinReader' to receive the current workspace/layout config
+--   from xmonad
+-- * FontAwesome and Symbol fonts for icons
+-- * Some custom plugins (imported below)
+-- * Theme integration with xmonad (shared module imported below)
+-- * A custom Locks plugin from my own forked repo
+
 import           Data.List
 
 import           Xmobar.Plugins.Bluetooth
@@ -9,30 +20,34 @@ import           Xmobar.Plugins.VPN
 
 import           Xmobar
 import           XMonad                        (getXMonadDir)
-import           XMonad.Hooks.DynamicLog       (xmobarColor)
+import           XMonad.Hooks.DynamicLog       (wrap, xmobarColor)
 import qualified XMonad.Internal.Theme         as T
 
 sep :: String
 sep = xmobarColor T.backdropFgColor "" " : "
 
+aSep :: String
+aSep = "}{"
+
+pSep :: String
+pSep = "%"
+
 myTemplate :: String
 myTemplate = formatTemplate left right
   where
-    formatTemplate l r = intercalate sep l
-      ++ " }{ "
-      ++ intercalate sep r
-      ++ " "
-    left = [ "%UnsafeStdinReader%" ]
-    right = [ "%wlp0s20f3wi%"
-            , "%vpn%"
-            , "%bluetooth%"
-            , "%alsa:default:Master%"
-            , "%battery%"
-            , "%intelbacklight%"
-            , "%screensaver%"
-            , "%locks%"
-            , "%date%"
+    formatTemplate l r = fmtAliases l ++ aSep ++ fmtAliases r ++ " "
+    left = [ "UnsafeStdinReader" ]
+    right = [ "wlp0s20f3wi"
+            , "vpn"
+            , "bluetooth"
+            , "alsa:default:Master"
+            , "battery"
+            , "intelbacklight"
+            , "screensaver"
+            , "locks"
+            , "date"
             ]
+    fmtAliases = intercalate sep . map (wrap pSep pSep)
 
 barFont :: String
 barFont = T.fmtFontXFT T.font
@@ -65,11 +80,7 @@ blockFont = T.fmtFontXFT T.font
 config :: String -> Config
 config confDir = defaultConfig
   { font = barFont
-  , additionalFonts =
-    [ iconFont
-    , iconFontLarge
-    , blockFont
-    ]
+  , additionalFonts = [ iconFont, iconFontLarge, blockFont ]
   , textOffset = 16
   , textOffsets = [ 16, 17, 17 ]
   , bgColor = T.bgColor
@@ -78,8 +89,8 @@ config confDir = defaultConfig
   , border = NoBorder
   , borderColor = T.bordersColor
 
-  , sepChar = "%"
-  , alignSep = "}{"
+  , sepChar = pSep
+  , alignSep = aSep
   , template = myTemplate
 
   , lowerOnStart = False
@@ -88,6 +99,7 @@ config confDir = defaultConfig
   , overrideRedirect = True
   , pickBroadest = False
   , persistent = True
+  -- store the icons with the xmonad/xmobar stack project
   , iconRoot = confDir ++ "/icons"
 
   , commands =
@@ -144,6 +156,4 @@ config confDir = defaultConfig
   }
 
 main :: IO ()
-main = do
-  confDir <- getXMonadDir
-  xmobar $ config confDir
+main = xmobar =<< config <$> getXMonadDir
