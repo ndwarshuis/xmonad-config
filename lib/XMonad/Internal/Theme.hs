@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module XMonad.Internal.Theme
   ( baseColor
   , bgColor
@@ -24,11 +22,10 @@ module XMonad.Internal.Theme
   , promptTheme
   ) where
 
-import           Data.Char
 
+import           Data.Char
 import           Data.Colour
 import           Data.Colour.SRGB
-
 import           Data.List
 
 import qualified XMonad.Layout.Decoration as D
@@ -82,9 +79,6 @@ darken' wt = sRGB24show . darken wt . sRGB24read
 
 -- Fonts
 
--- TODO use the font package from contrib
--- https://hackage.haskell.org/package/xmonad-contrib-0.16/docs/XMonad-Util-Font.html
-
 data Slant = Roman
     | Italic
     | Oblique
@@ -108,25 +102,23 @@ data ThemeFont = ThemeFont
 
 fmtFontXFT :: ThemeFont -> String
 fmtFontXFT ThemeFont
-  -- TODO there should be a better way to do this...
   { family = f
   , weight = w
   , slant = l
   , size = s
-  , pixelsize = i
+  , pixelsize = p
   , antialias = a
-  } = "xft:" ++ intercalate ":" (filter (not . null) elems)
+  } = intercalate ":" $ ["xft", f] ++ elems
   where
-    elems = [ f
-            , fmt "weight" w
-            , fmt "slant" l
-            , fmt "size" s
-            , fmt "pixelsize" i
-            , fmt "antialias" a]
-    fmt :: Show a => String -> Maybe a -> String
-    fmt e = \case
-      Just d -> e ++ "=" ++ map toLower (show d)
-      Nothing -> ""
+    elems = [ k ++ "=" ++ v | (k, Just v) <- [ ("weight", showLower w)
+                                             , ("slant", showLower l)
+                                             , ("size", showLower s)
+                                             , ("pixelsize", showLower p)
+                                             , ("antialias", showLower a)
+                                             ]
+                            ]
+    showLower :: Show a => Maybe a -> Maybe String
+    showLower = fmap (fmap toLower . show)
 
 font :: ThemeFont
 font = ThemeFont
