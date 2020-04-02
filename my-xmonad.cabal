@@ -48,8 +48,6 @@ executable xmonad
     main-is: bin/xmonad.hs
     build-depends: X11 >= 1.9.1
                  , base
-                 , containers >= 0.6.0.1
-                 , directory >= 1.3.3.0
                  , process >= 1.6.5.0
                  , my-xmonad
                  , xmonad >= 0.13
