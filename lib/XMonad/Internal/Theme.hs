@@ -166,13 +166,13 @@ tabbedTheme = D.def
 
 promptTheme :: P.XPConfig
 promptTheme = P.def
-  { P.font              = fmtFontXFT font
+  { P.font              = fmtFontXFT font { size = Just 12 }
   , P.bgColor           = bgColor
   , P.fgColor           = fgColor
   , P.fgHLight          = selectedFgColor
   , P.bgHLight          = selectedBgColor
   , P.borderColor       = bordersColor
   , P.promptBorderWidth = 1
-  , P.height            = 30
+  , P.height            = 35
   , P.position          = P.CenteredAt 0.5 0.5
   }
