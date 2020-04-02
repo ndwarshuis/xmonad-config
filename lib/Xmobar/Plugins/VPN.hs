@@ -1,13 +1,13 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Xmobar.Plugins.VPN where
+module Xmobar.Plugins.VPN (VPN(..)) where
 
 import           DBus
 import           DBus.Client
 
 import           Xmobar
-import           Xmobar.Common
+import           XMonad.Hooks.DynamicLog (xmobarColor)
 
 data VPN = VPN (String, String, String) Int
     deriving (Read, Show)
@@ -31,5 +31,5 @@ instance Exec VPN where
         Right r -> (fromVariant r :: Maybe String)
         Left _  -> Nothing
       fmtState = \case
-        Just s -> wrapColor (if s == "vpn" then colorOn else colorOff) text
+        Just s -> xmobarColor (if s == "vpn" then colorOn else colorOff) "" text
         Nothing -> "N/A"

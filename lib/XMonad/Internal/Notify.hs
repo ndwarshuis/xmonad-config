@@ -1,32 +1,32 @@
-{-# LANGUAGE LambdaCase #-}
-
-module Notify
+module XMonad.Internal.Notify
   ( Note(..)
   , Body(..)
   , defNote
   , defNoteInfo
   , defNoteError
   , fmtNotifyCmd
-  )
-  where
+  ) where
 
-import Shell
+import           Data.Maybe
 
-import Data.Maybe
+import           DBus.Notify
 
-import DBus.Notify
+import           XMonad.Internal.Shell
 
+defNote :: Note
 defNote = blankNote { summary = "\"xmonad\"" }
 
+defNoteInfo :: Note
 defNoteInfo = defNote
   { appImage = Just $ Icon "dialog-information-symbolic" }
 
+defNoteError :: Note
 defNoteError = defNote
   { appImage = Just $ Icon "dialog-error-symbolic" }
 
 parseBody :: Body -> Maybe String
 parseBody (Text s) = Just s
-parseBody _ = Nothing
+parseBody _        = Nothing
 
 fmtNotifyCmd :: Note -> String
 fmtNotifyCmd note =

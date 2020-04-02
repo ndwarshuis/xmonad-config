@@ -1,13 +1,35 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Theme where
+module XMonad.Internal.Theme
+  ( baseColor
+  , bgColor
+  , fgColor
+  , bordersColor
+  , warningColor
+  , errorColor
+  , selectedFgColor
+  , selectedBgColor
+  , selectedBordersColor
+  , backdropBaseColor
+  , backdropFgColor
+  , backdropTextColor
+  , blend'
+  , darken'
+  , Slant(..)
+  , Weight(..)
+  , ThemeFont(..)
+  , fmtFontXFT
+  , font
+  , tabbedTheme
+  , promptTheme
+  ) where
 
-import Data.Char
+import           Data.Char
 
-import Data.Colour
-import Data.Colour.SRGB
+import           Data.Colour
+import           Data.Colour.SRGB
 
-import Data.List
+import           Data.List
 
 import qualified XMonad.Layout.Decoration as D
 import qualified XMonad.Prompt            as P
@@ -60,6 +82,9 @@ darken' wt = sRGB24show . darken wt . sRGB24read
 
 -- Fonts
 
+-- TODO use the font package from contrib
+-- https://hackage.haskell.org/package/xmonad-contrib-0.16/docs/XMonad-Util-Font.html
+
 data Slant = Roman
     | Italic
     | Oblique
@@ -103,6 +128,7 @@ fmtFontXFT ThemeFont
       Just d -> e ++ "=" ++ map toLower (show d)
       Nothing -> ""
 
+font :: ThemeFont
 font = ThemeFont
   { family = "DejaVu Sans"
   , size = Just 10
@@ -114,6 +140,7 @@ font = ThemeFont
 
 -- Complete themes
 
+tabbedTheme :: D.Theme
 tabbedTheme = D.def
   { D.fontName              = fmtFontXFT font { weight = Just Bold }
 
@@ -139,6 +166,7 @@ tabbedTheme = D.def
   , D.windowTitleIcons      = []
 }
 
+promptTheme :: P.XPConfig
 promptTheme = P.def
   { P.font              = fmtFontXFT font
   , P.bgColor           = bgColor

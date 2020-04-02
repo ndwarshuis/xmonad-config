@@ -4,24 +4,15 @@
 
 module Main (main) where
 
-import           Capture
-import           General
-import           Internal.DMenu
-import           Power
-
-import           ACPI
-import           DBus.Common
-import           Process
-import           SendXMsg
-import           Shell
-import qualified Theme                            as T
-import           WorkspaceMon
-
 import           Control.Concurrent
 
-import           Data.List                        (isPrefixOf, sortBy, sortOn)
-import           Data.Maybe                       (isJust)
-import           Data.Monoid                      (All (..))
+import           Data.List
+    ( isPrefixOf
+    , sortBy
+    , sortOn
+    )
+import           Data.Maybe                                   (isJust)
+import           Data.Monoid                                  (All (..))
 
 import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
@@ -30,23 +21,36 @@ import           Graphics.X11.Xlib.Extras
 import           System.IO
 import           System.Process
 
-import           Xmobar.Common
-
 import           XMonad
 import           XMonad.Actions.CopyWindow
 import           XMonad.Actions.CycleWS
 import           XMonad.Actions.PhysicalScreens
 import           XMonad.Actions.Warp
+import           XMonad.Hooks.DynamicLog
+    ( pad
+    , wrap
+    , xmobarColor
+    )
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
+import           XMonad.Internal.Command.Desktop
+import           XMonad.Internal.Command.DMenu
+import           XMonad.Internal.Command.Power
+import           XMonad.Internal.Concurrent.ACPIEvent
+import           XMonad.Internal.Concurrent.ClientMessage
+import           XMonad.Internal.Concurrent.DynamicWorkspaces
+import           XMonad.Internal.DBus.Control
+import           XMonad.Internal.Process
+import           XMonad.Internal.Shell
+import qualified XMonad.Internal.Theme                        as T
 import           XMonad.Layout.MultiToggle
 import           XMonad.Layout.NoBorders
 import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
 import           XMonad.Layout.Renamed
 import           XMonad.Layout.Tabbed
-import qualified XMonad.StackSet                  as W
+import qualified XMonad.StackSet                              as W
 import           XMonad.Util.EZConfig
 import           XMonad.Util.NamedActions
 
@@ -231,21 +235,21 @@ myWindowSetXinerama
      W.StackSet String (layout a1) a2 ScreenId ScreenDetail -> String
 myWindowSetXinerama ws = unwords [onScreen, offScreen, sep, layout, nWindows]
   where
-    onScreen = wrapColorBg hilightFgColor hilightBgColor
-      $ (\s -> " " ++ s ++ " ")
+    onScreen = xmobarColor hilightFgColor hilightBgColor
+      $ pad
       $ unwords
       $ map (fmtTags . W.tag . W.workspace)
       $ sortBy compareXCoord
       $ W.current ws : W.visible ws
-    offScreen = wrapColor T.backdropFgColor
+    offScreen = xmobarColor T.backdropFgColor ""
       $ unwords
       $ map W.tag
       $ filter (isJust . W.stack)
       $ sortOn W.tag
       $ W.hidden ws
-    sep = wrapColor T.backdropFgColor ":"
+    sep = xmobarColor T.backdropFgColor "" ":"
     layout = description $ W.layout $ W.workspace $ W.current ws
-    nWindows = (\s -> "(" ++ s ++ ")")
+    nWindows = wrap "(" ")"
       $ show
       $ length
       $ W.integrate'
@@ -255,7 +259,7 @@ myWindowSetXinerama ws = unwords [onScreen, offScreen, sep, layout, nWindows]
     hilightBgColor = "#8fc7ff"
     hilightFgColor = T.blend' 0.5 hilightBgColor T.fgColor
     fmtTags t = if t == W.currentTag ws
-      then wrapColorBg T.fgColor hilightBgColor t
+      then xmobarColor T.fgColor hilightBgColor t
       else t
 
 compareXCoord

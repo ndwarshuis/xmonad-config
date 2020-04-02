@@ -1,6 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Process where
+module XMonad.Internal.Process
+  ( waitUntilExit
+  , killPID
+  , spawnPipe'
+  ) where
 
 import           Control.Concurrent
 import           Control.Exception

@@ -1,13 +1,13 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Xmobar.Plugins.Bluetooth where
+module Xmobar.Plugins.Bluetooth (Bluetooth(..)) where
 
 import           DBus
 import           DBus.Client
 
 import           Xmobar
-import           Xmobar.Common
+import           XMonad.Hooks.DynamicLog (xmobarColor)
 
 data Bluetooth = Bluetooth (String, String, String) Int
     deriving (Read, Show)
@@ -31,5 +31,5 @@ instance Exec Bluetooth where
         Right r -> fromVariant r
         Left _  -> Nothing
       fmtState = \case
-        Just s -> wrapColor (if s then colorOn else colorOff) text
+        Just s -> xmobarColor (if s then colorOn else colorOff) "" text
         Nothing -> "N/A"

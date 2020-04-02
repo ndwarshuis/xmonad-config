@@ -1,9 +1,12 @@
-module Shell where
+module XMonad.Internal.Shell
+  ( fmtCmd
+  , spawnCmd
+  , (#!&&)
+  , (#!||)
+  , (#!>>)
+  ) where
 
 import           XMonad
-
-myTerm :: String
-myTerm = "urxvt"
 
 fmtCmd :: String -> [String] -> String
 fmtCmd cmd args = unwords $ cmd : args

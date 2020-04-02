@@ -1,13 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Xmobar.Plugins.IntelBacklight where
+module Xmobar.Plugins.IntelBacklight (IntelBacklight(..)) where
 
-import Control.Concurrent
-import Control.Monad
+import           Control.Concurrent
+import           Control.Monad
 
-import DBus.IntelBacklight
+import           Xmobar
 
-import Xmobar
+import           XMonad.Internal.DBus.IntelBacklight
 
 newtype IntelBacklight = IntelBacklight String deriving (Read, Show)
 

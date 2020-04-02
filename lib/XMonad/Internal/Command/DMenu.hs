@@ -1,6 +1,12 @@
-module Internal.DMenu where
-
-import           Shell
+module XMonad.Internal.Command.DMenu
+  ( runCmdMenu
+  , runAppMenu
+  , runClipMenu
+  , runWinMenu
+  , runNetMenu
+  , runDevMenu
+  , runShowKeys
+  ) where
 
 import           Control.Monad.Reader
 
@@ -14,6 +20,7 @@ import           Graphics.X11.Xrandr
 import           System.IO
 
 import           XMonad.Core
+import           XMonad.Internal.Shell
 import           XMonad.StackSet
 import           XMonad.Util.NamedActions
 import           XMonad.Util.Run
@@ -77,10 +84,8 @@ runShowKeys x = addName "Show Keybindings" $ do
     Nothing -> io $ putStrLn "fail"
   where cmd name = fmtCmd myDmenuCmd
           [ "-dmenu"
-          , "-m"
-          , name
-          , "-p"
-          , "commands"
+          , "-m", name
+          , "-p", "commands"
           , "-theme-str"
           , "'#element.selected.normal { background-color: #a200ff; }'"
           ]

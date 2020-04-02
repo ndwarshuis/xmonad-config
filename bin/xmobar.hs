@@ -1,21 +1,19 @@
+module Main (main) where
+
+import           Data.List
+
 import           Xmobar.Plugins.Bluetooth
 import           Xmobar.Plugins.IntelBacklight
 import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
 
-import qualified Theme                         as T
-
-import           Data.List
-
 import           Xmobar
-import           Xmobar.Common
 import           XMonad                        (getXMonadDir)
-
--- wrapColor :: String -> String -> String
--- wrapColor c s = "<fc=" ++ c ++ ">" ++ s ++ "</fc>"
+import           XMonad.Hooks.DynamicLog       (xmobarColor)
+import qualified XMonad.Internal.Theme         as T
 
 sep :: String
-sep = wrapColor T.backdropFgColor " : "
+sep = xmobarColor T.backdropFgColor "" " : "
 
 myTemplate :: String
 myTemplate = formatTemplate left right
@@ -125,9 +123,9 @@ config confDir = defaultConfig
 
       , Run $ Locks
         [ "-N", "<fn=3>\x1f13d</fn>"
-        , "-n", wrapColor T.backdropFgColor "<fn=3>\x1f13d</fn>"
+        , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\x1f13d</fn>"
         , "-C", "<fn=3>\x1f132</fn>"
-        , "-c", wrapColor T.backdropFgColor "<fn=3>\x1f132</fn>"
+        , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\x1f132</fn>"
         , "-s", ""
         , "-S", ""
         , "-d", "<fn=3> </fn>"

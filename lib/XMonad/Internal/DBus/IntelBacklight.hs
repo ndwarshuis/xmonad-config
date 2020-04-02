@@ -3,7 +3,7 @@
 --------------------------------------------------------------------------------
 -- | DBus module for Intel Backlight control
 
-module DBus.IntelBacklight
+module XMonad.Internal.DBus.IntelBacklight
   ( callDecBrightness
   , callGetBrightness
   , callIncBrightness
@@ -13,19 +13,17 @@ module DBus.IntelBacklight
   , matchSignal
   ) where
 
-import Control.Monad (void)
+import           Control.Monad               (void)
 
-import Data.Char
+import           Data.Char
+import           Data.Int                    (Int16, Int32)
+import           Data.Text                   (pack, unpack)
+import           Data.Text.IO                as T (readFile, writeFile)
 
-import Data.Int (Int16, Int32)
+import           DBus
+import           DBus.Client
 
--- use strict IO here, the data in these files is literally 1-10 bytes
-import Data.Text    (pack, unpack)
-import Data.Text.IO as T (readFile, writeFile)
-
-import DBus
-import DBus.Client
-import DBus.Internal
+import           XMonad.Internal.DBus.Common
 
 --------------------------------------------------------------------------------
 -- | Low level sysfs functions
@@ -35,6 +33,8 @@ import DBus.Internal
 -- from 1 (min brightness) to some multiple 1000's number (note that raw values
 -- of 0 turn the monitor off). The latter is the raw brightness scaled from 0 to
 -- 10000 (which can easily be converted to a percent).
+
+-- use strict IO here, the data in these files is literally 1-10 bytes
 
 -- TODO this is hacky but not sure if there is a cleaner way to enforce type
 -- checking between these without making two new types and adding Integral

@@ -1,29 +1,28 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module ACPI
+module XMonad.Internal.Concurrent.ACPIEvent
   ( ACPIEvent(..)
   , isDischarging
   , runPowermon
   , handleACPI
   ) where
 
-import           Power
-import           SendXMsg
-
 import           Control.Exception
 import           Control.Monad
 
-import           Data.ByteString              hiding (readFile)
-import           Data.ByteString.Char8        as C hiding (readFile)
+import           Data.ByteString                          hiding (readFile)
+import           Data.ByteString.Char8                    as C hiding (readFile)
 import           Data.Connection
 
-import           System.IO.Streams.Internal   as S (read)
+import           Text.Read                                (readMaybe)
+
+import           System.IO.Streams.Internal               as S (read)
 import           System.IO.Streams.UnixSocket
 
-import           Text.Read                    (readMaybe)
-
 import           XMonad.Core
+import           XMonad.Internal.Command.Power
+import           XMonad.Internal.Concurrent.ClientMessage
 
 data ACPIEvent = Power
     | Sleep

@@ -25,20 +25,16 @@
 -- 2) Xsane (see Gimp)
 -- 3) Virtualbox (should always be by itself anyways)
 
-module WorkspaceMon
+module XMonad.Internal.Concurrent.DynamicWorkspaces
   ( DynWorkspace(..)
   , appendViewShift
   , removeDynamicWorkspace
   , runWorkspaceMon
   , spawnOrSwitch
   , doSink
-  )
-where
+  ) where
 
-import           Process
-import           SendXMsg
-
-import qualified Data.Map                         as M
+import qualified Data.Map                                 as M
 import           Data.Maybe
 
 import           Control.Concurrent
@@ -54,7 +50,7 @@ import           Graphics.X11.Xlib.Extras
 import           Graphics.X11.Xlib.Misc
 import           Graphics.X11.Xlib.Types
 
-import           System.Process                   (Pid)
+import           System.Process                           (Pid)
 
 import           XMonad.Actions.DynamicWorkspaces
 import           XMonad.Core
@@ -63,10 +59,13 @@ import           XMonad.Core
     , X
     , withWindowSet
     )
-import           XMonad.Hooks.ManageHelpers       (MaybeManageHook)
+import           XMonad.Hooks.ManageHelpers               (MaybeManageHook)
+import           XMonad.Internal.Concurrent.ClientMessage
+import           XMonad.Internal.Process
 import           XMonad.ManageHook
 import           XMonad.Operations
-import qualified XMonad.StackSet                  as W
+import qualified XMonad.StackSet                          as W
+
 
 --------------------------------------------------------------------------------
 -- | Dynamic Workspace datatype

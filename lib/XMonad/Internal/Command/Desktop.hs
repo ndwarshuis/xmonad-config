@@ -1,22 +1,50 @@
-module General where
-
 --------------------------------------------------------------------------------
 -- | General commands
 
-import           Notify
-import           Shell
+module XMonad.Internal.Command.Desktop
+  ( myTerm
+  , runTerm
+  , runCalc
+  , runBrowser
+  , runEditor
+  , runFileManager
+  , runTogglePlay
+  , runPrevTrack
+  , runNextTrack
+  , runStopPlay
+  , runVolumeDown
+  , runVolumeUp
+  , runVolumeMute
+  , runToggleBluetooth
+  , runIncBacklight
+  , runDecBacklight
+  , runMinBacklight
+  , runMaxBacklight
+  , runToggleDPMS
+  , runRestart
+  , runRecompile
+  , runAreaCapture
+  , runScreenCapture
+  , runDesktopCapture
+  ) where
 
-import           DBus.IntelBacklight
-import           DBus.Screensaver
+import           Control.Monad                       (void)
 
-import           Control.Monad         (void)
+import           System.Directory                    (getHomeDirectory)
 
 import           XMonad.Actions.Volume
 import           XMonad.Core
+import           XMonad.Internal.DBus.IntelBacklight
+import           XMonad.Internal.DBus.Screensaver
+import           XMonad.Internal.Notify
+import           XMonad.Internal.Shell
 import           XMonad.Operations
 
 --------------------------------------------------------------------------------
 -- | Some nice apps
+
+myTerm :: String
+myTerm = "urxvt"
 
 runTerm :: X ()
 runTerm = spawn myTerm
@@ -104,3 +132,29 @@ runRecompile = do
       #!&& fmtCmd "stack" ["install", ":xmonad"]
       #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "compilation succeeded" }
       #!|| fmtNotifyCmd defNoteError { body = Just $ Text "compilation failed" }
+
+--------------------------------------------------------------------------------
+-- | Screen capture commands
+
+getScreenshotDir :: IO FilePath
+getScreenshotDir = do
+  h <- getHomeDirectory
+  return $ h ++ "/Pictures/screenshots"
+
+runFlameshot :: String -> X ()
+runFlameshot mode = do
+  ssDir <- io getScreenshotDir
+  spawnCmd "flameshot" $ mode : ["-p", ssDir]
+
+-- TODO this will steal focus from the current window (and puts it
+-- in the root window?) ...need to fix
+runAreaCapture :: X ()
+runAreaCapture = runFlameshot "gui"
+
+-- myWindowCap = "screencap -w" --external script
+
+runScreenCapture :: X ()
+runScreenCapture = runFlameshot "screen"
+
+runDesktopCapture :: X ()
+runDesktopCapture = runFlameshot "full"

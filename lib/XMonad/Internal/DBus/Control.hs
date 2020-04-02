@@ -1,15 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module DBus.Common
+module XMonad.Internal.DBus.Control
   ( Client
   , startXMonadService
-  , stopXMonadService)
-where
-
-import           DBus.IntelBacklight
-import           DBus.Screensaver
+  , stopXMonadService
+  ) where
 
 import           DBus.Client
+
+import           XMonad.Internal.DBus.IntelBacklight
+import           XMonad.Internal.DBus.Screensaver
 
 startXMonadService :: IO Client
 startXMonadService = do

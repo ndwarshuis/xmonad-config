@@ -1,14 +1,14 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Xmobar.Plugins.Screensaver where
+module Xmobar.Plugins.Screensaver (Screensaver(..)) where
 
 import           Control.Concurrent
 import           Control.Monad
 
-import           DBus.Screensaver
-
 import           Xmobar
-import           Xmobar.Common
+
+import           XMonad.Hooks.DynamicLog          (xmobarColor)
+import           XMonad.Internal.DBus.Screensaver
 
 newtype Screensaver = Screensaver (String, String, String)
     deriving (Read, Show)
@@ -21,6 +21,6 @@ instance Exec Screensaver where
       forever (threadDelay 5000000)
       where
         fmtState = \case
-          Just s -> wrapColor (if s then colorOn else colorOff) text
+          Just s -> xmobarColor (if s then colorOn else colorOff) "" text
           Nothing -> "N/A"
 

@@ -1,4 +1,8 @@
-module SendXMsg (XMsgType(..), sendXMsg, splitXMsg) where
+module XMonad.Internal.Concurrent.ClientMessage
+  ( XMsgType(..)
+  , sendXMsg
+  , splitXMsg
+  ) where
 
 import           Data.Char
 

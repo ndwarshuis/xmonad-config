@@ -1,4 +1,7 @@
-module Power
+--------------------------------------------------------------------------------
+-- | Commands for controlling power
+
+module XMonad.Internal.Command.Power
   ( runHibernate
   , runOptimusPrompt
   , runPowerOff
@@ -8,14 +11,7 @@ module Power
   , runSuspend
   , runSuspendPrompt
   , runQuitPrompt
-  )
-where
-
---------------------------------------------------------------------------------
--- | Commands for controlling power
-
-import           Shell
-import qualified Theme                       as T
+  ) where
 
 import           Control.Arrow               (first)
 
@@ -23,12 +19,14 @@ import qualified Data.Map                    as M
 
 import           Graphics.X11.Types
 
-import           XMonad.Core
-import           XMonad.Prompt
-import           XMonad.Prompt.ConfirmPrompt
-
 import           System.Directory
 import           System.Exit
+
+import           XMonad.Core
+import           XMonad.Internal.Shell
+import qualified XMonad.Internal.Theme       as T
+import           XMonad.Prompt
+import           XMonad.Prompt.ConfirmPrompt
 
 --------------------------------------------------------------------------------
 -- | Core commands

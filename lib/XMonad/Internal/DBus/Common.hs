@@ -1,9 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module DBus.Internal where
+module XMonad.Internal.DBus.Common
+  ( callMethod
+  , addMatchCallback
+  ) where
 
-import DBus
-import DBus.Client
+import           DBus
+import           DBus.Client
+
+-- TODO export the bus name (org.xmonad)
 
 -- TODO not all methods warrent that we wait for a reply?
 callMethod :: MethodCall -> IO (Maybe [Variant])
