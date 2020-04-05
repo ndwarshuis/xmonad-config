@@ -247,7 +247,8 @@ myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
 myWindowSetXinerama
   :: LayoutClass layout a1 =>
      W.StackSet String (layout a1) a2 ScreenId ScreenDetail -> String
-myWindowSetXinerama ws = unwords [onScreen, offScreen, sep, layout, nWindows]
+myWindowSetXinerama ws =
+  unwords $ filter (not . null) [onScreen, offScreen, sep, layout, nWindows]
   where
     onScreen = xmobarColor hilightFgColor hilightBgColor
       $ pad
