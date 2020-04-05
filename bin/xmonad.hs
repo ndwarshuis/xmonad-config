@@ -54,6 +54,7 @@ import           XMonad.Layout.PerWorkspace
 import           XMonad.Layout.Renamed
 import           XMonad.Layout.Tabbed
 import qualified XMonad.StackSet                              as W
+import           XMonad.Util.Cursor
 import           XMonad.Util.EZConfig
 import           XMonad.Util.NamedActions
 
@@ -104,7 +105,8 @@ runCleanup ts = io $ do
 -- | Startuphook configuration
 
 myStartupHook :: X ()
-myStartupHook = docksStartupHook <+> startupHook def
+myStartupHook = setDefaultCursor xC_left_ptr <+> docksStartupHook
+  <+> startupHook def
 
 --------------------------------------------------------------------------------
 -- | Workspace configuration
