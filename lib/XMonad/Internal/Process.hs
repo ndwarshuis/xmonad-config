@@ -1,34 +1,29 @@
-{-# LANGUAGE LambdaCase #-}
-
 --------------------------------------------------------------------------------
 -- | Functions for managing processes
 
 module XMonad.Internal.Process
   ( waitUntilExit
-  , killPID
-  , spawnPipe'
+  , killHandle
+  , spawnPipe
+  , createProcess'
+  , proc'
+  , shell'
+  , spawn
+  , spawnAt
+  , module System.Process
   ) where
 
 import           Control.Concurrent
 import           Control.Exception
 import           Control.Monad
-import           Control.Monad.IO.Class
 
 import           System.Directory
 import           System.Exit
 import           System.IO
-import           System.Posix.IO
-import           System.Posix.Process
 import           System.Posix.Signals
-import           System.Posix.Types
-import           System.Process           hiding (createPipe)
-import           System.Process.Internals
-    ( ProcessHandle__ (ClosedHandle, OpenHandle)
-    , mkProcessHandle
-    , withProcessHandle
-    )
+import           System.Process
 
-import           XMonad.Core
+import           XMonad.Core          hiding (spawn)
 
 -- | Block until a PID has exited (in any form)
 -- ASSUMPTION on linux PIDs will always increase until they overflow, in which
@@ -41,29 +36,39 @@ waitUntilExit pid = do
   res <- doesDirectoryExist $ "/proc/" ++ show pid
   when res $ threadDelay 100000 >> waitUntilExit pid
 
-killPID :: ProcessID -> IO ()
-killPID pid = do
-  h <- mkProcessHandle pid False
-  -- this may fail of the PID does not exist
-  _ <- try $ sendSIGTERM h :: IO (Either IOException ())
+killHandle :: ProcessHandle -> IO ()
+killHandle ph = do
+  pid <- getPid ph
+  forM_ pid $ signalProcess sigTERM
   -- this may fail if the process exits instantly and the handle
   -- is destroyed by the time we get to this line (I think?)
-  _ <- try $ waitForProcess h :: IO (Either IOException ExitCode)
-  return ()
-  where
-    sendSIGTERM h = withProcessHandle h $ \case
-      OpenHandle _ -> signalProcess sigTERM pid
-      ClosedHandle _ -> return ()
-      _ -> return () -- this should never happen
+  void (try $ waitForProcess ph :: IO (Either IOException ExitCode))
 
-spawnPipe' :: MonadIO m => String -> m (ProcessID, Handle)
-spawnPipe' x = liftIO $ do
-  (rd, wr) <- createPipe
-  setFdOption wr CloseOnExec True
-  h <- fdToHandle wr
+withDefaultSignalHandlers :: IO a -> IO a
+withDefaultSignalHandlers =
+  bracket_ uninstallSignalHandlers installSignalHandlers
+
+addGroupSession :: CreateProcess -> CreateProcess
+addGroupSession cp = cp { create_group = True, new_session = True }
+
+createProcess' :: CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+createProcess' = withDefaultSignalHandlers . createProcess
+
+shell' :: String -> CreateProcess
+shell' = addGroupSession . shell
+
+proc' :: FilePath -> [String] -> CreateProcess
+proc' cmd args = addGroupSession $ proc cmd args
+
+spawn :: String -> X ()
+spawn = io . void . createProcess' . shell'
+
+spawnAt :: FilePath -> String -> X ()
+spawnAt fp cmd = io $ void $ createProcess' $ (shell' cmd) { cwd = Just fp }
+
+spawnPipe :: String -> IO (Handle, ProcessHandle)
+spawnPipe cmd = do
+  -- ASSUME creating a pipe will always succeed in making a Just Handle
+  (Just h, _, _, p) <- createProcess' $ (shell cmd) { std_in = CreatePipe }
   hSetBuffering h LineBuffering
-  p <- xfork $ do
-    _ <- dupTo rd stdInput
-    executeFile "/bin/sh" False ["-c", x] Nothing
-  closeFd rd
-  return (p, h)
+  return (h, p)

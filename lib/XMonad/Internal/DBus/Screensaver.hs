@@ -18,9 +18,8 @@ import           DBus.Client
 import           Graphics.X11.Xlib.Display
 import           Graphics.X11.XScreenSaver
 
-import           XMonad
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.Shell
+import           XMonad.Internal.Process
 
 --------------------------------------------------------------------------------
 -- | Low-level functions
@@ -31,7 +30,7 @@ toggle :: IO SSState
 toggle = do
   st <- query
   -- TODO figure out how not to do this with shell commands
-  spawn $ fmtCmd "xset" $ "s" : args st
+  void $ createProcess' $ proc "xset" $ "s" : args st
   -- TODO this assumes the command succeeds
   return $ not st
   where

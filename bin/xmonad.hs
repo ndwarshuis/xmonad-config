@@ -61,7 +61,7 @@ import           XMonad.Util.NamedActions
 main :: IO ()
 main = do
   cl <- startXMonadService
-  (p, h) <- spawnPipe' "xmobar"
+  (h, p) <- spawnPipe "xmobar"
   _ <- forkIO runPowermon
   _ <- forkIO $ runWorkspaceMon allDWs
   let ts = ThreadState
@@ -91,14 +91,14 @@ main = do
 
 data ThreadState = ThreadState
     { client       :: Client
-    , childPIDs    :: [Pid]
+    , childPIDs    :: [ProcessHandle]
     , childHandles :: [Handle]
     }
 
 -- TODO shouldn't this be run by a signal handler?
 runCleanup :: ThreadState -> X ()
 runCleanup ts = io $ do
-  mapM_ killPID $ childPIDs ts
+  mapM_ killHandle $ childPIDs ts
   stopXMonadService $ client ts
 
 --------------------------------------------------------------------------------
@@ -229,6 +229,7 @@ data HIDE = HIDE
 instance Transformer HIDE Window where
   transform _ x k = k EmptyLayout (\EmptyLayout -> x)
 
+-- TODO toggle back to normal when a new window is opened
 runHide :: X ()
 runHide = sendMessage $ Toggle HIDE
 

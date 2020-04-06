@@ -9,7 +9,8 @@ module XMonad.Internal.Shell
   , (#!>>)
   ) where
 
-import           XMonad
+import           XMonad.Core             (X)
+import           XMonad.Internal.Process
 
 --------------------------------------------------------------------------------
 -- | Opening subshell

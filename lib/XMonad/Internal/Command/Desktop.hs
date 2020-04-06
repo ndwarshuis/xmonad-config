@@ -33,10 +33,11 @@ import           Control.Monad                       (void)
 import           System.Directory                    (getHomeDirectory)
 
 import           XMonad.Actions.Volume
-import           XMonad.Core
+import           XMonad.Core                         hiding (spawn)
 import           XMonad.Internal.DBus.IntelBacklight
 import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Notify
+import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import           XMonad.Operations
 
@@ -124,14 +125,17 @@ runRestart = restart "xmonad" True
 runRecompile :: X ()
 runRecompile = do
   -- assume that the conf directory contains a valid stack project
-  -- TODO this is hacky AF
   confDir <- getXMonadDir
-  spawn $ cmd confDir
-  where
-    cmd c = fmtCmd "cd" [c]
-      #!&& fmtCmd "stack" ["install", ":xmonad"]
-      #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "compilation succeeded" }
-      #!|| fmtNotifyCmd defNoteError { body = Just $ Text "compilation failed" }
+  spawnAt confDir $ fmtCmd "stack" ["install"]
+    #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "compilation succeeded" }
+    #!|| fmtNotifyCmd defNoteError { body = Just $ Text "compilation failed" }
+
+-- runRecompile :: X ()
+-- runRecompile = do
+--   -- assume that the conf directory contains a valid stack project
+--   -- TODO this is hacky AF
+--   confDir <- getXMonadDir
+--   spawnCmdAt confDir "stack" ["install"]
 
 --------------------------------------------------------------------------------
 -- | Screen capture commands

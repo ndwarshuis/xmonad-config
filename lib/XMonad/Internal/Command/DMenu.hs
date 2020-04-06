@@ -22,11 +22,11 @@ import           Graphics.X11.Xrandr
 
 import           System.IO
 
-import           XMonad.Core
+import           XMonad.Core              hiding (spawn)
+import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import           XMonad.StackSet
 import           XMonad.Util.NamedActions
-import           XMonad.Util.Run
 
 --------------------------------------------------------------------------------
 -- | Fix rofi screen indexing limitations
@@ -96,11 +96,9 @@ runShowKeys x = addName "Show Keybindings" $ do
   name <- getMonitorName
   case name of
     Just n -> do
-      h <- spawnPipe $ cmd n
-      io $ hPutStr h (unlines $ showKm x)
-      io $ hClose h
-      return ()
-    -- TODO put better error message here
+      (h, _, _, _) <- io $ createProcess' $ (shell' $ cmd n)
+        { std_in = CreatePipe }
+      io $ forM_ h $ \h' -> hPutStr h' (unlines $ showKm x) >> hClose h'
     Nothing -> io $ putStrLn "fail"
   where cmd name = fmtCmd myDmenuCmd
           [ "-dmenu"
