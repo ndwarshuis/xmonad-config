@@ -299,8 +299,9 @@ manageApps = composeOne $ concatMap dwHook allDWs ++
   , className =? "Seafile Client" -?> doFloat
   -- gnucash
   , (className =? "Gnucash" <&&> title =? "Transaction Import Assistant") -?> doFloat
-  -- plots and graphics created by R
+  -- plots and graphics
   , className =? "R_x11" -?> doFloat
+  , className =? "Matplotlib" -?> doFloat
   , className =? "mpv"    -?> doFloat
   -- the floating windows created by the brave browser
   , stringProperty "WM_NAME" =? "Brave" -?> doFloat
