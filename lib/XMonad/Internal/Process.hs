@@ -17,6 +17,8 @@ import           Control.Concurrent
 import           Control.Exception
 import           Control.Monad
 
+import           Data.Maybe
+
 import           System.Directory
 import           System.Exit
 import           System.IO
@@ -38,11 +40,13 @@ waitUntilExit pid = do
 
 killHandle :: ProcessHandle -> IO ()
 killHandle ph = do
-  pid <- getPid ph
-  forM_ pid $ signalProcess sigTERM
-  -- this may fail if the process exits instantly and the handle
-  -- is destroyed by the time we get to this line (I think?)
-  void (try $ waitForProcess ph :: IO (Either IOException ExitCode))
+  ec <- getProcessExitCode ph
+  unless (isJust ec) $ do
+    pid <- getPid ph
+    forM_ pid $ signalProcess sigTERM
+    -- this may fail if the process exits instantly and the handle
+    -- is destroyed by the time we get to this line (I think?)
+    void (try $ waitForProcess ph :: IO (Either IOException ExitCode))
 
 withDefaultSignalHandlers :: IO a -> IO a
 withDefaultSignalHandlers =
