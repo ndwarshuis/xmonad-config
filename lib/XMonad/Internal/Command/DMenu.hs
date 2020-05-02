@@ -99,7 +99,13 @@ devSecrets = concatMap (\x -> ["-s", x])
   ]
 
 runDevMenu :: X ()
-runDevMenu = spawnDmenuCmd "rofi-dev" $ devSecrets ++ ["--"]
+runDevMenu = spawnDmenuCmd "rofi-dev" $ devSecrets ++ rofiArgs
+  where
+    rofiArgs =
+      [ "--"
+      , "-theme-str"
+      , "'#element.selected.normal { background-color: #999933; }'"
+      ]
 
 runBwMenu :: X ()
 runBwMenu = spawnDmenuCmd "rofi-bw" ["-c", "--"]
