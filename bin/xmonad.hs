@@ -405,6 +405,7 @@ mkKeys ts c =
   , ("M-a", "launch network selector", runNetMenu)
   , ("M-w", "launch window selector", runWinMenu)
   , ("M-u", "launch device selector", runDevMenu)
+  , ("M-b", "launch bitwarden selector", runBwMenu)
   , ("M-C-e", "launch editor", runEditor)
   , ("M-C-w", "launch browser", runBrowser)
   , ("M-C-t", "launch terminal", runTerm)

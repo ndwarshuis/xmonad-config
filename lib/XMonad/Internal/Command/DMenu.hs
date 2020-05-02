@@ -8,6 +8,7 @@ module XMonad.Internal.Command.DMenu
   , runWinMenu
   , runNetMenu
   , runDevMenu
+  , runBwMenu
   , runShowKeys
   ) where
 
@@ -82,7 +83,7 @@ spawnDmenuCmd :: String -> [String] -> X ()
 spawnDmenuCmd cmd args = do
   name <- getMonitorName
   case name of
-    Just n  -> spawnCmd cmd $ ["-m", n] ++ args
+    Just n  -> spawnCmd cmd $ args ++ ["-m", n]
     Nothing -> io $ putStrLn "fail"
 
 spawnDmenuCmd' :: [String] -> X ()
@@ -90,6 +91,18 @@ spawnDmenuCmd' = spawnDmenuCmd myDmenuCmd
 
 --------------------------------------------------------------------------------
 -- | Exported Commands
+
+devSecrets :: [String]
+devSecrets = concatMap (\x -> ["-s", x])
+  [ "/media/ndwar/Roylab:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
+  , "/media/ndwar/MC3M:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
+  ]
+
+runDevMenu :: X ()
+runDevMenu = spawnDmenuCmd "rofi-dev" $ devSecrets ++ ["--"]
+
+runBwMenu :: X ()
+runBwMenu = spawnDmenuCmd "rofi-bw" ["-c", "--"]
 
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
@@ -128,5 +141,3 @@ runWinMenu = spawnDmenuCmd' ["-show", "window"]
 runNetMenu :: X ()
 runNetMenu = spawnDmenuCmd "networkmanager_dmenu" []
 
-runDevMenu :: X ()
-runDevMenu = spawnDmenuCmd "rofi-devices" []
