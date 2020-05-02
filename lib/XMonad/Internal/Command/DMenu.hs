@@ -108,7 +108,12 @@ runDevMenu = spawnDmenuCmd "rofi-dev" $ devSecrets ++ rofiArgs
       ]
 
 runBwMenu :: X ()
-runBwMenu = spawnDmenuCmd "rofi-bw" ["-c", "--"]
+runBwMenu = spawnDmenuCmd "rofi-bw"
+  ["-c"
+  , "--"
+  , "-theme-str"
+  , "'#element.selected.normal { background-color: #bb6600; }'"
+  ]
 
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
