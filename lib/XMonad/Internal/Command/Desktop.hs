@@ -26,11 +26,17 @@ module XMonad.Internal.Command.Desktop
   , runAreaCapture
   , runScreenCapture
   , runDesktopCapture
+  , runCaptureBrowser
   ) where
 
 import           Control.Monad                       (void)
 
-import           System.Directory                    (getHomeDirectory)
+import           System.Directory
+    ( createDirectoryIfMissing
+    , getHomeDirectory
+    )
+import           System.Environment
+import           System.FilePath
 
 import           XMonad.Actions.Volume
 import           XMonad.Core                         hiding (spawn)
@@ -140,14 +146,23 @@ runRecompile = do
 --------------------------------------------------------------------------------
 -- | Screen capture commands
 
-getScreenshotDir :: IO FilePath
-getScreenshotDir = do
-  h <- getHomeDirectory
-  return $ h ++ "/Pictures/screenshots"
+getCaptureDir :: IO FilePath
+getCaptureDir = do
+  e <- lookupEnv "XDG_DATA_HOME"
+  parent <- case e of
+    Nothing -> fallback
+    Just path
+      | isRelative path -> fallback
+      | otherwise -> return path
+  let fullpath = parent </> "screenshots"
+  createDirectoryIfMissing True fullpath
+  return fullpath
+  where
+    fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> X ()
 runFlameshot mode = do
-  ssDir <- io getScreenshotDir
+  ssDir <- io getCaptureDir
   spawnCmd "flameshot" $ mode : ["-p", ssDir]
 
 -- TODO this will steal focus from the current window (and puts it
@@ -162,3 +177,8 @@ runScreenCapture = runFlameshot "screen"
 
 runDesktopCapture :: X ()
 runDesktopCapture = runFlameshot "full"
+
+runCaptureBrowser :: X ()
+runCaptureBrowser = do
+  dir <- io getCaptureDir
+  spawnCmd "geeqie" [dir]

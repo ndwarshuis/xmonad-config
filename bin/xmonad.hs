@@ -396,6 +396,7 @@ mkKeys ts c =
   , ("M-C-s", "capture area", runAreaCapture)
   , ("M-C-S-s", "capture screen", runScreenCapture)
   , ("M-C-d", "capture desktop", runDesktopCapture)
+  , ("M-C-b", "browse captures", runCaptureBrowser)
   -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
   ] ++
 
