@@ -444,6 +444,7 @@ mkKeys ts c =
   -- M-<F1> reserved for showing the keymap
   , ("M-<F2>", "restart xmonad", runCleanup ts >> runRestart)
   , ("M-<F3>", "recompile xmonad", runRecompile)
+  , ("M-<F9>", "toggle ethernet", runToggleEthernet)
   , ("M-<F10>", "toggle bluetooth", runToggleBluetooth)
   , ("M-<F11>", "toggle screensaver", runToggleDPMS)
   , ("M-<F12>", "switch gpu", runOptimusPrompt)

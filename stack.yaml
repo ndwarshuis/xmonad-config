@@ -43,7 +43,7 @@ extra-deps:
 - iwlib-0.1.0
 - fdo-notify-0.3.1
 - github: ndwarshuis/xmobar
-  commit: 4d750adcdecf5c1085ff583cf69392fcaf5dfaf7
+  commit: 4186bcbc50a7c78ac0aee8bc3719e0dd9a46dace
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

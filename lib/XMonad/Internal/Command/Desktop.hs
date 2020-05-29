@@ -21,6 +21,7 @@ module XMonad.Internal.Command.Desktop
   , runMinBacklight
   , runMaxBacklight
   , runToggleDPMS
+  , runToggleEthernet
   , runRestart
   , runRecompile
   , runAreaCapture
@@ -121,6 +122,17 @@ runMaxBacklight = io $ void callMaxBrightness
 
 runToggleDPMS :: X ()
 runToggleDPMS = io $ void callToggle
+
+ethernetIface :: String
+ethernetIface = "enp7s0f1"
+
+runToggleEthernet :: X ()
+runToggleEthernet = spawn
+  $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
+  #!&& "a=connect"
+  #!|| "a=disconnect"
+  #!>> fmtCmd "nmcli" ["device", "$a", ethernetIface]
+  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
 --------------------------------------------------------------------------------
 -- | Configuration commands

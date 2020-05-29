@@ -14,6 +14,7 @@ module Main (main) where
 import           Data.List
 
 import           Xmobar.Plugins.Bluetooth
+import           Xmobar.Plugins.Device
 import           Xmobar.Plugins.IntelBacklight
 import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
@@ -38,6 +39,7 @@ myTemplate = formatTemplate left right
     formatTemplate l r = fmtAliases l ++ aSep ++ fmtAliases r ++ " "
     left = [ "UnsafeStdinReader" ]
     right = [ "wlp0s20f3wi"
+            , "enp7s0f1"
             , "vpn"
             , "bluetooth"
             , "alsa:default:Master"
@@ -132,6 +134,9 @@ config confDir = defaultConfig
         , "--"
         , "--quality-icon-pattern", "<icon=wifi_%%.xpm/>"
         ] 5
+
+      , Run $ Device
+        ("enp7s0f1", "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
 
       , Run $ Locks
         [ "-N", "<fn=3>\x1f13d</fn>"
