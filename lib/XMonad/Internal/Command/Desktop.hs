@@ -88,14 +88,17 @@ runNextTrack = spawnCmd myMultimediaCtl ["next"]
 runStopPlay :: X ()
 runStopPlay = spawnCmd myMultimediaCtl ["stop"]
 
+volumeChangeSound :: FilePath
+volumeChangeSound = "smb_fireball.wav"
+
 runVolumeDown :: X ()
-runVolumeDown = void (lowerVolume 2)
+runVolumeDown = void (lowerVolume 2) >> spawnSound volumeChangeSound
 
 runVolumeUp :: X ()
-runVolumeUp = void (raiseVolume 2)
+runVolumeUp = void (raiseVolume 2) >> spawnSound volumeChangeSound
 
 runVolumeMute :: X ()
-runVolumeMute = void toggleMute
+runVolumeMute = void toggleMute >> spawnSound volumeChangeSound
 
 --------------------------------------------------------------------------------
 -- | System commands

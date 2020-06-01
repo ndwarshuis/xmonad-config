@@ -4,12 +4,15 @@
 module XMonad.Internal.Shell
   ( fmtCmd
   , spawnCmd
+  , spawnSound
   , (#!&&)
   , (#!||)
   , (#!>>)
   ) where
 
-import           XMonad.Core             (X)
+import           System.FilePath.Posix
+
+import           XMonad.Core             (X, getXMonadDir)
 import           XMonad.Internal.Process
 
 --------------------------------------------------------------------------------
@@ -17,6 +20,17 @@ import           XMonad.Internal.Process
 
 spawnCmd :: String -> [String] -> X ()
 spawnCmd cmd args = spawn $ fmtCmd cmd args
+
+--------------------------------------------------------------------------------
+-- | Playing sound
+
+soundDir :: FilePath
+soundDir = "sound"
+
+spawnSound :: FilePath -> X ()
+spawnSound file = do
+  path <- (</> soundDir </> file) <$> getXMonadDir
+  spawnCmd "aplay" [path]
 
 --------------------------------------------------------------------------------
 -- | Formatting commands
