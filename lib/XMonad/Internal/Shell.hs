@@ -30,7 +30,8 @@ soundDir = "sound"
 spawnSound :: FilePath -> X ()
 spawnSound file = do
   path <- (</> soundDir </> file) <$> getXMonadDir
-  spawnCmd "aplay" [path]
+  -- paplay seems to have less latency than aplay
+  spawnCmd "paplay" [path]
 
 --------------------------------------------------------------------------------
 -- | Formatting commands
