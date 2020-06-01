@@ -92,10 +92,10 @@ volumeChangeSound :: FilePath
 volumeChangeSound = "smb_fireball.wav"
 
 runVolumeDown :: X ()
-runVolumeDown = void (lowerVolume 2) >> spawnSound volumeChangeSound
+runVolumeDown =  spawnSound volumeChangeSound >> void (lowerVolume 2)
 
 runVolumeUp :: X ()
-runVolumeUp = void (raiseVolume 2) >> spawnSound volumeChangeSound
+runVolumeUp = spawnSound volumeChangeSound >> void (raiseVolume 2)
 
 runVolumeMute :: X ()
 runVolumeMute = void toggleMute >> spawnSound volumeChangeSound
