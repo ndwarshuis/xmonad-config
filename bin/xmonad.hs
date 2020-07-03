@@ -121,8 +121,8 @@ gimpDynamicWorkspace = DynWorkspace
   , dwClass = c
   , dwHook =
     [ matchGimpRole "gimp-image-window" -?> appendViewShift t
-    , matchGimpRole "gimp-dock" -?> doF (toBottom . W.focusMaster)
-    , matchGimpRole "gimp-toolbox" -?> doF (toBottom . W.focusMaster)
+    , matchGimpRole "gimp-dock" -?> doF W.swapDown
+    , matchGimpRole "gimp-toolbox" -?> doF W.swapDown
     , className =? c -?> appendViewShift t
     ]
   , dwKey = 'g'
@@ -131,7 +131,6 @@ gimpDynamicWorkspace = DynWorkspace
   where
     matchGimpRole role = isPrefixOf role <$> stringProperty "WM_WINDOW_ROLE"
       <&&> className =? c
-    toBottom = W.modify' $ \(W.Stack f tp bt) -> W.Stack f (reverse bt ++ tp) []
     t = "GIMP"
     c = "Gimp-2.10" -- TODO I don't feel like changing the version long term
 
