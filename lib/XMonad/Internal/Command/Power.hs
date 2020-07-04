@@ -71,9 +71,9 @@ runOptimusPrompt = do
   where
     switch mode = confirmPrompt T.promptTheme (prompt mode) (cmd mode)
     prompt mode = "gpu switch to " ++ mode ++ "?"
-    cmd mode = spawnCmd "optimus-manager"
-      ["--switch", mode, "--no-confirm"]
-      >> io exitSuccess
+    cmd mode = spawn $
+      unwords ["optimus-manager", "--switch", mode, "--no-confirm"]
+      #!&& "killall xmonad"
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt
