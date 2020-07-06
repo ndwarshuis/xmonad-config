@@ -13,6 +13,7 @@ import           DBus.Client
 
 import           XMonad.Internal.DBus.IntelBacklight
 import           XMonad.Internal.DBus.Screensaver
+-- import           XMonad.Internal.DBus.Workspaces
 
 startXMonadService :: IO Client
 startXMonadService = do
@@ -26,6 +27,7 @@ startXMonadService = do
     putStrLn "Started xmonad dbus client"
     exportIntelBacklight client
     exportScreensaver client
+    -- exportWorkspaces client
   return client
 
 stopXMonadService :: Client -> IO ()

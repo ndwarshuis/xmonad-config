@@ -18,6 +18,7 @@ library
                    , XMonad.Internal.DBus.IntelBacklight
                    , XMonad.Internal.DBus.Control
                    , XMonad.Internal.DBus.Screensaver
+                   , XMonad.Internal.DBus.Workspaces
                    , XMonad.Internal.Process
                    , Xmobar.Plugins.Bluetooth
                    , Xmobar.Plugins.Device

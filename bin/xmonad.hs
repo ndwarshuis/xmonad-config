@@ -8,6 +8,7 @@
 module Main (main) where
 
 import           Control.Concurrent
+import           Control.Monad                                (unless)
 
 import           Data.List
     ( isPrefixOf
@@ -55,8 +56,10 @@ import           XMonad.Layout.Renamed
 import           XMonad.Layout.Tabbed
 import qualified XMonad.StackSet                              as W
 import           XMonad.Util.Cursor
+import qualified XMonad.Util.ExtensibleState                  as E
 import           XMonad.Util.EZConfig
 import           XMonad.Util.NamedActions
+import           XMonad.Util.WorkspaceCompare
 
 main :: IO ()
 main = do
@@ -104,6 +107,7 @@ runCleanup ts = io $ do
 --------------------------------------------------------------------------------
 -- | Startuphook configuration
 
+-- TODO add _NET_DESKTOP_VIEWPORTS to _NET_SUPPORTED?
 myStartupHook :: X ()
 myStartupHook = setDefaultCursor xC_left_ptr <+> docksStartupHook
   <+> startupHook def
@@ -235,36 +239,85 @@ runHide = sendMessage $ Toggle HIDE
 --------------------------------------------------------------------------------
 -- | Loghook configuration
 --
+
+myLoghook :: Handle -> X ()
+myLoghook h = do
+  logXinerama h
+  logViewports
+
+-- | Viewports loghook
+-- This is all stuff that should probably be added to the EVMH contrib module.
+-- Basically, this will send the workspace "viewport" positions to
+-- _NET_DESKTOP_VIEWPORT which can be further processed by tools such as
+-- 'wmctrl' to figure out which workspaces are on what monitor outside of
+-- xmomad. This is more or less the way i3 does this, where the current
+-- workspace has a valid position and everything else is just (0, 0). Also, I
+-- probably should set the _NET_SUPPORT atom to reflect the existance of
+-- _NET_DESKTOP_VIEWPORT, but for now there seems to be no ill effects so why
+-- bother...(if that were necessary it would go in the startup hook)
+newtype DesktopViewports = DesktopViewports [Int]
+    deriving Eq
+
+instance ExtensionClass DesktopViewports where
+    initialValue = DesktopViewports []
+
+logViewports :: X ()
+logViewports = withWindowSet $ \s -> do
+  sort' <- getSortByIndex
+  let ws = sort' $ W.workspaces s
+  let desktopViewports = concatMap (wsToViewports s) ws
+  whenChanged (DesktopViewports desktopViewports) $
+      setDesktopViewports desktopViewports
+  where
+    wsToViewports s w = let cur = W.current s in
+      if W.tag w == currentTag cur then currentPos cur else [0, 0]
+    currentTag = W.tag . W.workspace
+    currentPos = rectXY . screenRect . W.screenDetail
+    rectXY (Rectangle x y _ _) = [fromIntegral x, fromIntegral y]
+
+setDesktopViewports :: [Int] -> X ()
+setDesktopViewports vps = withDisplay $ \dpy -> do
+    r <- asks theRoot
+    a <- getAtom "_NET_DESKTOP_VIEWPORT"
+    c <- getAtom "CARDINAL"
+    io $ changeProperty32 dpy r a c propModeReplace $ map fromIntegral vps
+
+-- stolen from XMonad.Hooks.EwmhDesktops
+whenChanged :: (Eq a, ExtensionClass a) => a -> X () -> X ()
+whenChanged v action = do
+    v0 <- E.get
+    unless (v == v0) $ do
+        action
+        E.put v
+
+-- | Xinerama loghook (for xmobar)
 -- The format will be like "[<1> 2 3] 4 5 | LAYOUT (N)" where each digit is the
 -- workspace and LAYOUT is the current layout. Each workspace in the brackets is
 -- currently visible and the order reflects the physical location of each
 -- screen. The "<>" is the workspace that currently has focus. N is the number
 -- of windows on the current workspace.
 
-myLoghook :: Handle -> X ()
-myLoghook h = withWindowSet $ io . hPutStrLn h . myWindowSetXinerama
-
-myWindowSetXinerama
-  :: LayoutClass layout a1 =>
-     W.StackSet String (layout a1) a2 ScreenId ScreenDetail -> String
-myWindowSetXinerama ws =
-  unwords $ filter (not . null) [onScreen, offScreen, sep, layout, nWindows]
+logXinerama :: Handle -> X ()
+logXinerama h = withWindowSet $ \ws -> io
+  $ hPutStrLn h
+  $ unwords
+  $ filter (not . null) [onScreen ws, offScreen ws, sep, layout ws, nWindows ws]
   where
-    onScreen = xmobarColor hilightFgColor hilightBgColor
+    onScreen ws = xmobarColor hilightFgColor hilightBgColor
       $ pad
       $ unwords
-      $ map (fmtTags . W.tag . W.workspace)
+      $ map (fmtTags ws . W.tag . W.workspace)
       $ sortBy compareXCoord
       $ W.current ws : W.visible ws
-    offScreen = xmobarColor T.backdropFgColor ""
+    offScreen ws = xmobarColor T.backdropFgColor ""
       $ unwords
       $ map W.tag
       $ filter (isJust . W.stack)
       $ sortOn W.tag
       $ W.hidden ws
     sep = xmobarColor T.backdropFgColor "" ":"
-    layout = description $ W.layout $ W.workspace $ W.current ws
-    nWindows = wrap "(" ")"
+    layout ws = description $ W.layout $ W.workspace $ W.current ws
+    nWindows ws = wrap "(" ")"
       $ show
       $ length
       $ W.integrate'
@@ -273,7 +326,7 @@ myWindowSetXinerama ws =
       $ W.current ws
     hilightBgColor = "#8fc7ff"
     hilightFgColor = T.blend' 0.5 hilightBgColor T.fgColor
-    fmtTags t = if t == W.currentTag ws
+    fmtTags ws t = if t == W.currentTag ws
       then xmobarColor T.fgColor hilightBgColor t
       else t
 
