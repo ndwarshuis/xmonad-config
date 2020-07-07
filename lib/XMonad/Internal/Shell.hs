@@ -10,15 +10,17 @@ module XMonad.Internal.Shell
   , (#!>>)
   ) where
 
+import           Control.Monad.IO.Class
+
 import           System.FilePath.Posix
 
-import           XMonad.Core             (X, getXMonadDir)
+import           XMonad.Core             (getXMonadDir)
 import           XMonad.Internal.Process
 
 --------------------------------------------------------------------------------
 -- | Opening subshell
 
-spawnCmd :: String -> [String] -> X ()
+spawnCmd :: MonadIO m => String -> [String] -> m ()
 spawnCmd cmd args = spawn $ fmtCmd cmd args
 
 --------------------------------------------------------------------------------
@@ -27,7 +29,7 @@ spawnCmd cmd args = spawn $ fmtCmd cmd args
 soundDir :: FilePath
 soundDir = "sound"
 
-spawnSound :: FilePath -> X ()
+spawnSound :: MonadIO m => FilePath -> m ()
 spawnSound file = do
   path <- (</> soundDir </> file) <$> getXMonadDir
   -- paplay seems to have less latency than aplay

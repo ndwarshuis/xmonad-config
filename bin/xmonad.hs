@@ -44,6 +44,7 @@ import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ACPIEvent
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Concurrent.DynamicWorkspaces
+import           XMonad.Internal.Concurrent.Removable
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
@@ -66,6 +67,7 @@ main = do
   cl <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
   _ <- forkIO runPowermon
+  _ <- forkIO runRemovableMon
   _ <- forkIO $ runWorkspaceMon allDWs
   let ts = ThreadState
         { client = cl

@@ -16,6 +16,7 @@ module XMonad.Internal.Process
 import           Control.Concurrent
 import           Control.Exception
 import           Control.Monad
+import           Control.Monad.IO.Class
 
 import           Data.Maybe
 
@@ -25,7 +26,7 @@ import           System.IO
 import           System.Posix.Signals
 import           System.Process
 
-import           XMonad.Core          hiding (spawn)
+import           XMonad.Core            hiding (spawn)
 
 -- | Block until a PID has exited (in any form)
 -- ASSUMPTION on linux PIDs will always increase until they overflow, in which
@@ -64,10 +65,10 @@ shell' = addGroupSession . shell
 proc' :: FilePath -> [String] -> CreateProcess
 proc' cmd args = addGroupSession $ proc cmd args
 
-spawn :: String -> X ()
+spawn :: MonadIO m => String -> m ()
 spawn = io . void . createProcess' . shell'
 
-spawnAt :: FilePath -> String -> X ()
+spawnAt :: MonadIO m => FilePath -> String -> m ()
 spawnAt fp cmd = io $ void $ createProcess' $ (shell' cmd) { cwd = Just fp }
 
 spawnPipe :: String -> IO (Handle, ProcessHandle)
