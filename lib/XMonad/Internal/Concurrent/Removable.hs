@@ -59,6 +59,10 @@ removedHasDrive _ = False
 playSoundMaybe :: FilePath -> Bool -> IO ()
 playSoundMaybe p b = when b $ spawnSound p
 
+-- NOTE: the udisks2 service should be already running for this module to work.
+-- If it not already, we won't see any signals from the dbus until it is
+-- started (it will work after it is started however). It seems safe to simply
+-- enable the udisks2 service at boot; however this is not default behavior.
 runRemovableMon :: IO ()
 runRemovableMon = do
   client <- connectSystem
