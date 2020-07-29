@@ -41,6 +41,9 @@ devSecrets = concatMap (\x -> ["-s", x])
   , "/media/ndwar/MC3M:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
   ]
 
+myDmenuMatchingArgs :: [String]
+myDmenuMatchingArgs = ["-i"] -- case insensitivity
+
 runDevMenu :: X ()
 runDevMenu = spawnCmd "rofi-dev" $ devSecrets ++ rofiArgs
   where
@@ -48,26 +51,29 @@ runDevMenu = spawnCmd "rofi-dev" $ devSecrets ++ rofiArgs
       [ "--"
       , "-theme-str"
       , "'#element.selected.normal { background-color: #999933; }'"
-      ]
+      ] ++
+      myDmenuMatchingArgs
 
 runBwMenu :: X ()
-runBwMenu = spawnCmd "rofi-bw"
-  ["-c"
+runBwMenu = spawnCmd "rofi-bw" $
+  [ "-c"
   , "--"
   , "-theme-str"
   , "'#element.selected.normal { background-color: #bb6600; }'"
-  ]
+  ] ++
+  myDmenuMatchingArgs
 
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
   (h, _, _, _) <- io $ createProcess' $ (shell' cmd) { std_in = CreatePipe }
   io $ forM_ h $ \h' -> hPutStr h' (unlines $ showKm x) >> hClose h'
-  where cmd = fmtCmd myDmenuCmd
+  where cmd = fmtCmd myDmenuCmd $
           [ "-dmenu"
           , "-p", "commands"
           , "-theme-str"
           , "'#element.selected.normal { background-color: #a200ff; }'"
-          ]
+          ] ++
+          myDmenuMatchingArgs
 
 runCmdMenu :: X ()
 runCmdMenu = spawnDmenuCmd ["-show", "run"]
