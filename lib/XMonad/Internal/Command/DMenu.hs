@@ -32,6 +32,15 @@ myDmenuCmd = "rofi"
 spawnDmenuCmd :: [String] -> X ()
 spawnDmenuCmd = spawnCmd myDmenuCmd
 
+themeArgs :: String -> [String]
+themeArgs hexColor =
+  [ "-theme-str"
+  , "'#element.selected.normal { background-color: " ++ hexColor ++ "; }'"
+  ]
+
+myDmenuMatchingArgs :: [String]
+myDmenuMatchingArgs = ["-i"] -- case insensitivity
+
 --------------------------------------------------------------------------------
 -- | Exported Commands
 
@@ -41,39 +50,21 @@ devSecrets = concatMap (\x -> ["-s", x])
   , "/media/ndwar/MC3M:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
   ]
 
-myDmenuMatchingArgs :: [String]
-myDmenuMatchingArgs = ["-i"] -- case insensitivity
-
 runDevMenu :: X ()
 runDevMenu = spawnCmd "rofi-dev" $ devSecrets ++ rofiArgs
   where
-    rofiArgs =
-      [ "--"
-      , "-theme-str"
-      , "'#element.selected.normal { background-color: #999933; }'"
-      ] ++
-      myDmenuMatchingArgs
+    rofiArgs = "--" : themeArgs "#999933" ++ myDmenuMatchingArgs
 
 runBwMenu :: X ()
-runBwMenu = spawnCmd "rofi-bw" $
-  [ "-c"
-  , "--"
-  , "-theme-str"
-  , "'#element.selected.normal { background-color: #bb6600; }'"
-  ] ++
-  myDmenuMatchingArgs
+runBwMenu = spawnCmd "rofi-bw" $ ["-c", "--"] ++ themeArgs "#bb6600"
+  ++ myDmenuMatchingArgs
 
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
   (h, _, _, _) <- io $ createProcess' $ (shell' cmd) { std_in = CreatePipe }
   io $ forM_ h $ \h' -> hPutStr h' (unlines $ showKm x) >> hClose h'
-  where cmd = fmtCmd myDmenuCmd $
-          [ "-dmenu"
-          , "-p", "commands"
-          , "-theme-str"
-          , "'#element.selected.normal { background-color: #a200ff; }'"
-          ] ++
-          myDmenuMatchingArgs
+  where cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
+          ++ themeArgs "#a200ff" ++ myDmenuMatchingArgs
 
 runCmdMenu :: X ()
 runCmdMenu = spawnDmenuCmd ["-show", "run"]
@@ -82,16 +73,14 @@ runAppMenu :: X ()
 runAppMenu = spawnDmenuCmd ["-show", "drun"]
 
 runClipMenu :: X ()
-runClipMenu = spawnDmenuCmd
+runClipMenu = spawnDmenuCmd $
   [ "-modi", "\"clipboard:greenclip print\""
   , "-show", "clipboard"
   , "-run-command", "'{cmd}'"
-  , "-theme-str", "'#element.selected.normal { background-color: #00c44e; }'"
-  ]
+  ] ++ themeArgs "#00c44e"
 
 runWinMenu :: X ()
 runWinMenu = spawnDmenuCmd ["-show", "window"]
 
 runNetMenu :: X ()
-runNetMenu = spawnCmd "networkmanager_dmenu" []
-
+runNetMenu = spawnCmd "networkmanager_dmenu" $ themeArgs "#ff3333"
