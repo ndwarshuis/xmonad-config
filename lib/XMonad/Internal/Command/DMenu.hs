@@ -10,6 +10,7 @@ module XMonad.Internal.Command.DMenu
   , runDevMenu
   , runBwMenu
   , runShowKeys
+  , runAutorandrMenu
   ) where
 
 import           Control.Monad.Reader
@@ -84,3 +85,6 @@ runWinMenu = spawnDmenuCmd ["-show", "window"]
 
 runNetMenu :: X ()
 runNetMenu = spawnCmd "networkmanager_dmenu" $ themeArgs "#ff3333"
+
+runAutorandrMenu :: X ()
+runAutorandrMenu = spawnCmd "rofi-autorandr" $ themeArgs "#ff0066"
