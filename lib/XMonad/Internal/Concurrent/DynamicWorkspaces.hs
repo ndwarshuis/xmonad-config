@@ -34,6 +34,7 @@ module XMonad.Internal.Concurrent.DynamicWorkspaces
   , doSink
   ) where
 
+import           Data.List                                (deleteBy, find)
 import qualified Data.Map                                 as M
 import           Data.Maybe
 
@@ -193,6 +194,23 @@ doSink = doF $ \s -> case W.stack $ W.workspace $ W.current s of
 -- When an app is closed, this will respond the event that is sent in the main
 -- XMonad thread
 
--- TODO this doesn't kill a workspace if it isn't in focus...weird
 removeDynamicWorkspace :: WorkspaceId -> X ()
-removeDynamicWorkspace = removeEmptyWorkspaceByTag
+removeDynamicWorkspace target = windows removeIfEmpty
+  where
+    -- remove workspace if it is empty and if there are hidden workspaces
+    removeIfEmpty s@W.StackSet { W.visible = vis, W.hidden = hall@(h:hs) }
+      -- if hidden, delete from hidden
+      | Just x <- find isEmptyTarget hall
+      = s { W.hidden = deleteBy (eq W.tag) x hall }
+      -- if visible, delete from visible and move first hidden to its place
+      | Just x <- find (isEmptyTarget . W.workspace) vis
+      = s { W.visible = x { W.workspace = h } : deleteBy (eq W.screen) x vis
+          , W.hidden = hs }
+      -- if current, move the first hidden workspace to the current
+      | isEmptyTarget $ W.workspace $ W.current s
+      = s { W.current = (W.current s) { W.workspace = h }, W.hidden = hs }
+      -- otherwise do nothing
+      | otherwise = s
+    removeIfEmpty s = s
+    isEmptyTarget ws = isNothing (W.stack ws) && W.tag ws == target
+    eq f x y = f x == f y
