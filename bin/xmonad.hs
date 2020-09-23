@@ -166,27 +166,10 @@ xsaneDynamicWorkspace = DynWorkspace
     t = "XSANE"
     c = "Xsane"
 
-steamDynamicWorkspace :: DynWorkspace
-steamDynamicWorkspace = DynWorkspace
-  { dwName = "Steam Game"
-  , dwTag = t
-  , dwClass = c
-  -- TODO not sure why the doSink is needed, windows should tile be default
-  -- since dynamic workspaces are first in the managehook
-  , dwHook = [ className =? c -?> appendViewShift t >> doSink ]
-  , dwKey = 'z'
-  , dwCmd = Nothing
-  }
-  where
-    t = "STEAM"
-    -- TODO this actually needs to be a list to match all games we care about
-    c = "portal2_linux"
-
 allDWs :: [DynWorkspace]
 allDWs = [ xsaneDynamicWorkspace
          , wmDynamicWorkspace
          , gimpDynamicWorkspace
-         , steamDynamicWorkspace
          ]
 
 --------------------------------------------------------------------------------
@@ -194,7 +177,6 @@ allDWs = [ xsaneDynamicWorkspace
 
 myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
   $ onWorkspace (dwTag gimpDynamicWorkspace) gimpLayout
-  $ onWorkspace (dwTag steamDynamicWorkspace) steamLayout
   $ mkToggle (single HIDE)
   $ tall ||| fulltab ||| full
   where
@@ -211,7 +193,6 @@ myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
     full = renamed [Replace "Full"]
       $ noBorders Full
     vmLayout = noBorders Full
-    steamLayout = vmLayout
     -- TODO use a tabbed layout for multiple master windows
     gimpLayout = renamed [Replace "Gimp Layout"]
       $ avoidStruts
