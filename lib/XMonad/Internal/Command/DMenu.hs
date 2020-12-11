@@ -47,8 +47,8 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 
 devSecrets :: [String]
 devSecrets = concatMap (\x -> ["-s", x])
-  [ "/media/ndwar/Roylab:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
-  , "/media/ndwar/MC3M:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
+  [ "/tmp/media/ndwar/Roylab:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
+  , "/tmp/media/ndwar/MC3M:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
   ]
 
 runDevMenu :: X ()
