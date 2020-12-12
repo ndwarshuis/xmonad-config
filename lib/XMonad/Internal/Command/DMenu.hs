@@ -49,6 +49,13 @@ devSecrets :: [String]
 devSecrets = concatMap (\x -> ["-s", x])
   [ "/tmp/media/ndwar/Roylab:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
   , "/tmp/media/ndwar/MC3M:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
+  ] ++
+  [ "-b"
+  , "/home/ndwar/.ssh:\"Veracrypt (ssh)\""
+  ] ++ concatMap (\x -> ["-v", x])
+  [ "/tmp/media/ndwar/accounts:/mnt/data/Documents/personal_records/financial/acnt.crypt"
+  , "/home/ndwar/.ssh:/mnt/data/Documents/crypt/ssh-config"
+  , "/tmp/media/ndwar/ansible-pki:/home/ndwar/.ansible/openvpn.vcrypt"
   ]
 
 runDevMenu :: X ()
