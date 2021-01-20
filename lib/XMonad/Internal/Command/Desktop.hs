@@ -196,4 +196,4 @@ runDesktopCapture = runFlameshot "full"
 runCaptureBrowser :: X ()
 runCaptureBrowser = do
   dir <- io getCaptureDir
-  spawnCmd "geeqie" [dir]
+  spawnCmd "feh" [dir]
