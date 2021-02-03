@@ -52,6 +52,7 @@ devSecrets = concatMap (\x -> ["-s", x])
   ] ++
   concatMap (\x -> ["-b", x])
   [ "/home/ndwar/.ssh:\"Veracrypt (ssh)\""
+  , "/home/ndwar/.local/share/pass:\"Veracrypt (pass)\""
   , "/tmp/media/ndwar/accounts:\"Veracrypt (accounts)\""
   , "/tmp/media/ndwar/ansible-pki:\"Veracrypt (Ansible PKI)\""
   , "/tmp/media/ndwar/call-logs:\"Veracrypt (ACR)\""
@@ -59,6 +60,7 @@ devSecrets = concatMap (\x -> ["-s", x])
   concatMap (\x -> ["-v", x])
   [ "/tmp/media/ndwar/accounts:/mnt/data/Documents/personal_records/financial/acnt.crypt"
   , "/home/ndwar/.ssh:/mnt/data/Documents/crypt/ssh-config"
+  , "/home/ndwar/.local/share/pass:/mnt/data/Documents/crypt/pass"
   , "/tmp/media/ndwar/ansible-pki:/home/ndwar/.ansible/openvpn.vcrypt"
   , "/tmp/media/ndwar/call-logs:/mnt/data/Documents/personal_records/call_logs"
   ]
