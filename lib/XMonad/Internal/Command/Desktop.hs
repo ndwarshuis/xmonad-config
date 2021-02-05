@@ -28,6 +28,8 @@ module XMonad.Internal.Command.Desktop
   , runScreenCapture
   , runDesktopCapture
   , runCaptureBrowser
+  , runStartISyncTimer
+  , runStartISyncService
   ) where
 
 import           Control.Monad                       (void)
@@ -136,6 +138,18 @@ runToggleEthernet = spawn
   #!|| "a=disconnect"
   #!>> fmtCmd "nmcli" ["device", "$a", ethernetIface]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
+
+runStartISyncTimer :: X ()
+runStartISyncTimer = spawn
+  $ "systemctl --user start mbsync.timer"
+  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
+  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start"  }
+
+runStartISyncService :: X ()
+runStartISyncService = spawn
+  $ "systemctl --user start mbsync.service"
+  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed"  }
+  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync failed"  }
 
 --------------------------------------------------------------------------------
 -- | Configuration commands

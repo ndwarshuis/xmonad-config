@@ -479,6 +479,8 @@ mkKeys ts c =
   -- M-<F1> reserved for showing the keymap
   , ("M-<F2>", "restart xmonad", runCleanup ts >> runRestart)
   , ("M-<F3>", "recompile xmonad", runRecompile)
+  , ("M-<F7>", "start Isync Service", runStartISyncService)
+  , ("M-C-<F7>", "start Isync Timer", runStartISyncTimer)
   , ("M-<F8>", "select autorandr profile", runAutorandrMenu)
   , ("M-<F9>", "toggle ethernet", runToggleEthernet)
   , ("M-<F10>", "toggle bluetooth", runToggleBluetooth)
