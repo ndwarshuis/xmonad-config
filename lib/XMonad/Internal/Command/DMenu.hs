@@ -51,16 +51,17 @@ devSecrets = concatMap (\x -> ["-s", x])
   , "/tmp/media/ndwar/MC3M:user=ndwarshuis3@gatech.edu,host=outlook.office365.com"
   ] ++
   concatMap (\x -> ["-b", x])
-  [ "/home/ndwar/.ssh:\"Veracrypt (ssh)\""
-  , "/home/ndwar/.config/gnupg:\"Veracrypt (gpg)\""
-  , "/tmp/media/ndwar/accounts:\"Veracrypt (accounts)\""
+  [
+    -- "/home/ndwar/.ssh:\"Veracrypt (ssh)\""
+  -- , "/home/ndwar/.config/gnupg:\"Veracrypt (gpg)\""
+    "/tmp/media/ndwar/accounts:\"Veracrypt (accounts)\""
   , "/tmp/media/ndwar/ansible-pki:\"Veracrypt (Ansible PKI)\""
   , "/tmp/media/ndwar/call-logs:\"Veracrypt (ACR)\""
   ] ++
   concatMap (\x -> ["-v", x])
   [ "/tmp/media/ndwar/accounts:/mnt/data/Documents/personal_records/financial/acnt.crypt"
-  , "/home/ndwar/.ssh:/mnt/data/Documents/crypt/ssh-config"
-  , "/home/ndwar/.config/gnupg:/mnt/data/Documents/crypt/gnupg"
+  -- , "/home/ndwar/.ssh:/mnt/data/Documents/crypt/ssh-config"
+  -- , "/home/ndwar/.config/gnupg:/mnt/data/Documents/crypt/gnupg"
   , "/tmp/media/ndwar/ansible-pki:/home/ndwar/.ansible/openvpn.vcrypt"
   , "/tmp/media/ndwar/call-logs:/mnt/data/Documents/personal_records/call_logs"
   ]
