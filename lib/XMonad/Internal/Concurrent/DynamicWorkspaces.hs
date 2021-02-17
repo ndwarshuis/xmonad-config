@@ -51,8 +51,6 @@ import           Graphics.X11.Xlib.Extras
 import           Graphics.X11.Xlib.Misc
 import           Graphics.X11.Xlib.Types
 
-import           System.Process                           (Pid)
-
 import           XMonad.Actions.DynamicWorkspaces
 import           XMonad.Core
     ( ManageHook

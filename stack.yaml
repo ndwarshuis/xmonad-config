@@ -17,7 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-14.27
+resolver: lts-17.4
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -42,8 +42,10 @@ packages:
 extra-deps:
 - iwlib-0.1.0
 - fdo-notify-0.3.1
+- tcp-streams-1.0.1.1
 - github: ndwarshuis/xmobar
-  commit: 4186bcbc50a7c78ac0aee8bc3719e0dd9a46dace
+  # commit: 4186bcbc50a7c78ac0aee8bc3719e0dd9a46dace
+  commit: 7d37ab57d8160cf840c1fe2a279c89eac599a10b
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

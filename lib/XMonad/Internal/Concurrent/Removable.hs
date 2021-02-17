@@ -12,7 +12,6 @@ import           Control.Concurrent
 import           Control.Monad
 
 import           Data.Map.Lazy         (Map, member)
-import           Data.Maybe            (maybe)
 
 import           DBus
 import           DBus.Client
