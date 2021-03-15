@@ -63,7 +63,7 @@ runCalc :: X ()
 runCalc = spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: X ()
-runBrowser = spawn "chromium"
+runBrowser = spawn "brave-accel"
 
 runEditor :: X ()
 runEditor = spawnCmd "emacsclient"
