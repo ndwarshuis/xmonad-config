@@ -55,6 +55,7 @@ import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
 import           XMonad.Layout.Renamed
 import           XMonad.Layout.Tabbed
+import qualified XMonad.Operations                            as O
 import qualified XMonad.StackSet                              as W
 import           XMonad.Util.Cursor
 import qualified XMonad.Util.ExtensibleState                  as E
@@ -385,6 +386,7 @@ mkKeys ts c =
   , ("M-<Return>", "next layout", sendMessage NextLayout)
   , ("M-S-<Return>", "reset layout", setLayout $ layoutHook c)
   , ("M-t", "sink tiling", withFocused $ windows . W.sink)
+  , ("M-S-t", "float tiling", withFocused O.float)
   , ("M--", "shrink", sendMessage Shrink)
   , ("M-=", "expand", sendMessage Expand)
   , ("M-S--", "remove master window", sendMessage $ IncMasterN (-1))
