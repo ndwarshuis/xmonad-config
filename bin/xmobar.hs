@@ -148,7 +148,7 @@ config confDir = defaultConfig
         , "-d", "<fn=3> </fn>"
         ]
 
-      , Run $ Date "%Y-%m-%d %H:%M" "date" 10
+      , Run $ Date "%Y-%m-%d %H:%M:%S" "date" 10
 
       , Run $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
 
