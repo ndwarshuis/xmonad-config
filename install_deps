@@ -1,0 +1,10 @@
+#!/bin/bash
+
+## Install all pkgs required for xmonad to run at full capacity
+
+xmonad_pkgs=(autorandr feh xorg-server xorg-xset libpulse flameshot
+             playerctl wireless_tools acpid ttf-symbola-free ttf-symbola-free
+             ttf-dejavu awesome-terminal-fonts numlockx picom i3lock-color
+             xorg-xrandr xss-lock)
+
+yay --needed --noconfirm --norebuild --removemake -S "${xmonad_pkgs[@]}"
