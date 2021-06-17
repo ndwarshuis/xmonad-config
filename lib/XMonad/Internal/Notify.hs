@@ -49,8 +49,7 @@ fmtNotifyCmd note =
     ++ getBody note
   where
     -- TODO add the rest of the options as needed
-    getSummary = (:[]) . quote . summary
+    getSummary = (:[]) . doubleQuote . summary
     getIcon n = maybe [] (\i -> ["-i", case i of { Icon s -> s; File s -> s }])
       $ appImage n
-    getBody n = maybeToList $ (fmap quote . parseBody) =<< body n
-    quote s = "\"" ++ s ++ "\""
+    getBody n = maybeToList $ (fmap doubleQuote . parseBody) =<< body n

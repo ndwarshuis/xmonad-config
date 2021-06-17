@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE MultiWayIf            #-}
 
 --------------------------------------------------------------------------------
 -- | XMonad binary
@@ -446,7 +445,8 @@ mkKeys ts c =
   , ("M-b", "launch bitwarden selector", runBwMenu)
   , ("M-C-e", "launch editor", runEditor)
   , ("M-C-w", "launch browser", runBrowser)
-  , ("M-C-t", "launch terminal", runTerm)
+  , ("M-C-t", "launch terminal with tmux", runTMux)
+  , ("M-C-S-t", "launch terminal", runTerm)
   , ("M-C-q", "launch calc", runCalc)
   , ("M-C-f", "launch file manager", runFileManager)
   ] ++

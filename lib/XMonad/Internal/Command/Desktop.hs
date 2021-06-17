@@ -4,6 +4,7 @@
 module XMonad.Internal.Command.Desktop
   ( myTerm
   , runTerm
+  , runTMux
   , runCalc
   , runBrowser
   , runEditor
@@ -59,6 +60,15 @@ myTerm = "urxvt"
 runTerm :: X ()
 runTerm = spawn myTerm
 
+runTMux :: X ()
+runTMux = spawn
+  $ "tmux has-session"
+  #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
+  #!|| fmtNotifyCmd defNoteError { body = Just $ Text msg }
+  where
+    c = "exec tmux attach-session -d"
+    msg = "could not connect to tmux session"
+
 runCalc :: X ()
 runCalc = spawnCmd myTerm ["-e", "R"]
 
@@ -67,7 +77,7 @@ runBrowser = spawn "brave-accel"
 
 runEditor :: X ()
 runEditor = spawnCmd "emacsclient"
-  ["-c", "-e", "\"(select-frame-set-input-focus (selected-frame))\""]
+  ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
 
 runFileManager :: X ()
 runFileManager = spawn "pcmanfm"

@@ -5,6 +5,8 @@ module XMonad.Internal.Shell
   ( fmtCmd
   , spawnCmd
   , spawnSound
+  , doubleQuote
+  , singleQuote
   , (#!&&)
   , (#!||)
   , (#!>>)
@@ -55,3 +57,9 @@ infixr 0 #!||
 cmdA #!>> cmdB = cmdA ++ "; " ++ cmdB
 
 infixr 0 #!>>
+
+doubleQuote :: String -> String
+doubleQuote s = "\"" ++ s ++ "\""
+
+singleQuote :: String -> String
+singleQuote s = "'" ++ s ++ "'"
