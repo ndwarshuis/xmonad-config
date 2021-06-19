@@ -17,8 +17,8 @@ import           Data.Word
 import           DBus
 import           DBus.Client
 
-import           Xmobar
 import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           Xmobar
 
 data Device = Device (String, String, String, String) Int
     deriving (Read, Show)

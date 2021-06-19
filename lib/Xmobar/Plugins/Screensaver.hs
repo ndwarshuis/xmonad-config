@@ -27,6 +27,6 @@ instance Exec Screensaver where
       forever (threadDelay 5000000)
       where
         fmtState = \case
-          Just s -> xmobarColor (if s then colorOn else colorOff) "" text
+          Just s  -> xmobarColor (if s then colorOn else colorOff) "" text
           Nothing -> "N/A"
 

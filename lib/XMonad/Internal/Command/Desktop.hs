@@ -241,7 +241,7 @@ runDesktopCapture = runFlameshot "full"
 
 runScreenCapture :: IO MaybeX
 runScreenCapture = runFlameshot "screen"
-  
+
 runCaptureBrowser :: IO MaybeX
 runCaptureBrowser = runIfInstalled [myImageBrowser] $ do
   dir <- io getCaptureDir

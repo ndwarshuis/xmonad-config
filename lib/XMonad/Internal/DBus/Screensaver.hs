@@ -15,8 +15,8 @@ import           Control.Monad               (void)
 import           DBus
 import           DBus.Client
 
-import           Graphics.X11.Xlib.Display
 import           Graphics.X11.XScreenSaver
+import           Graphics.X11.Xlib.Display
 
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Process

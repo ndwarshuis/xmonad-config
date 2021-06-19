@@ -11,8 +11,8 @@ module Xmobar.Plugins.VPN (VPN(..)) where
 import           DBus
 import           DBus.Client
 
-import           Xmobar
 import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           Xmobar
 
 data VPN = VPN (String, String, String) Int
     deriving (Read, Show)

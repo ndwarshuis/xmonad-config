@@ -11,8 +11,8 @@ module Xmobar.Plugins.Bluetooth (Bluetooth(..)) where
 import           DBus
 import           DBus.Client
 
-import           Xmobar
 import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           Xmobar
 
 data Bluetooth = Bluetooth (String, String, String) Int
     deriving (Read, Show)
@@ -36,5 +36,5 @@ instance Exec Bluetooth where
         Right r -> fromVariant r
         Left _  -> Nothing
       fmtState = \case
-        Just s -> xmobarColor (if s then colorOn else colorOff) "" text
+        Just s  -> xmobarColor (if s then colorOn else colorOff) "" text
         Nothing -> "N/A"

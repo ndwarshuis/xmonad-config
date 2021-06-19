@@ -37,8 +37,8 @@ import           XMonad.Hooks.DynamicLog
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
-import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.Command.DMenu
+import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ACPIEvent
 import           XMonad.Internal.Concurrent.ClientMessage
@@ -57,8 +57,8 @@ import           XMonad.Layout.Tabbed
 import qualified XMonad.Operations                            as O
 import qualified XMonad.StackSet                              as W
 import           XMonad.Util.Cursor
-import qualified XMonad.Util.ExtensibleState                  as E
 import           XMonad.Util.EZConfig
+import qualified XMonad.Util.ExtensibleState                  as E
 import           XMonad.Util.NamedActions
 import           XMonad.Util.WorkspaceCompare
 
@@ -444,13 +444,13 @@ mkNamedSubmap c KeyGroup { kgHeader = h, kgBindings = b } =
   <$> b
 
 data KeyBinding a = KeyBinding
-  { kbSyms :: String
-  , kbDesc :: String
+  { kbSyms   :: String
+  , kbDesc   :: String
   , kbAction :: a
   }
 
 data KeyGroup a = KeyGroup
-  { kgHeader :: String
+  { kgHeader   :: String
   , kgBindings :: [KeyBinding a]
   }
 
@@ -469,7 +469,7 @@ filterExternal = fmap go
     go k@KeyGroup { kgBindings = bs } =
       k { kgBindings = mapMaybe go' bs }
     go' k@KeyBinding { kbAction = Installed x } = Just $ k { kbAction = x }
-    go' _ = Nothing
+    go' _                                       = Nothing
 
 externalBindings :: ThreadState -> [KeyGroup (IO MaybeX)]
 externalBindings ts =
@@ -508,7 +508,7 @@ externalBindings ts =
     , KeyBinding "<XF86AudioRaiseVolume>" "volume up" runVolumeUp
     , KeyBinding "<XF86AudioMute>" "volume mute" runVolumeMute
     ]
-  
+
   , KeyGroup "System"
     [ KeyBinding "M-." "backlight up" $ noCheck runIncBacklight
     , KeyBinding "M-," "backlight down" $ noCheck runDecBacklight

@@ -17,8 +17,8 @@ import           Control.Monad.Reader
 
 import           Graphics.X11.Types
 
+import           System.Directory         (XdgDirectory (..), getXdgDirectory)
 import           System.IO
-import           System.Directory (getXdgDirectory, XdgDirectory(..))
 
 import           XMonad.Core              hiding (spawn)
 import           XMonad.Internal.Process

@@ -23,8 +23,8 @@ import           System.IO.Streams.UnixSocket
 
 import           XMonad.Core
 import           XMonad.Internal.Command.Power
-import           XMonad.Internal.Shell
 import           XMonad.Internal.Concurrent.ClientMessage
+import           XMonad.Internal.Shell
 
 --------------------------------------------------------------------------------
 -- | Data structure to hold the ACPI events I care about

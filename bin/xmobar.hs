@@ -19,10 +19,10 @@ import           Xmobar.Plugins.IntelBacklight
 import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
 
-import           Xmobar
 import           XMonad                        (getXMonadDir)
 import           XMonad.Hooks.DynamicLog       (wrap, xmobarColor)
 import qualified XMonad.Internal.Theme         as T
+import           Xmobar
 
 sep :: String
 sep = xmobarColor T.backdropFgColor "" " : "
