@@ -62,7 +62,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: IO MaybeX
-runDevMenu = runIfInstalled [myDmenuDevices] $ do
+runDevMenu = runIfInstalled [Required myDmenuDevices] $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
@@ -70,7 +70,7 @@ runDevMenu = runIfInstalled [myDmenuDevices] $ do
     ++ myDmenuMatchingArgs
 
 runBwMenu :: IO MaybeX
-runBwMenu = runIfInstalled [myDmenuPasswords] $
+runBwMenu = runIfInstalled [Required myDmenuPasswords] $
   spawnCmd myDmenuPasswords $ ["-c", "--"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 -- TODO what to do with this if rofi doesn't exist?

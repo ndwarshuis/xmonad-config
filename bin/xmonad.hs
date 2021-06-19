@@ -468,8 +468,8 @@ filterExternal = fmap go
   where
     go k@KeyGroup { kgBindings = bs } =
       k { kgBindings = mapMaybe go' bs }
-    go' k@KeyBinding { kbAction = Installed x } = Just $ k { kbAction = x }
-    go' _                                       = Nothing
+    go' k@KeyBinding { kbAction = Installed x _ } = Just $ k { kbAction = x }
+    go' _                                         = Nothing
 
 externalBindings :: ThreadState -> [KeyGroup (IO MaybeX)]
 externalBindings ts =

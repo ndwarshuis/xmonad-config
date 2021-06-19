@@ -3,6 +3,7 @@
 
 module XMonad.Internal.Shell
   ( MaybeExe(..)
+  , Dependency(..)
   , MaybeX
   , IOMaybeX
   , runIfInstalled
@@ -25,45 +26,57 @@ module XMonad.Internal.Shell
 import           Control.Monad           (filterM)
 import           Control.Monad.IO.Class
 
-import           Data.Maybe              (isNothing)
+import           Data.Maybe              (isJust)
 
-import           System.FilePath.Posix
 import           System.Directory        (findExecutable)
+import           System.FilePath.Posix
 
-import           XMonad.Core             (getXMonadDir, X)
+import           XMonad.Core             (X, getXMonadDir)
 import           XMonad.Internal.Process
 
 --------------------------------------------------------------------------------
 -- | Gracefully handling missing binaries
 
-data MaybeExe m = Installed (m ()) | Missing [String] | Noop
+data Dependency = Required String | Optional String deriving (Eq, Show)
+
+data MaybeExe m = Installed (m ()) [String] | Missing [Dependency] | Ignore
 
 type MaybeX = MaybeExe X
 
 type IOMaybeX = IO MaybeX
 
-runIfInstalled :: MonadIO m => [String] -> m () -> IO (MaybeExe m)
-runIfInstalled exes x = do
-  missing <- filterM (fmap isNothing . findExecutable) exes
-  return $ case missing of
-    [] -> Installed x
-    ms -> Missing ms
+exeInstalled :: String -> IO Bool
+exeInstalled x = isJust <$> findExecutable x
+
+depInstalled :: Dependency -> IO Bool
+depInstalled (Required d) = exeInstalled d
+depInstalled (Optional d) = exeInstalled d
+
+filterMissing :: [Dependency] -> IO [Dependency]
+filterMissing = filterM (fmap not . depInstalled)
+
+runIfInstalled :: MonadIO m => [Dependency] -> m () -> IO (MaybeExe m)
+runIfInstalled ds x = do
+  missing <- filterMissing ds
+  return $ if null [m | Required m <- missing]
+    then Installed x [m | Optional m <- missing]
+    else Missing missing
 
 spawnIfInstalled :: MonadIO m => String -> IO (MaybeExe m)
-spawnIfInstalled exe = runIfInstalled [exe] $ spawn exe
+spawnIfInstalled exe = runIfInstalled [Required exe] $ spawn exe
 
 spawnCmdIfInstalled :: MonadIO m => String -> [String] -> IO (MaybeExe m)
-spawnCmdIfInstalled exe args = runIfInstalled [exe] $ spawnCmd exe args
+spawnCmdIfInstalled exe args = runIfInstalled [Required exe] $ spawnCmd exe args
 
 whenInstalled :: Monad m => MaybeExe m -> m ()
-whenInstalled (Installed x) = x
-whenInstalled _ = return ()
+whenInstalled (Installed x _) = x
+whenInstalled _               = return ()
 
 skip :: Monad m => m ()
 skip = return ()
 
 noCheck :: Monad m => a () -> m (MaybeExe a)
-noCheck = return . Installed
+noCheck = return . flip Installed []
 
 --------------------------------------------------------------------------------
 -- | Opening subshell
@@ -78,7 +91,7 @@ soundDir :: FilePath
 soundDir = "sound"
 
 spawnSound :: MonadIO m => FilePath -> m () -> m () -> IO (MaybeExe m)
-spawnSound file pre post = runIfInstalled ["paplay"]
+spawnSound file pre post = runIfInstalled [Required "paplay"]
   $ pre >> playSound file >> post
 
 playSound :: MonadIO m => FilePath -> m ()

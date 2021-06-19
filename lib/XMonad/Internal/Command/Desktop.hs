@@ -91,7 +91,7 @@ runTerm :: IO MaybeX
 runTerm = spawnIfInstalled myTerm
 
 runTMux :: IO MaybeX
-runTMux = runIfInstalled [myTerm, "tmux", "bash"] cmd
+runTMux = runIfInstalled [Required myTerm, Required "tmux", Required "bash"] cmd
   where
     cmd = spawn
       $ "tmux has-session"
@@ -101,7 +101,7 @@ runTMux = runIfInstalled [myTerm, "tmux", "bash"] cmd
     msg = "could not connect to tmux session"
 
 runCalc :: IO MaybeX
-runCalc = runIfInstalled [myTerm, "R"] $ spawnCmd myTerm ["-e", "R"]
+runCalc = runIfInstalled [Required myTerm, Required "R"] $ spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: IO MaybeX
 runBrowser = spawnIfInstalled myBrowser
@@ -144,7 +144,7 @@ runVolumeMute = spawnSound volumeChangeSound (void toggleMute) $ return ()
 -- | System commands
 
 runToggleBluetooth :: IO MaybeX
-runToggleBluetooth = runIfInstalled [myBluetooth] $ spawn
+runToggleBluetooth = runIfInstalled [Required myBluetooth] $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
   #!|| "a=off"
@@ -167,7 +167,7 @@ runToggleDPMS :: X ()
 runToggleDPMS = io $ void callToggle
 
 runToggleEthernet :: IO MaybeX
-runToggleEthernet = runIfInstalled ["nmcli"] $ spawn
+runToggleEthernet = runIfInstalled [Required "nmcli"] $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
   #!|| "a=disconnect"
@@ -225,7 +225,7 @@ getCaptureDir = do
     fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> IO MaybeX
-runFlameshot mode = runIfInstalled [myCapture] $ do
+runFlameshot mode = runIfInstalled [Required myCapture] $ do
   ssDir <- io getCaptureDir
   spawnCmd myCapture $ mode : ["-p", ssDir]
 
@@ -243,6 +243,6 @@ runScreenCapture :: IO MaybeX
 runScreenCapture = runFlameshot "screen"
 
 runCaptureBrowser :: IO MaybeX
-runCaptureBrowser = runIfInstalled [myImageBrowser] $ do
+runCaptureBrowser = runIfInstalled [Required myImageBrowser] $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]
