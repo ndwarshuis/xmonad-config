@@ -7,6 +7,7 @@ module XMonad.Internal.Shell
   , MaybeX
   , IOMaybeX
   , runIfInstalled
+  , warnMissing
   , whenInstalled
   , spawnIfInstalled
   , spawnCmdIfInstalled
@@ -44,6 +45,13 @@ data MaybeExe m = Installed (m ()) [String] | Missing [Dependency] | Ignore
 type MaybeX = MaybeExe X
 
 type IOMaybeX = IO MaybeX
+
+warnMissing :: Dependency -> IO ()
+warnMissing d            = case d of
+  Required d' -> warn "required" d'
+  Optional d' -> warn "optional" d'
+  where
+    warn t n = putStrLn $ "WARNING: " ++ t ++ " executable not found: " ++ n
 
 exeInstalled :: String -> IO Bool
 exeInstalled x = isJust <$> findExecutable x

@@ -74,10 +74,11 @@ main = do
         , childPIDs = [p]
         , childHandles = [h]
         }
-  ekbs <- evalExternal $ externalBindings ts
+  (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings ts
+  mapM_ warnMissing missing
   launch
     $ ewmh
-    $ addKeymap (filterExternal ekbs)
+    $ addKeymap ekbs
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
@@ -463,13 +464,15 @@ evalExternal = mapM go
 evalKeyBinding :: Monad m => KeyBinding (m a) -> m (KeyBinding a)
 evalKeyBinding k@KeyBinding { kbAction = a } = (\b -> k { kbAction = b }) <$> a
 
-filterExternal :: [KeyGroup MaybeX] -> [KeyGroup (X ())]
-filterExternal = fmap go
+filterExternal :: [KeyGroup MaybeX] -> ([KeyGroup (X ())], [Dependency])
+filterExternal kgs = let kgs' = fmap go kgs in (fst <$> kgs', concatMap snd kgs')
   where
-    go k@KeyGroup { kgBindings = bs } =
-      k { kgBindings = mapMaybe go' bs }
-    go' k@KeyBinding { kbAction = Installed x _ } = Just $ k { kbAction = x }
-    go' _                                         = Nothing
+    go k@KeyGroup { kgBindings = bs } = let bs' = go' <$> bs in
+      (k { kgBindings = mapMaybe fst bs' }, concatMap snd bs')
+    go' k@KeyBinding { kbAction = a } = case a of
+      Installed x ds -> (Just $ k { kbAction = x }, fmap Optional ds)
+      Missing ds     -> (Nothing, ds)
+      Ignore         -> (Nothing, [])
 
 externalBindings :: ThreadState -> [KeyGroup (IO MaybeX)]
 externalBindings ts =
