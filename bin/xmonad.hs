@@ -75,6 +75,11 @@ main = do
         , childHandles = [h]
         }
   (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings ts
+  -- TODO this seems really dumb but I can't print outside the launch function;
+  -- this seems like a buffering problem since I can print something here and
+  -- then print from the launch function (eg in the X monad) and both messages
+  -- will print. However, trying to flush the print output from here makes
+  -- xmonad bootloop
   let missingErrs = warnMissing <$> missing
   launch
     $ ewmh
@@ -117,7 +122,7 @@ runCleanup ts = io $ do
 -- TODO add _NET_DESKTOP_VIEWPORTS to _NET_SUPPORTED?
 myStartupHook :: [String] -> X ()
 myStartupHook msgs = setDefaultCursor xC_left_ptr
-  <+> (io $ mapM_ print msgs)
+  <+> io (mapM_ print msgs)
   <+> docksStartupHook
   <+> startupHook def
 
