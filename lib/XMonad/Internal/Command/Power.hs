@@ -31,8 +31,8 @@ import           XMonad.Prompt.ConfirmPrompt
 --------------------------------------------------------------------------------
 -- | Core commands
 
-runScreenLock :: X ()
-runScreenLock = spawn "screenlock"
+runScreenLock :: IOMaybeX
+runScreenLock = spawnIfInstalled "screenlock"
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -119,6 +119,6 @@ runPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
     sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
     executeAction a = case toEnum $ read a of
       Poweroff  -> runPowerOff
-      Shutdown  -> runScreenLock >> runSuspend
-      Hibernate -> runScreenLock >> runHibernate
+      Shutdown  -> (io runScreenLock >>= whenInstalled) >> runSuspend
+      Hibernate -> (io runScreenLock >>= whenInstalled) >> runHibernate
       Reboot    -> runReboot

@@ -18,6 +18,7 @@ import           Control.Monad.Reader
 import           Graphics.X11.Types
 
 import           System.IO
+import           System.Directory (getXdgDirectory, XdgDirectory(..))
 
 import           XMonad.Core              hiding (spawn)
 import           XMonad.Internal.Process
@@ -25,13 +26,28 @@ import           XMonad.Internal.Shell
 import           XMonad.Util.NamedActions
 
 --------------------------------------------------------------------------------
--- | Other internal functions
+-- | DMenu executables
 
 myDmenuCmd :: String
 myDmenuCmd = "rofi"
 
-spawnDmenuCmd :: [String] -> X ()
-spawnDmenuCmd = spawnCmd myDmenuCmd
+myDmenuDevices :: String
+myDmenuDevices = "rofi-dev"
+
+myDmenuPasswords :: String
+myDmenuPasswords = "rofi-bw"
+
+myDmenuMonitors :: String
+myDmenuMonitors = "rofi-autorandr"
+
+myDmenuNetworks :: String
+myDmenuNetworks = "networkmanager_dmenu"
+
+--------------------------------------------------------------------------------
+-- | Other internal functions
+
+spawnDmenuCmd :: [String] -> IO MaybeX
+spawnDmenuCmd = spawnCmdIfInstalled myDmenuCmd
 
 themeArgs :: String -> [String]
 themeArgs hexColor =
@@ -45,18 +61,19 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 --------------------------------------------------------------------------------
 -- | Exported Commands
 
-devSecrets :: [String]
-devSecrets = ["-c", "/home/ndwar/.config/rofi/devices.yml"]
+runDevMenu :: IO MaybeX
+runDevMenu = runIfInstalled [myDmenuDevices] $ do
+  c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
+  spawnCmd myDmenuDevices
+    $ ["-c", c]
+    ++ "--" : themeArgs "#999933"
+    ++ myDmenuMatchingArgs
 
-runDevMenu :: X ()
-runDevMenu = spawnCmd "rofi-dev" $ devSecrets ++ rofiArgs
-  where
-    rofiArgs = "--" : themeArgs "#999933" ++ myDmenuMatchingArgs
+runBwMenu :: IO MaybeX
+runBwMenu = runIfInstalled [myDmenuPasswords] $
+  spawnCmd myDmenuPasswords $ ["-c", "--"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
-runBwMenu :: X ()
-runBwMenu = spawnCmd "rofi-bw" $ ["-c", "--"] ++ themeArgs "#bb6600"
-  ++ myDmenuMatchingArgs
-
+-- TODO what to do with this if rofi doesn't exist?
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
   (h, _, _, _) <- io $ createProcess' $ (shell' cmd) { std_in = CreatePipe }
@@ -64,24 +81,25 @@ runShowKeys x = addName "Show Keybindings" $ do
   where cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
           ++ themeArgs "#a200ff" ++ myDmenuMatchingArgs
 
-runCmdMenu :: X ()
+runCmdMenu :: IO MaybeX
 runCmdMenu = spawnDmenuCmd ["-show", "run"]
 
-runAppMenu :: X ()
+runAppMenu :: IO MaybeX
 runAppMenu = spawnDmenuCmd ["-show", "drun"]
 
-runClipMenu :: X ()
+-- TODO this also depends on greenclip
+runClipMenu :: IO MaybeX
 runClipMenu = spawnDmenuCmd $
   [ "-modi", "\"clipboard:greenclip print\""
   , "-show", "clipboard"
   , "-run-command", "'{cmd}'"
   ] ++ themeArgs "#00c44e"
 
-runWinMenu :: X ()
+runWinMenu :: IO MaybeX
 runWinMenu = spawnDmenuCmd ["-show", "window"]
 
-runNetMenu :: X ()
-runNetMenu = spawnCmd "networkmanager_dmenu" $ themeArgs "#ff3333"
+runNetMenu :: IO MaybeX
+runNetMenu = spawnCmdIfInstalled myDmenuNetworks $ themeArgs "#ff3333"
 
-runAutorandrMenu :: X ()
-runAutorandrMenu = spawnCmd "rofi-autorandr" $ themeArgs "#ff0066"
+runAutorandrMenu :: IO MaybeX
+runAutorandrMenu = spawnCmdIfInstalled myDmenuMonitors $ themeArgs "#ff0066"

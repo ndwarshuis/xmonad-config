@@ -56,7 +56,7 @@ removedHasDrive [_, a] = maybe False (driveFlag `elem`)
 removedHasDrive _ = False
 
 playSoundMaybe :: FilePath -> Bool -> IO ()
-playSoundMaybe p b = when b $ spawnSound p
+playSoundMaybe p b = when b $ playSound p
 
 -- NOTE: the udisks2 service should be already running for this module to work.
 -- If it not already, we won't see any signals from the dbus until it is

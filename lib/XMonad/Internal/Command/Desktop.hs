@@ -52,75 +52,103 @@ import           XMonad.Internal.Shell
 import           XMonad.Operations
 
 --------------------------------------------------------------------------------
--- | Some nice apps
+-- | My Executables
 
 myTerm :: String
 myTerm = "urxvt"
 
-runTerm :: X ()
-runTerm = spawn myTerm
+myBrowser :: String
+myBrowser = "brave-accel"
 
-runTMux :: X ()
-runTMux = spawn
-  $ "tmux has-session"
-  #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
-  #!|| fmtNotifyCmd defNoteError { body = Just $ Text msg }
-  where
-    c = "exec tmux attach-session -d"
-    msg = "could not connect to tmux session"
-
-runCalc :: X ()
-runCalc = spawnCmd myTerm ["-e", "R"]
-
-runBrowser :: X ()
-runBrowser = spawn "brave-accel"
-
-runEditor :: X ()
-runEditor = spawnCmd "emacsclient"
-  ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
-
-runFileManager :: X ()
-runFileManager = spawn "pcmanfm"
-
---------------------------------------------------------------------------------
--- | Multimedia Commands
+myEditor :: String
+myEditor = "emacsclient"
 
 myMultimediaCtl :: String
 myMultimediaCtl = "playerctl"
 
-runTogglePlay :: X ()
-runTogglePlay = spawnCmd myMultimediaCtl ["play-pause"]
+myBluetooth :: String
+myBluetooth = "bluetoothctl"
 
-runPrevTrack :: X ()
-runPrevTrack = spawnCmd myMultimediaCtl ["previous"]
+myCapture :: String
+myCapture = "flameshot"
 
-runNextTrack :: X ()
-runNextTrack = spawnCmd myMultimediaCtl ["next"]
+myImageBrowser :: String
+myImageBrowser = "feh"
 
-runStopPlay :: X ()
-runStopPlay = spawnCmd myMultimediaCtl ["stop"]
+--------------------------------------------------------------------------------
+-- | Misc constants
 
 volumeChangeSound :: FilePath
 volumeChangeSound = "smb_fireball.wav"
 
-runVolumeDown :: X ()
-runVolumeDown =  spawnSound volumeChangeSound >> void (lowerVolume 2)
+ethernetIface :: String
+ethernetIface = "enp7s0f1"
 
-runVolumeUp :: X ()
-runVolumeUp = spawnSound volumeChangeSound >> void (raiseVolume 2)
+--------------------------------------------------------------------------------
+-- | Some nice apps
 
-runVolumeMute :: X ()
-runVolumeMute = void toggleMute >> spawnSound volumeChangeSound
+runTerm :: IO MaybeX
+runTerm = spawnIfInstalled myTerm
+
+runTMux :: IO MaybeX
+runTMux = runIfInstalled [myTerm, "tmux", "bash"] cmd
+  where
+    cmd = spawn
+      $ "tmux has-session"
+      #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
+      #!|| fmtNotifyCmd defNoteError { body = Just $ Text msg }
+    c = "exec tmux attach-session -d"
+    msg = "could not connect to tmux session"
+
+runCalc :: IO MaybeX
+runCalc = runIfInstalled [myTerm, "R"] $ spawnCmd myTerm ["-e", "R"]
+
+runBrowser :: IO MaybeX
+runBrowser = spawnIfInstalled myBrowser
+
+runEditor :: IO MaybeX
+runEditor = spawnCmdIfInstalled myEditor
+  ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
+
+runFileManager :: IO MaybeX
+runFileManager = spawnIfInstalled "pcmanfm"
+
+--------------------------------------------------------------------------------
+-- | Multimedia Commands
+
+runMultimediaIfInstalled :: String -> IO MaybeX
+runMultimediaIfInstalled cmd = spawnCmdIfInstalled myMultimediaCtl [cmd]
+
+runTogglePlay :: IO MaybeX
+runTogglePlay = runMultimediaIfInstalled "play-pause"
+
+runPrevTrack :: IO MaybeX
+runPrevTrack = runMultimediaIfInstalled "previous"
+
+runNextTrack :: IO MaybeX
+runNextTrack = runMultimediaIfInstalled "next"
+
+runStopPlay :: IO MaybeX
+runStopPlay = runMultimediaIfInstalled "stop"
+
+runVolumeDown :: IO MaybeX
+runVolumeDown =  spawnSound volumeChangeSound (return ()) $ void (lowerVolume 2)
+
+runVolumeUp :: IO MaybeX
+runVolumeUp = spawnSound volumeChangeSound (return ()) $ void (raiseVolume 2)
+
+runVolumeMute :: IO MaybeX
+runVolumeMute = spawnSound volumeChangeSound (void toggleMute) $ return ()
 
 --------------------------------------------------------------------------------
 -- | System commands
 
-runToggleBluetooth :: X ()
-runToggleBluetooth = spawn
-  $ "bluetoothctl show | grep -q \"Powered: no\""
+runToggleBluetooth :: IO MaybeX
+runToggleBluetooth = runIfInstalled [myBluetooth] $ spawn
+  $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
   #!|| "a=off"
-  #!>> fmtCmd "bluetoothctl" ["power", "$a", ">", "/dev/null"]
+  #!>> fmtCmd myBluetooth ["power", "$a", ">", "/dev/null"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
 runIncBacklight :: X ()
@@ -138,11 +166,8 @@ runMaxBacklight = io $ void callMaxBrightness
 runToggleDPMS :: X ()
 runToggleDPMS = io $ void callToggle
 
-ethernetIface :: String
-ethernetIface = "enp7s0f1"
-
-runToggleEthernet :: X ()
-runToggleEthernet = spawn
+runToggleEthernet :: IO MaybeX
+runToggleEthernet = runIfInstalled ["nmcli"] $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
   #!|| "a=disconnect"
@@ -199,25 +224,25 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
-runFlameshot :: String -> X ()
-runFlameshot mode = do
+runFlameshot :: String -> IO MaybeX
+runFlameshot mode = runIfInstalled [myCapture] $ do
   ssDir <- io getCaptureDir
-  spawnCmd "flameshot" $ mode : ["-p", ssDir]
+  spawnCmd myCapture $ mode : ["-p", ssDir]
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
-runAreaCapture :: X ()
+runAreaCapture :: IO MaybeX
 runAreaCapture = runFlameshot "gui"
 
 -- myWindowCap = "screencap -w" --external script
 
-runScreenCapture :: X ()
-runScreenCapture = runFlameshot "screen"
-
-runDesktopCapture :: X ()
+runDesktopCapture :: IO MaybeX
 runDesktopCapture = runFlameshot "full"
 
-runCaptureBrowser :: X ()
-runCaptureBrowser = do
+runScreenCapture :: IO MaybeX
+runScreenCapture = runFlameshot "screen"
+  
+runCaptureBrowser :: IO MaybeX
+runCaptureBrowser = runIfInstalled [myImageBrowser] $ do
   dir <- io getCaptureDir
-  spawnCmd "feh" [dir]
+  spawnCmd myImageBrowser [dir]

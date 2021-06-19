@@ -23,6 +23,7 @@ import           System.IO.Streams.UnixSocket
 
 import           XMonad.Core
 import           XMonad.Internal.Command.Power
+import           XMonad.Internal.Shell
 import           XMonad.Internal.Concurrent.ClientMessage
 
 --------------------------------------------------------------------------------
@@ -100,4 +101,6 @@ handleACPI tag = do
     Sleep -> runSuspendPrompt
     LidClose -> do
       status <- io isDischarging
-      forM_ status $ \s -> runScreenLock >> when s runSuspend
+      forM_ status $ \s -> do
+        io runScreenLock >>= whenInstalled
+        when s runSuspend

@@ -14,7 +14,7 @@ import           Data.List
     , sortBy
     , sortOn
     )
-import           Data.Maybe                                   (isJust)
+import           Data.Maybe                                   (isJust, mapMaybe)
 import           Data.Monoid                                  (All (..))
 
 import           Graphics.X11.Types
@@ -74,9 +74,10 @@ main = do
         , childPIDs = [p]
         , childHandles = [h]
         }
+  ekbs <- evalExternal $ externalBindings ts
   launch
     $ ewmh
-    $ addKeymap ts
+    $ addKeymap (filterExternal ekbs)
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
@@ -369,126 +370,162 @@ xMsgEventHook _ = return (All True)
 myModMask :: KeyMask
 myModMask = mod4Mask
 
-addKeymap :: ThreadState -> XConfig l -> XConfig l
-addKeymap ts = addDescrKeys' ((myModMask, xK_F1), runShowKeys) (mkKeys ts)
+addKeymap :: [KeyGroup (X ())] -> XConfig l -> XConfig l
+addKeymap external = addDescrKeys' ((myModMask, xK_F1), runShowKeys)
+  (\c -> concatMap (mkNamedSubmap c) $ internalBindings c ++ external)
 
-mkKeys :: ThreadState -> XConfig Layout -> [((KeyMask, KeySym), NamedAction)]
-mkKeys ts c =
-  mkNamedSubmap "Window Layouts"
-  [ ("M-j", "focus down", windows W.focusDown)
-  , ("M-k", "focus up", windows W.focusUp)
-  , ("M-m", "focus master", windows W.focusMaster)
-  , ("M-d", "focus master", runHide)
-  , ("M-S-j", "swap down", windows W.swapDown)
-  , ("M-S-k", "swap up", windows W.swapUp)
-  , ("M-S-m", "swap master", windows W.swapMaster)
-  , ("M-<Return>", "next layout", sendMessage NextLayout)
-  , ("M-S-<Return>", "reset layout", setLayout $ layoutHook c)
-  , ("M-t", "sink tiling", withFocused $ windows . W.sink)
-  , ("M-S-t", "float tiling", withFocused O.float)
-  , ("M--", "shrink", sendMessage Shrink)
-  , ("M-=", "expand", sendMessage Expand)
-  , ("M-S--", "remove master window", sendMessage $ IncMasterN (-1))
-  , ("M-S-=", "add master window", sendMessage $ IncMasterN 1)
-  ] ++
+internalBindings :: XConfig Layout -> [KeyGroup (X ())]
+internalBindings c =
+  [ KeyGroup "Window Layouts"
+    [ KeyBinding "M-j" "focus down" $ windows W.focusDown
+    , KeyBinding "M-k" "focus up" $ windows W.focusUp
+    , KeyBinding "M-m" "focus master" $ windows W.focusMaster
+    , KeyBinding "M-d" "focus master" runHide
+    , KeyBinding "M-S-j" "swap down" $ windows W.swapDown
+    , KeyBinding "M-S-k" "swap up" $ windows W.swapUp
+    , KeyBinding "M-S-m" "swap master" $ windows W.swapMaster
+    , KeyBinding "M-<Return>" "next layout" $ sendMessage NextLayout
+    , KeyBinding "M-S-<Return>" "reset layout" $ setLayout $ layoutHook c
+    , KeyBinding "M-t" "sink tiling" $ withFocused $ windows . W.sink
+    , KeyBinding "M-S-t" "float tiling" $ withFocused O.float
+    , KeyBinding "M--" "shrink" $ sendMessage Shrink
+    , KeyBinding "M-=" "expand" $ sendMessage Expand
+    , KeyBinding "M-S--" "remove master window" $ sendMessage $ IncMasterN (-1)
+    , KeyBinding "M-S-=" "add master window" $ sendMessage $ IncMasterN 1
+    ]
 
-  mkNamedSubmap "Workspaces"
-  -- ASSUME standard workspaces only use numbers 0-9 (otherwise we won't get
-  -- valid keysyms)
-  ([ (mods ++ n, msg ++ n, f n) | n <- myWorkspaces
-    , (mods, msg, f) <-
-      [ ("M-", "switch to workspace ", windows . W.view)
-      , ("M-S-", "move client to workspace ", windows . W.shift)
-      , ("M-C-", "follow client to workspace ", \n' -> do
-            windows $ W.shift n'
-            windows $ W.view n')
-      ]
-   ] ++
-   [ ("M-M1-l", "move up workspace", moveTo Next HiddenNonEmptyWS)
-   , ("M-M1-h", "move down workspace", moveTo Prev HiddenNonEmptyWS)
-   ]) ++
+  , KeyGroup "Workspaces"
+    -- ASSUME standard workspaces only use numbers 0-9 (otherwise we won't get
+    -- valid keysyms)
+    ([ KeyBinding (mods ++ n) (msg ++ n) (f n) | n <- myWorkspaces
+      , (mods, msg, f) <-
+        [ ("M-", "switch to workspace ", windows . W.view)
+        , ("M-S-", "move client to workspace ", windows . W.shift)
+        , ("M-C-", "follow client to workspace ", \n' -> do
+              windows $ W.shift n'
+              windows $ W.view n')
+        ]
+     ] ++
+     [ KeyBinding "M-M1-l" "move up workspace" $ moveTo Next HiddenNonEmptyWS
+     , KeyBinding "M-M1-h" "move down workspace" $ moveTo Prev HiddenNonEmptyWS
+     ])
 
-  mkNamedSubmap "Dynamic Workspaces"
-  [ ("M-C-" ++ [k], "launch/switch to " ++ n, cmd)
-  |  DynWorkspace { dwTag = t, dwKey = k, dwCmd = a, dwName = n } <- allDWs,
-     let cmd = case a of
-           Just a' -> spawnOrSwitch t a'
-           Nothing -> windows $ W.view t
-  ] ++
+  , KeyGroup "Dynamic Workspaces"
+    [ KeyBinding ("M-C-" ++ [k]) ("launch/switch to " ++ n) cmd
+    |  DynWorkspace { dwTag = t, dwKey = k, dwCmd = a, dwName = n } <- allDWs,
+       let cmd = case a of
+             Just a' -> spawnOrSwitch t a'
+             Nothing -> windows $ W.view t
+    ]
 
-  mkNamedSubmap "Screens"
-  [ ("M-l", "move up screen", nextScreen)
-  , ("M-h", "move down screen", prevScreen)
-  , ("M-C-l", "follow client up screen", shiftNextScreen >> nextScreen)
-  , ("M-C-h", "follow client down screen", shiftPrevScreen >> prevScreen)
-  , ("M-S-l", "shift workspace up screen", swapNextScreen >> nextScreen)
-  , ("M-S-h", "shift workspace down screen", swapPrevScreen >> prevScreen)
-  ] ++
-
-  mkNamedSubmap "Actions"
-  [ ("M-q", "close window", kill1)
-  , ("M-r", "run program", runCmdMenu)
-  , ("M-<Space>", "warp pointer", warpToWindow 0.5 0.5)
-  , ("M-C-s", "capture area", runAreaCapture)
-  , ("M-C-S-s", "capture screen", runScreenCapture)
-  , ("M-C-d", "capture desktop", runDesktopCapture)
-  , ("M-C-b", "browse captures", runCaptureBrowser)
-  -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
-  ] ++
-
-  mkNamedSubmap "Launchers"
-  [ ("<XF86Search>", "select/launch app", runAppMenu)
-  , ("M-g", "launch clipboard manager", runClipMenu)
-  , ("M-a", "launch network selector", runNetMenu)
-  , ("M-w", "launch window selector", runWinMenu)
-  , ("M-u", "launch device selector", runDevMenu)
-  , ("M-b", "launch bitwarden selector", runBwMenu)
-  , ("M-C-e", "launch editor", runEditor)
-  , ("M-C-w", "launch browser", runBrowser)
-  , ("M-C-t", "launch terminal with tmux", runTMux)
-  , ("M-C-S-t", "launch terminal", runTerm)
-  , ("M-C-q", "launch calc", runCalc)
-  , ("M-C-f", "launch file manager", runFileManager)
-  ] ++
-
-  mkNamedSubmap "Multimedia"
-  [ ("<XF86AudioPlay>", "toggle play/pause", runTogglePlay)
-  , ("<XF86AudioPrev>", "previous track", runPrevTrack)
-  , ("<XF86AudioNext>", "next track", runNextTrack)
-  , ("<XF86AudioStop>", "stop", runStopPlay)
-  , ("<XF86AudioLowerVolume>", "volume down", runVolumeDown)
-  , ("<XF86AudioRaiseVolume>", "volume up", runVolumeUp)
-  , ("<XF86AudioMute>", "volume mute", runVolumeMute)
-  ] ++
+  , KeyGroup "Screens"
+    [ KeyBinding "M-l" "move up screen" nextScreen
+    , KeyBinding "M-h" "move down screen" prevScreen
+    , KeyBinding "M-C-l" "follow client up screen" $ shiftNextScreen >> nextScreen
+    , KeyBinding "M-C-h" "follow client down screen" $ shiftPrevScreen >> prevScreen
+    , KeyBinding "M-S-l" "shift workspace up screen" $ swapNextScreen >> nextScreen
+    , KeyBinding "M-S-h" "shift workspace down screen" $ swapPrevScreen >> prevScreen
+    ]
 
   -- dummy map for dunst commands (defined separately but this makes them show
   -- up in the help menu)
-  mkNamedSubmap "Dunst"
-  [ ("M-`", "dunst history", return ())
-  , ("M-S-`", "dunst close", return ())
-  , ("M-M1-`", "dunst context menu", return ())
-  , ("M-C-`", "dunst close all", return ())
-  ] ++
-
-  mkNamedSubmap "System"
-  [ ("M-.", "backlight up", runIncBacklight)
-  , ("M-,", "backlight down", runDecBacklight)
-  , ("M-M1-,", "backlight min", runMinBacklight)
-  , ("M-M1-.", "backlight max", runMaxBacklight)
-  , ("M-<End>", "power menu", runPowerPrompt)
-  , ("M-<Home>", "quit xmonad", runQuitPrompt)
-  , ("M-<Delete>", "lock screen", runScreenLock)
-  -- M-<F1> reserved for showing the keymap
-  , ("M-<F2>", "restart xmonad", runCleanup ts >> runRestart)
-  , ("M-<F3>", "recompile xmonad", runRecompile)
-  , ("M-<F7>", "start Isync Service", runStartISyncService)
-  , ("M-C-<F7>", "start Isync Timer", runStartISyncTimer)
-  , ("M-<F8>", "select autorandr profile", runAutorandrMenu)
-  , ("M-<F9>", "toggle ethernet", runToggleEthernet)
-  , ("M-<F10>", "toggle bluetooth", runToggleBluetooth)
-  , ("M-<F11>", "toggle screensaver", runToggleDPMS)
-  , ("M-<F12>", "switch gpu", runOptimusPrompt)
+  , KeyGroup "Dunst"
+    [ KeyBinding "M-`" "dunst history" skip
+    , KeyBinding "M-S-`" "dunst close" skip
+    , KeyBinding "M-M1-`" "dunst context menu" skip
+    , KeyBinding "M-C-`" "dunst close all" skip
+    ]
   ]
+
+mkNamedSubmap :: XConfig Layout ->  KeyGroup (X ()) -> [((KeyMask, KeySym), NamedAction)]
+mkNamedSubmap c KeyGroup { kgHeader = h, kgBindings = b } =
+  (subtitle h:) $ mkNamedKeymap c
+  $ (\KeyBinding{kbSyms = s, kbDesc = d, kbAction = a} -> (s, addName d a))
+  <$> b
+
+data KeyBinding a = KeyBinding
+  { kbSyms :: String
+  , kbDesc :: String
+  , kbAction :: a
+  }
+
+data KeyGroup a = KeyGroup
+  { kgHeader :: String
+  , kgBindings :: [KeyBinding a]
+  }
+
+evalExternal :: [KeyGroup (IO MaybeX)] -> IO [KeyGroup MaybeX]
+evalExternal = mapM go
   where
-    mkNamedSubmap header bindings = (subtitle header:) $ mkNamedKeymap c
-      $ map (\(key, name, cmd) -> (key, addName name cmd)) bindings
+    go k@KeyGroup { kgBindings = bs } =
+      (\bs' -> k { kgBindings = bs' }) <$> mapM evalKeyBinding bs
+
+evalKeyBinding :: Monad m => KeyBinding (m a) -> m (KeyBinding a)
+evalKeyBinding k@KeyBinding { kbAction = a } = (\b -> k { kbAction = b }) <$> a
+
+filterExternal :: [KeyGroup MaybeX] -> [KeyGroup (X ())]
+filterExternal = fmap go
+  where
+    go k@KeyGroup { kgBindings = bs } =
+      k { kgBindings = mapMaybe go' bs }
+    go' k@KeyBinding { kbAction = Installed x } = Just $ k { kbAction = x }
+    go' _ = Nothing
+
+externalBindings :: ThreadState -> [KeyGroup (IO MaybeX)]
+externalBindings ts =
+  [ KeyGroup "Launchers"
+    [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
+    , KeyBinding "M-g" "launch clipboard manager" runClipMenu
+    , KeyBinding "M-a" "launch network selector" runNetMenu
+    , KeyBinding "M-w" "launch window selector" runWinMenu
+    , KeyBinding "M-u" "launch device selector" runDevMenu
+    , KeyBinding "M-b" "launch bitwarden selector" runBwMenu
+    , KeyBinding "M-C-e" "launch editor" runEditor
+    , KeyBinding "M-C-w" "launch browser" runBrowser
+    , KeyBinding "M-C-t" "launch terminal with tmux" runTMux
+    , KeyBinding "M-C-S-t" "launch terminal" runTerm
+    , KeyBinding "M-C-q" "launch calc" runCalc
+    , KeyBinding "M-C-f" "launch file manager" runFileManager
+    ]
+
+  , KeyGroup "Actions"
+    [ KeyBinding "M-q" "close window" $ noCheck kill1
+    , KeyBinding "M-r" "run program" runCmdMenu
+    , KeyBinding "M-<Space>" "warp pointer" $ noCheck $ warpToWindow 0.5 0.5
+    , KeyBinding "M-C-s" "capture area" runAreaCapture
+    , KeyBinding "M-C-S-s" "capture screen" runScreenCapture
+    , KeyBinding "M-C-d" "capture desktop" runDesktopCapture
+    , KeyBinding "M-C-b" "browse captures" runCaptureBrowser
+    -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
+    ]
+
+  , KeyGroup "Multimedia"
+    [ KeyBinding "<XF86AudioPlay>" "toggle play/pause" runTogglePlay
+    , KeyBinding "<XF86AudioPrev>" "previous track" runPrevTrack
+    , KeyBinding "<XF86AudioNext>" "next track" runNextTrack
+    , KeyBinding "<XF86AudioStop>" "stop" runStopPlay
+    , KeyBinding "<XF86AudioLowerVolume>" "volume down" runVolumeDown
+    , KeyBinding "<XF86AudioRaiseVolume>" "volume up" runVolumeUp
+    , KeyBinding "<XF86AudioMute>" "volume mute" runVolumeMute
+    ]
+  
+  , KeyGroup "System"
+    [ KeyBinding "M-." "backlight up" $ noCheck runIncBacklight
+    , KeyBinding "M-," "backlight down" $ noCheck runDecBacklight
+    , KeyBinding "M-M1-," "backlight min" $ noCheck runMinBacklight
+    , KeyBinding "M-M1-." "backlight max" $ noCheck runMaxBacklight
+    , KeyBinding "M-<End>" "power menu" $ noCheck runPowerPrompt
+    , KeyBinding "M-<Home>" "quit xmonad" $ noCheck runQuitPrompt
+    , KeyBinding "M-<Delete>" "lock screen" runScreenLock
+    -- M-<F1> reserved for showing the keymap
+    , KeyBinding "M-<F2>" "restart xmonad" $ noCheck (runCleanup ts >> runRestart)
+    , KeyBinding "M-<F3>" "recompile xmonad" $ noCheck runRecompile
+    , KeyBinding "M-<F7>" "start Isync Service" $ noCheck runStartISyncService
+    , KeyBinding "M-C-<F7>" "start Isync Timer" $ noCheck runStartISyncTimer
+    , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
+    , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
+    , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
+    , KeyBinding "M-<F11>" "toggle screensaver" $ noCheck runToggleDPMS
+    , KeyBinding "M-<F12>" "switch gpu" $ noCheck runOptimusPrompt
+    ]
+  ]
