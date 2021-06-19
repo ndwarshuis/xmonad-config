@@ -474,10 +474,11 @@ filterExternal kgs = let kgs' = fmap go kgs in (fst <$> kgs', concatMap snd kgs'
   where
     go k@KeyGroup { kgBindings = bs } = let bs' = go' <$> bs in
       (k { kgBindings = mapMaybe fst bs' }, concatMap snd bs')
-    go' k@KeyBinding { kbAction = a } = case a of
-      Installed x ds -> (Just $ k { kbAction = x }, fmap Optional ds)
-      Missing ds     -> (Nothing, ds)
+    go' k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
+      Installed x ds -> (Just $ k{ kbAction = x }, fmap Optional ds)
+      Missing ds     -> (Just $ k{ kbDesc = flagMissing d, kbAction = skip }, ds)
       Ignore         -> (Nothing, [])
+    flagMissing s = "[!!!]" ++ s
 
 externalBindings :: ThreadState -> [KeyGroup (IO MaybeX)]
 externalBindings ts =
