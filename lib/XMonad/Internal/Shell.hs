@@ -46,12 +46,12 @@ type MaybeX = MaybeExe X
 
 type IOMaybeX = IO MaybeX
 
-warnMissing :: Dependency -> IO ()
+warnMissing :: Dependency -> String
 warnMissing d            = case d of
   Required d' -> warn "required" d'
   Optional d' -> warn "optional" d'
   where
-    warn t n = putStrLn $ "WARNING: " ++ t ++ " executable not found: " ++ n
+    warn t n = "WARNING: " ++ t ++ " executable not found: " ++ n
 
 exeInstalled :: String -> IO Bool
 exeInstalled x = isJust <$> findExecutable x

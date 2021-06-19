@@ -75,7 +75,7 @@ main = do
         , childHandles = [h]
         }
   (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings ts
-  mapM_ warnMissing missing
+  let missingErrs = warnMissing <$> missing
   launch
     $ ewmh
     $ addKeymap ekbs
@@ -84,7 +84,7 @@ main = do
           , layoutHook = myLayouts
           , manageHook = myManageHook
           , handleEventHook = myEventHook
-          , startupHook = myStartupHook
+          , startupHook = myStartupHook missingErrs
           , workspaces = myWorkspaces
           , logHook = myLoghook h
           , clickJustFocuses = False
@@ -110,10 +110,15 @@ runCleanup ts = io $ do
 
 --------------------------------------------------------------------------------
 -- | Startuphook configuration
+--
+-- For some reason I can't print error messages (perhaps a buffering/flushing
+-- problem) outside the 'launch' function so pass them here to be printed.
 
 -- TODO add _NET_DESKTOP_VIEWPORTS to _NET_SUPPORTED?
-myStartupHook :: X ()
-myStartupHook = setDefaultCursor xC_left_ptr <+> docksStartupHook
+myStartupHook :: [String] -> X ()
+myStartupHook msgs = setDefaultCursor xC_left_ptr
+  <+> (io $ mapM_ print msgs)
+  <+> docksStartupHook
   <+> startupHook def
 
 --------------------------------------------------------------------------------
