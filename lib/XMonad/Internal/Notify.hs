@@ -13,8 +13,10 @@ module XMonad.Internal.Notify
   , defNoteInfo
   , defNoteError
   , fmtNotifyCmd
+  , spawnNotify
   ) where
 
+import           Control.Monad.IO.Class
 import           Data.Maybe
 
 import           DBus.Notify
@@ -43,13 +45,16 @@ parseBody (Text s) = Just s
 parseBody _        = Nothing
 
 fmtNotifyCmd :: Note -> String
-fmtNotifyCmd note =
-  fmtCmd "notify-send" $ getIcon note
-    ++ getSummary note
-    ++ getBody note
+fmtNotifyCmd = fmtCmd "notify-send" . fmtNotifyArgs
+
+spawnNotify :: MonadIO m => Note -> m ()
+spawnNotify = spawnCmd "notify-send" . fmtNotifyArgs
+
+fmtNotifyArgs :: Note -> [String]
+fmtNotifyArgs n = getIcon n ++ getSummary n ++ getBody n
   where
     -- TODO add the rest of the options as needed
     getSummary = (:[]) . doubleQuote . summary
-    getIcon n = maybe [] (\i -> ["-i", case i of { Icon s -> s; File s -> s }])
-      $ appImage n
-    getBody n = maybeToList $ (fmap doubleQuote . parseBody) =<< body n
+    getIcon n' = maybe [] (\i -> ["-i", case i of { Icon s -> s; File s -> s }])
+      $ appImage n'
+    getBody n' = maybeToList $ (fmap doubleQuote . parseBody) =<< body n'

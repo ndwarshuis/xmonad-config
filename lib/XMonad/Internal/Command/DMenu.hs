@@ -21,6 +21,7 @@ import           System.Directory         (XdgDirectory (..), getXdgDirectory)
 import           System.IO
 
 import           XMonad.Core              hiding (spawn)
+import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import           XMonad.Util.NamedActions
@@ -73,13 +74,20 @@ runBwMenu :: IO MaybeX
 runBwMenu = runIfInstalled [Required myDmenuPasswords] $
   spawnCmd myDmenuPasswords $ ["-c", "--"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
--- TODO what to do with this if rofi doesn't exist?
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
-  (h, _, _, _) <- io $ createProcess' $ (shell' cmd) { std_in = CreatePipe }
-  io $ forM_ h $ \h' -> hPutStr h' (unlines $ showKm x) >> hClose h'
-  where cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
-          ++ themeArgs "#a200ff" ++ myDmenuMatchingArgs
+  s <- io $ runDMenuShowKeys x
+  ifInstalled s
+    $ spawnNotify
+    $ defNoteError { body = Just $ Text "could not display keymap" }
+
+runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> IO MaybeX
+runDMenuShowKeys kbs = runIfInstalled [Required myDmenuCmd] $ io $ do
+  (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
+  forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
+  where
+    cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
+      ++ themeArgs "#a200ff" ++ myDmenuMatchingArgs
 
 runCmdMenu :: IO MaybeX
 runCmdMenu = spawnDmenuCmd ["-show", "run"]

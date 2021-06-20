@@ -9,6 +9,7 @@ module XMonad.Internal.Shell
   , runIfInstalled
   , warnMissing
   , whenInstalled
+  , ifInstalled
   , spawnIfInstalled
   , spawnCmdIfInstalled
   , noCheck
@@ -78,8 +79,11 @@ spawnCmdIfInstalled :: MonadIO m => String -> [String] -> IO (MaybeExe m)
 spawnCmdIfInstalled exe args = runIfInstalled [Required exe] $ spawnCmd exe args
 
 whenInstalled :: Monad m => MaybeExe m -> m ()
-whenInstalled (Installed x _) = x
-whenInstalled _               = return ()
+whenInstalled = flip ifInstalled skip
+
+ifInstalled ::  Monad m => MaybeExe m -> m () -> m ()
+ifInstalled (Installed x _) _ = x
+ifInstalled _ alt             = alt
 
 skip :: Monad m => m ()
 skip = return ()
