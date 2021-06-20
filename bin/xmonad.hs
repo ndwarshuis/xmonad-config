@@ -540,6 +540,6 @@ externalBindings ts =
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
     , KeyBinding "M-<F11>" "toggle screensaver" $ noCheck runToggleDPMS
-    , KeyBinding "M-<F12>" "switch gpu" $ noCheck runOptimusPrompt
+    , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]

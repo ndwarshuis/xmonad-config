@@ -21,6 +21,7 @@ module XMonad.Internal.Shell
   , skip
   , (#!&&)
   , (#!||)
+  , (#!|)
   , (#!>>)
   ) where
 
@@ -118,6 +119,11 @@ fmtCmd cmd args = unwords $ cmd : args
 cmdA #!&& cmdB = cmdA ++ " && " ++ cmdB
 
 infixr 0 #!&&
+
+(#!|) :: String -> String -> String
+cmdA #!| cmdB = cmdA ++ " | " ++ cmdB
+
+infixr 0 #!|
 
 (#!||) :: String -> String -> String
 cmdA #!|| cmdB = cmdA ++ " || " ++ cmdB

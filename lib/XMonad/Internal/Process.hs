@@ -6,6 +6,7 @@ module XMonad.Internal.Process
   , killHandle
   , spawnPipe
   , createProcess'
+  , readCreateProcessWithExitCode'
   , proc'
   , shell'
   , spawn
@@ -58,6 +59,10 @@ addGroupSession cp = cp { create_group = True, new_session = True }
 
 createProcess' :: CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 createProcess' = withDefaultSignalHandlers . createProcess
+
+readCreateProcessWithExitCode' :: CreateProcess -> String -> IO (ExitCode, String, String)
+readCreateProcessWithExitCode' c i = withDefaultSignalHandlers
+  $ readCreateProcessWithExitCode c i
 
 shell' :: String -> CreateProcess
 shell' = addGroupSession . shell
