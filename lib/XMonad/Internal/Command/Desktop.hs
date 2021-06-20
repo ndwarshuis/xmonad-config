@@ -91,7 +91,7 @@ runTerm :: IO MaybeX
 runTerm = spawnIfInstalled myTerm
 
 runTMux :: IO MaybeX
-runTMux = runIfInstalled [Required myTerm, Required "tmux", Required "bash"] cmd
+runTMux = runIfInstalled [exe myTerm, exe "tmux", exe "bash"] cmd
   where
     cmd = spawn
       $ "tmux has-session"
@@ -101,7 +101,7 @@ runTMux = runIfInstalled [Required myTerm, Required "tmux", Required "bash"] cmd
     msg = "could not connect to tmux session"
 
 runCalc :: IO MaybeX
-runCalc = runIfInstalled [Required myTerm, Required "R"] $ spawnCmd myTerm ["-e", "R"]
+runCalc = runIfInstalled [exe myTerm, exe "R"] $ spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: IO MaybeX
 runBrowser = spawnIfInstalled myBrowser
@@ -144,7 +144,7 @@ runVolumeMute = spawnSound volumeChangeSound (void toggleMute) $ return ()
 -- | System commands
 
 runToggleBluetooth :: IO MaybeX
-runToggleBluetooth = runIfInstalled [Required myBluetooth] $ spawn
+runToggleBluetooth = runIfInstalled [exe myBluetooth] $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
   #!|| "a=off"
@@ -167,24 +167,26 @@ runToggleDPMS :: X ()
 runToggleDPMS = io $ void callToggle
 
 runToggleEthernet :: IO MaybeX
-runToggleEthernet = runIfInstalled [Required "nmcli"] $ spawn
+runToggleEthernet = runIfInstalled [exe "nmcli"] $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
   #!|| "a=disconnect"
   #!>> fmtCmd "nmcli" ["device", "$a", ethernetIface]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
-runStartISyncTimer :: X ()
-runStartISyncTimer = spawn
+runStartISyncTimer :: IO MaybeX
+runStartISyncTimer = runIfInstalled [userUnit "mbsync.timer"]
+  $ spawn
   $ "systemctl --user start mbsync.timer"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
-  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start"  }
+  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
-runStartISyncService :: X ()
-runStartISyncService = spawn
+runStartISyncService :: IO MaybeX
+runStartISyncService = runIfInstalled [userUnit "mbsync.service"]
+  $ spawn
   $ "systemctl --user start mbsync.service"
-  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed"  }
-  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync failed"  }
+  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
+  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync failed" }
 
 --------------------------------------------------------------------------------
 -- | Configuration commands
@@ -225,7 +227,7 @@ getCaptureDir = do
     fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> IO MaybeX
-runFlameshot mode = runIfInstalled [Required myCapture] $ do
+runFlameshot mode = runIfInstalled [exe myCapture] $ do
   ssDir <- io getCaptureDir
   spawnCmd myCapture $ mode : ["-p", ssDir]
 
@@ -243,6 +245,6 @@ runScreenCapture :: IO MaybeX
 runScreenCapture = runFlameshot "screen"
 
 runCaptureBrowser :: IO MaybeX
-runCaptureBrowser = runIfInstalled [Required myImageBrowser] $ do
+runCaptureBrowser = runIfInstalled [exe myImageBrowser] $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

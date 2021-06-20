@@ -129,7 +129,7 @@ runOptimusPrompt' = do
 runOptimusPrompt :: IO MaybeX
 runOptimusPrompt = do
   g <- requireOptimus
-  if g then runIfInstalled [Required myOptimusManager] runOptimusPrompt'
+  if g then runIfInstalled [exe myOptimusManager] runOptimusPrompt'
     else return Ignore
 
 --------------------------------------------------------------------------------

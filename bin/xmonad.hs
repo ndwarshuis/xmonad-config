@@ -480,7 +480,7 @@ filterExternal kgs = let kgs' = fmap go kgs in (fst <$> kgs', concatMap snd kgs'
     go k@KeyGroup { kgBindings = bs } = let bs' = go' <$> bs in
       (k { kgBindings = mapMaybe fst bs' }, concatMap snd bs')
     go' k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
-      Installed x ds -> (Just $ k{ kbAction = x }, fmap Optional ds)
+      Installed x ds -> (Just $ k{ kbAction = x }, ds)
       Missing ds     -> (Just $ k{ kbDesc = flagMissing d, kbAction = skip }, ds)
       Ignore         -> (Nothing, [])
     flagMissing s = "[!!!]" ++ s
@@ -534,8 +534,8 @@ externalBindings ts =
     -- M-<F1> reserved for showing the keymap
     , KeyBinding "M-<F2>" "restart xmonad" $ noCheck (runCleanup ts >> runRestart)
     , KeyBinding "M-<F3>" "recompile xmonad" $ noCheck runRecompile
-    , KeyBinding "M-<F7>" "start Isync Service" $ noCheck runStartISyncService
-    , KeyBinding "M-C-<F7>" "start Isync Timer" $ noCheck runStartISyncTimer
+    , KeyBinding "M-<F7>" "start Isync Service" runStartISyncService
+    , KeyBinding "M-C-<F7>" "start Isync Timer" runStartISyncTimer
     , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth

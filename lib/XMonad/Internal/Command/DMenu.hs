@@ -63,7 +63,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: IO MaybeX
-runDevMenu = runIfInstalled [Required myDmenuDevices] $ do
+runDevMenu = runIfInstalled [exe myDmenuDevices] $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
@@ -71,7 +71,7 @@ runDevMenu = runIfInstalled [Required myDmenuDevices] $ do
     ++ myDmenuMatchingArgs
 
 runBwMenu :: IO MaybeX
-runBwMenu = runIfInstalled [Required myDmenuPasswords] $
+runBwMenu = runIfInstalled [exe myDmenuPasswords] $
   spawnCmd myDmenuPasswords $ ["-c", "--"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
@@ -82,7 +82,7 @@ runShowKeys x = addName "Show Keybindings" $ do
     $ defNoteError { body = Just $ Text "could not display keymap" }
 
 runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> IO MaybeX
-runDMenuShowKeys kbs = runIfInstalled [Required myDmenuCmd] $ io $ do
+runDMenuShowKeys kbs = runIfInstalled [exe myDmenuCmd] $ io $ do
   (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
   forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
   where
