@@ -14,19 +14,20 @@ import           DBus.Client
 import           XMonad.Internal.DBus.IntelBacklight
 import           XMonad.Internal.DBus.Screensaver
 
-startXMonadService :: IO Client
+startXMonadService :: IO (Client, Maybe BacklightControls)
 startXMonadService = do
   client <- connectSession
   requestResult <- requestName client "org.xmonad" []
   -- TODO if the client is not released on shutdown the owner will be
   -- different
-  if requestResult /= NamePrimaryOwner then
+  if requestResult /= NamePrimaryOwner then do
     putStrLn "Another service owns \"org.xmonad\""
+    return (client, Nothing)
   else do
     putStrLn "Started xmonad dbus client"
-    exportIntelBacklight client
+    bc <- exportIntelBacklight client
     exportScreensaver client
-  return client
+    return (client, bc)
 
 stopXMonadService :: Client -> IO ()
 stopXMonadService client = do

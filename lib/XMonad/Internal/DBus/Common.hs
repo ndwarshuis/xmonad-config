@@ -28,4 +28,6 @@ callMethod mc = do
 addMatchCallback :: MatchRule -> ([Variant] -> IO ()) -> IO SignalHandler
 addMatchCallback rule cb = do
   client <- connectSession
-  addMatch client rule $ cb . signalBody
+  s <- addMatch client rule $ cb . signalBody
+  disconnect client
+  return s

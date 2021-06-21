@@ -80,9 +80,9 @@ type MaybeX = MaybeExe X
 
 type IOMaybeX = IO MaybeX
 
-warnMissing :: Dependency -> String
+warnMissing :: Dependency -> IO ()
 warnMissing Dependency {depRequired = r, depName = n, depType = t } =
-  "WARNING: " ++ r' ++ " " ++ fmtType t ++ " not found: " ++ n
+  putStrLn $ "WARNING: " ++ r' ++ " " ++ fmtType t ++ " not found: " ++ n
   where
     fmtType Executable = "executable"
     fmtType (Systemd u) =

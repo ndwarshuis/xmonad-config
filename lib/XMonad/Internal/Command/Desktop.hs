@@ -17,10 +17,6 @@ module XMonad.Internal.Command.Desktop
   , runVolumeUp
   , runVolumeMute
   , runToggleBluetooth
-  , runIncBacklight
-  , runDecBacklight
-  , runMinBacklight
-  , runMaxBacklight
   , runToggleDPMS
   , runToggleEthernet
   , runRestart
@@ -33,7 +29,7 @@ module XMonad.Internal.Command.Desktop
   , runStartISyncService
   ) where
 
-import           Control.Monad                       (void)
+import           Control.Monad                    (void)
 
 import           System.Directory
     ( createDirectoryIfMissing
@@ -43,8 +39,7 @@ import           System.Environment
 import           System.FilePath
 
 import           XMonad.Actions.Volume
-import           XMonad.Core                         hiding (spawn)
-import           XMonad.Internal.DBus.IntelBacklight
+import           XMonad.Core                      hiding (spawn)
 import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
@@ -150,18 +145,6 @@ runToggleBluetooth = runIfInstalled [exe myBluetooth] $ spawn
   #!|| "a=off"
   #!>> fmtCmd myBluetooth ["power", "$a", ">", "/dev/null"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
-
-runIncBacklight :: X ()
-runIncBacklight = io $ void callIncBrightness
-
-runDecBacklight :: X ()
-runDecBacklight = io $ void callDecBrightness
-
-runMinBacklight :: X ()
-runMinBacklight = io $ void callMinBrightness
-
-runMaxBacklight :: X ()
-runMaxBacklight = io $ void callMaxBrightness
 
 runToggleDPMS :: X ()
 runToggleDPMS = io $ void callToggle

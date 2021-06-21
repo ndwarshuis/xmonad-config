@@ -11,17 +11,24 @@ module XMonad.Internal.DBus.IntelBacklight
   , callMinBrightness
   , exportIntelBacklight
   , matchSignal
+  , hasBacklight
+  , BacklightControls(..)
   ) where
 
 import           Control.Monad               (void)
 
 import           Data.Char
+import           Data.Either
 import           Data.Int                    (Int16, Int32)
 import           Data.Text                   (pack, unpack)
 import           Data.Text.IO                as T (readFile, writeFile)
 
 import           DBus
 import           DBus.Client
+
+import           System.Directory
+import           System.FilePath.Posix
+import           System.IO.Error
 
 import           XMonad.Internal.DBus.Common
 
@@ -52,11 +59,11 @@ steps = 16
 backlightDir :: FilePath
 backlightDir = "/sys/class/backlight/intel_backlight/"
 
-maxFile :: String
-maxFile = backlightDir ++ "max_brightness"
+maxFile :: FilePath
+maxFile = backlightDir </> "max_brightness"
 
-curFile :: String
-curFile = backlightDir ++ "brightness"
+curFile :: FilePath
+curFile = backlightDir </> "brightness"
 
 readFileInt :: FilePath -> IO RawBrightness
 readFileInt file = read . takeWhile isDigit . unpack <$> T.readFile file
@@ -91,13 +98,48 @@ getBrightness maxRaw = rawToNorm maxRaw <$> getRawBrightness
 
 changeBrightness :: RawBrightness -> Brightness -> IO Brightness
 changeBrightness maxRaw delta = setBrightness maxRaw
-  =<< (+ delta) <$> getBrightness maxRaw
+  . (+ delta) =<< getBrightness maxRaw
 
 setBrightness :: RawBrightness -> Brightness -> IO Brightness
 setBrightness maxRaw newNorm = do
   let newNorm' = truncateNorm newNorm
   setRawBrightness $ normToRaw maxRaw newNorm'
   return newNorm'
+
+--------------------------------------------------------------------------------
+-- | Access checks
+
+-- | determine if backlight is accessible/present
+-- Right True -> backlight accessible and present
+-- Right False -> backlight not present
+-- Left x -> backlight present but could not access (x explaining why)
+hasBacklight' :: IO (Either String Bool)
+hasBacklight' = do
+  mx <- doesFileExist maxFile
+  cx <- doesFileExist curFile
+  if not $ mx || cx
+    then return $ Right False
+    else do
+    mp <- tryIOError $ readable <$> getPermissions maxFile
+    cp <- tryIOError $ (\p -> writable p && readable p) <$> getPermissions curFile
+    return $ case (mp, cp) of
+      (Right True, Right True) -> Right True
+      (Right _, Right _) -> Left "Insufficient permissions for backlight files"
+      _                  -> Left "Could not determine backlight file permissions"
+
+msg :: Either String Bool -> IO ()
+msg (Right True)  = return ()
+msg (Right False) = print ("No backlight detected. Controls disabled" :: String)
+msg (Left m)      = print ("WARNING: " ++ m)
+
+hasBacklightMsg :: IO Bool
+hasBacklightMsg = do
+  b <- hasBacklight'
+  msg b
+  return $ fromRight False b
+
+hasBacklight :: IO Bool
+hasBacklight = fromRight False <$> hasBacklight'
 
 --------------------------------------------------------------------------------
 -- | DBus interface
@@ -122,8 +164,8 @@ memGetBrightness = "GetBrightness"
 memMaxBrightness :: MemberName
 memMaxBrightness = "MaxBrightness"
 
-memMinnBrightness :: MemberName
-memMinnBrightness = "MinBrightness"
+memMinBrightness :: MemberName
+memMinBrightness = "MinBrightness"
 
 memIncBrightness :: MemberName
 memIncBrightness = "IncBrightness"
@@ -142,7 +184,6 @@ brMatcher = matchAny
   , matchMember = Just memCurrentBrightness
   }
 
-
 callBacklight :: MemberName -> IO ()
 callBacklight method = void $ callMethod $ methodCall path interface method
 
@@ -153,8 +194,20 @@ bodyGetBrightness _   = Nothing
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-exportIntelBacklight :: Client -> IO ()
+data BacklightControls = BacklightControls
+  { backlightMax  :: IO ()
+  , backlightMin  :: IO ()
+  , backlightUp   :: IO ()
+  , backlightDown :: IO ()
+  }
+
+exportIntelBacklight :: Client -> IO (Maybe BacklightControls)
 exportIntelBacklight client = do
+  b <- hasBacklightMsg
+  if b then Just <$> exportIntelBacklight' client else return Nothing
+
+exportIntelBacklight' :: Client -> IO BacklightControls
+exportIntelBacklight' client = do
   maxval <- getMaxRawBrightness -- assume the max value will never change
   let stepsize = maxBrightness `div` steps
   let emit' = emitBrightness client
@@ -162,11 +215,17 @@ exportIntelBacklight client = do
     { interfaceName = interface
     , interfaceMethods =
       [ autoMethod memMaxBrightness $ emit' =<< setBrightness maxval maxBrightness
-      , autoMethod memMinnBrightness $ emit' =<< setBrightness maxval 0
+      , autoMethod memMinBrightness $ emit' =<< setBrightness maxval 0
       , autoMethod memIncBrightness $ emit' =<< changeBrightness maxval stepsize
       , autoMethod memDecBrightness $ emit' =<< changeBrightness maxval (-stepsize)
       , autoMethod memGetBrightness $ getBrightness maxval
       ]
+    }
+  return $ BacklightControls
+    { backlightMax = callMaxBrightness
+    , backlightMin = callMinBrightness
+    , backlightUp = callIncBrightness
+    , backlightDown = callDecBrightness
     }
 
 emitBrightness :: Client -> Brightness -> IO ()
@@ -176,7 +235,7 @@ callMaxBrightness :: IO ()
 callMaxBrightness = callBacklight memMaxBrightness
 
 callMinBrightness :: IO ()
-callMinBrightness = callBacklight memMinnBrightness
+callMinBrightness = callBacklight memMinBrightness
 
 callIncBrightness :: IO ()
 callIncBrightness = callBacklight memIncBrightness

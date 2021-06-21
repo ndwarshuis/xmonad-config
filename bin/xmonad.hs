@@ -45,6 +45,7 @@ import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Concurrent.DynamicWorkspaces
 import           XMonad.Internal.Concurrent.Removable
 import           XMonad.Internal.DBus.Control
+import           XMonad.Internal.DBus.IntelBacklight
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                        as T
@@ -64,7 +65,7 @@ import           XMonad.Util.WorkspaceCompare
 
 main :: IO ()
 main = do
-  cl <- startXMonadService
+  (cl, bc) <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
   _ <- forkIO runPowermon
   _ <- forkIO runRemovableMon
@@ -74,13 +75,10 @@ main = do
         , childPIDs = [p]
         , childHandles = [h]
         }
-  (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings ts
-  -- TODO this seems really dumb but I can't print outside the launch function;
-  -- this seems like a buffering problem since I can print something here and
-  -- then print from the launch function (eg in the X monad) and both messages
-  -- will print. However, trying to flush the print output from here makes
-  -- xmonad bootloop
-  let missingErrs = warnMissing <$> missing
+  (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings bc ts
+  mapM_ warnMissing missing
+  -- IDK why this is necessary; nothing prior to this line will print if missing
+  hFlush stdout
   launch
     $ ewmh
     $ addKeymap ekbs
@@ -89,7 +87,7 @@ main = do
           , layoutHook = myLayouts
           , manageHook = myManageHook
           , handleEventHook = myEventHook
-          , startupHook = myStartupHook missingErrs
+          , startupHook = myStartupHook
           , workspaces = myWorkspaces
           , logHook = myLoghook h
           , clickJustFocuses = False
@@ -120,9 +118,8 @@ runCleanup ts = io $ do
 -- problem) outside the 'launch' function so pass them here to be printed.
 
 -- TODO add _NET_DESKTOP_VIEWPORTS to _NET_SUPPORTED?
-myStartupHook :: [String] -> X ()
-myStartupHook msgs = setDefaultCursor xC_left_ptr
-  <+> io (mapM_ print msgs)
+myStartupHook :: X ()
+myStartupHook = setDefaultCursor xC_left_ptr
   <+> docksStartupHook
   <+> startupHook def
 
@@ -485,8 +482,8 @@ filterExternal kgs = let kgs' = fmap go kgs in (fst <$> kgs', concatMap snd kgs'
       Ignore         -> (Nothing, [])
     flagMissing s = "[!!!]" ++ s
 
-externalBindings :: ThreadState -> [KeyGroup (IO MaybeX)]
-externalBindings ts =
+externalBindings :: Maybe BacklightControls -> ThreadState -> [KeyGroup (IO MaybeX)]
+externalBindings bc ts =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
     , KeyBinding "M-g" "launch clipboard manager" runClipMenu
@@ -524,10 +521,10 @@ externalBindings ts =
     ]
 
   , KeyGroup "System"
-    [ KeyBinding "M-." "backlight up" $ noCheck runIncBacklight
-    , KeyBinding "M-," "backlight down" $ noCheck runDecBacklight
-    , KeyBinding "M-M1-," "backlight min" $ noCheck runMinBacklight
-    , KeyBinding "M-M1-." "backlight max" $ noCheck runMaxBacklight
+    [ KeyBinding "M-." "backlight up" $ runMaybe bc backlightUp
+    , KeyBinding "M-," "backlight down" $ runMaybe bc backlightDown
+    , KeyBinding "M-M1-," "backlight min" $ runMaybe bc backlightMin
+    , KeyBinding "M-M1-." "backlight max" $ runMaybe bc backlightMax
     , KeyBinding "M-<End>" "power menu" $ noCheck runPowerPrompt
     , KeyBinding "M-<Home>" "quit xmonad" $ noCheck runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" runScreenLock
@@ -543,3 +540,8 @@ externalBindings ts =
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]
+  where
+    -- TODO this is hacky, I shouldn't really need this data structure for
+    -- something that doesn't depend on executables
+    runMaybe c f = return $ maybe Ignore (\x -> Installed (io $ f x) []) c
+
