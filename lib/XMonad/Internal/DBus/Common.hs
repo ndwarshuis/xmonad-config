@@ -20,6 +20,7 @@ callMethod mc = do
   -- TODO handle clienterrors here
   reply <- call client mc { methodCallDestination = Just "org.xmonad" }
   -- TODO not all methods warrent that we wait for a reply?
+  disconnect client
   return $ case reply of
     Left _    -> Nothing
     Right ret -> Just $ methodReturnBody ret
@@ -28,6 +29,4 @@ callMethod mc = do
 addMatchCallback :: MatchRule -> ([Variant] -> IO ()) -> IO SignalHandler
 addMatchCallback rule cb = do
   client <- connectSession
-  s <- addMatch client rule $ cb . signalBody
-  disconnect client
-  return s
+  addMatch client rule $ cb . signalBody
