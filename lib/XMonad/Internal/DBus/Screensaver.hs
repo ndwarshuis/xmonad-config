@@ -8,6 +8,7 @@ module XMonad.Internal.DBus.Screensaver
   , callToggle
   , callQuery
   , matchSignal
+  , SSControls(..)
   ) where
 
 import           Control.Monad               (void)
@@ -20,6 +21,7 @@ import           Graphics.X11.Xlib.Display
 
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Process
+import           XMonad.Internal.Shell
 
 --------------------------------------------------------------------------------
 -- | Low-level functions
@@ -89,8 +91,18 @@ bodyGetCurrentState _   = Nothing
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-exportScreensaver :: Client -> IO ()
-exportScreensaver client =
+newtype SSControls = SSControls { ssToggle :: IO () }
+
+exportScreensaver :: Client -> IO (MaybeExe SSControls)
+exportScreensaver client = do
+  d <- depInstalled dep
+  if d then flip Installed [] <$> exportScreensaver' client
+    else return $ Missing [dep]
+  where
+    dep = exe "xset"
+
+exportScreensaver' :: Client -> IO SSControls
+exportScreensaver' client = do
   export client path defaultInterface
     { interfaceName = interface
     , interfaceMethods =
@@ -98,6 +110,7 @@ exportScreensaver client =
       , autoMethod memQuery query
       ]
     }
+  return $ SSControls { ssToggle = callToggle }
 
 callToggle :: IO ()
 callToggle = void $ callMethod $ methodCall path interface memToggle

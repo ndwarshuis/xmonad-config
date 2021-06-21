@@ -161,4 +161,4 @@ config confDir = defaultConfig
   }
 
 main :: IO ()
-main = xmobar =<< config <$> getXMonadDir
+main = xmobar . config =<< getXMonadDir

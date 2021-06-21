@@ -42,7 +42,7 @@ myOptimusManager = "optimus-manager"
 --------------------------------------------------------------------------------
 -- | Core commands
 
-runScreenLock :: IOMaybeX
+runScreenLock :: IO MaybeX
 runScreenLock = spawnIfInstalled myScreenlock
 
 runPowerOff :: X ()

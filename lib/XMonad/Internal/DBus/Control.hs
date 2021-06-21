@@ -13,8 +13,9 @@ import           DBus.Client
 
 import           XMonad.Internal.DBus.IntelBacklight
 import           XMonad.Internal.DBus.Screensaver
+import           XMonad.Internal.Shell
 
-startXMonadService :: IO (Client, Maybe BacklightControls)
+startXMonadService :: IO (Client, Maybe BacklightControls, MaybeExe SSControls)
 startXMonadService = do
   client <- connectSession
   requestResult <- requestName client "org.xmonad" []
@@ -22,12 +23,12 @@ startXMonadService = do
   -- different
   if requestResult /= NamePrimaryOwner then do
     putStrLn "Another service owns \"org.xmonad\""
-    return (client, Nothing)
+    return (client, Nothing, Ignore)
   else do
     putStrLn "Started xmonad dbus client"
     bc <- exportIntelBacklight client
-    exportScreensaver client
-    return (client, bc)
+    sc <- exportScreensaver client
+    return (client, bc, sc)
 
 stopXMonadService :: Client -> IO ()
 stopXMonadService client = do

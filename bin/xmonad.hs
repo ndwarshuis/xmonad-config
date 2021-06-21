@@ -46,6 +46,7 @@ import           XMonad.Internal.Concurrent.DynamicWorkspaces
 import           XMonad.Internal.Concurrent.Removable
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.IntelBacklight
+import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                        as T
@@ -65,7 +66,7 @@ import           XMonad.Util.WorkspaceCompare
 
 main :: IO ()
 main = do
-  (cl, bc) <- startXMonadService
+  (cl, bc, sc) <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
   _ <- forkIO runPowermon
   _ <- forkIO runRemovableMon
@@ -75,7 +76,7 @@ main = do
         , childPIDs = [p]
         , childHandles = [h]
         }
-  (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings bc ts
+  (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings bc sc ts
   mapM_ warnMissing missing
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
@@ -482,8 +483,11 @@ filterExternal kgs = let kgs' = fmap go kgs in (fst <$> kgs', concatMap snd kgs'
       Ignore         -> (Nothing, [])
     flagMissing s = "[!!!]" ++ s
 
-externalBindings :: Maybe BacklightControls -> ThreadState -> [KeyGroup (IO MaybeX)]
-externalBindings bc ts =
+externalBindings :: Maybe BacklightControls
+  -> MaybeExe SSControls
+  -> ThreadState
+  -> [KeyGroup (IO MaybeX)]
+externalBindings bc sc ts =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
     , KeyBinding "M-g" "launch clipboard manager" runClipMenu
@@ -536,7 +540,7 @@ externalBindings bc ts =
     , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ noCheck runToggleDPMS
+    , KeyBinding "M-<F11>" "toggle screensaver" $ return $ fmap (io . ssToggle) sc
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]
