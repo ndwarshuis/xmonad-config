@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 --------------------------------------------------------------------------------
 -- | Module for monitoring removable drive events
 --
@@ -11,24 +9,28 @@ module XMonad.Internal.Concurrent.Removable (runRemovableMon) where
 import           Control.Concurrent
 import           Control.Monad
 
-import           Data.Map.Lazy         (Map, member)
+import           Data.Map.Lazy                (Map, member)
 
 import           DBus
 import           DBus.Client
 
+import           XMonad.Internal.DBus.Control (pathExists)
 import           XMonad.Internal.Shell
 
+bus :: BusName
+bus = busName_ "org.freedesktop.UDisks2"
+
 path :: ObjectPath
-path = "/org/freedesktop/UDisks2"
+path = objectPath_ "/org/freedesktop/UDisks2"
 
 interface :: InterfaceName
-interface = "org.freedesktop.DBus.ObjectManager"
+interface = interfaceName_ "org.freedesktop.DBus.ObjectManager"
 
 memAdded :: MemberName
-memAdded = "InterfacesAdded"
+memAdded = memberName_ "InterfacesAdded"
 
 memRemoved :: MemberName
-memRemoved = "InterfacesRemoved"
+memRemoved = memberName_ "InterfacesRemoved"
 
 driveInsertedSound :: FilePath
 driveInsertedSound = "smb_powerup.wav"
@@ -62,8 +64,8 @@ playSoundMaybe p b = when b $ playSound p
 -- If it not already, we won't see any signals from the dbus until it is
 -- started (it will work after it is started however). It seems safe to simply
 -- enable the udisks2 service at boot; however this is not default behavior.
-runRemovableMon :: IO ()
-runRemovableMon = do
+listenDevices :: IO ()
+listenDevices = do
   client <- connectSystem
   _ <- addMatch' client memAdded driveInsertedSound addedHasDrive
   _ <- addMatch' client memRemoved driveRemovedSound removedHasDrive
@@ -71,3 +73,9 @@ runRemovableMon = do
   where
     addMatch' client m p f = addMatch client ruleUdisks { matchMember = Just m }
       $ playSoundMaybe p . f . signalBody
+
+runRemovableMon :: IO ()
+runRemovableMon = do
+  e <- pathExists True bus path
+  if e then listenDevices else
+    putStrLn "WARNING: udisks not running. Super Mario disk sounds disabled."
