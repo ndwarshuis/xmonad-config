@@ -114,9 +114,6 @@ runCleanup ts = io $ do
 
 --------------------------------------------------------------------------------
 -- | Startuphook configuration
---
--- For some reason I can't print error messages (perhaps a buffering/flushing
--- problem) outside the 'launch' function so pass them here to be printed.
 
 -- TODO add _NET_DESKTOP_VIEWPORTS to _NET_SUPPORTED?
 myStartupHook :: X ()
