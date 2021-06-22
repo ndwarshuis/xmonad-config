@@ -18,7 +18,8 @@ import           Data.Connection
 
 import           Text.Read                                (readMaybe)
 
-import           System.IO.Streams.Internal               as S (read)
+import           System.Directory                         (doesPathExist)
+import           System.IO.Streams                        as S (read)
 import           System.IO.Streams.UnixSocket
 
 import           XMonad.Core
@@ -76,6 +77,18 @@ isDischarging = do
     Left _  -> return Nothing
     Right s -> return $ Just (s == "Discharging")
 
+listenACPI :: IO ()
+listenACPI = do
+  Connection { source = s } <- connect acpiPath
+  forever $ readStream s
+  where
+    readStream s = do
+      out <- S.read s
+      mapM_ sendACPIEvent $ parseLine =<< out
+
+acpiPath :: FilePath
+acpiPath = "/var/run/acpid.socket"
+
 --------------------------------------------------------------------------------
 -- | Exported API
 
@@ -83,13 +96,9 @@ isDischarging = do
 -- and send ClientMessage events when it receives them
 runPowermon :: IO ()
 runPowermon = do
-  -- TODO barf when the socket doesn't exist
-  Connection { source = s } <- connect "/var/run/acpid.socket"
-  forever $ readStream s
-  where
-    readStream s = do
-      out <- S.read s
-      mapM_ sendACPIEvent $ parseLine =<< out
+  e <- doesPathExist acpiPath
+  if e then listenACPI else
+    print ("WARNING: ACPI socket not found; disabling ACPI event management" :: String)
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)
@@ -101,6 +110,7 @@ handleACPI tag = do
     Sleep -> runSuspendPrompt
     LidClose -> do
       status <- io isDischarging
-      forM_ status $ \s -> do
-        io runScreenLock >>= whenInstalled
-        when s runSuspend
+      -- only run suspend if battery exists and is discharging
+      forM_ status $ flip when runSuspend
+      io runScreenLock >>= whenInstalled
+
