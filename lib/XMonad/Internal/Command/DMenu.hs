@@ -95,13 +95,14 @@ runCmdMenu = spawnDmenuCmd ["-show", "run"]
 runAppMenu :: IO MaybeX
 runAppMenu = spawnDmenuCmd ["-show", "drun"]
 
--- TODO this also depends on greenclip
 runClipMenu :: IO MaybeX
-runClipMenu = spawnDmenuCmd $
-  [ "-modi", "\"clipboard:greenclip print\""
-  , "-show", "clipboard"
-  , "-run-command", "'{cmd}'"
-  ] ++ themeArgs "#00c44e"
+runClipMenu = runIfInstalled [exe myDmenuCmd, exe "greenclip"]
+  $ spawnCmd myDmenuCmd args
+  where
+    args = [ "-modi", "\"clipboard:greenclip print\""
+           , "-show", "clipboard"
+           , "-run-command", "'{cmd}'"
+           ] ++ themeArgs "#00c44e"
 
 runWinMenu :: IO MaybeX
 runWinMenu = spawnDmenuCmd ["-show", "window"]
