@@ -6,7 +6,10 @@
 -- Use the custom DBus interface exported by the XMonad process so I can react
 -- to signals spawned by commands
 
-module Xmobar.Plugins.IntelBacklight (IntelBacklight(..)) where
+module Xmobar.Plugins.IntelBacklight
+  ( IntelBacklight(..)
+  , blAlias
+  ) where
 
 import           Control.Concurrent
 import           Control.Monad
@@ -17,8 +20,11 @@ import           XMonad.Internal.DBus.IntelBacklight
 
 newtype IntelBacklight = IntelBacklight String deriving (Read, Show)
 
+blAlias :: String
+blAlias = "intelbacklight"
+
 instance Exec IntelBacklight where
-  alias (IntelBacklight _) = "intelbacklight"
+  alias (IntelBacklight _) = blAlias
   start (IntelBacklight icon) cb = do
     _ <- matchSignal $ cb . formatBrightness
     cb . formatBrightness =<< callGetBrightness

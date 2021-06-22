@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 --------------------------------------------------------------------------------
 -- | DBus module for Intel Backlight control
 
@@ -12,6 +10,7 @@ module XMonad.Internal.DBus.IntelBacklight
   , exportIntelBacklight
   , matchSignal
   , hasBacklight
+  , blPath
   , BacklightControls(..)
   ) where
 
@@ -149,43 +148,43 @@ hasBacklight = fromRight False <$> hasBacklight'
 -- integer and emit a signal with the same brightness value. Additionally, there
 -- is one method to get the current brightness.
 
-path :: ObjectPath
-path = "/intelbacklight"
+blPath :: ObjectPath
+blPath = objectPath_ "/intelbacklight"
 
 interface :: InterfaceName
-interface = "org.xmonad.Brightness"
+interface = interfaceName_ "org.xmonad.Brightness"
 
 memCurrentBrightness :: MemberName
-memCurrentBrightness = "CurrentBrightness"
+memCurrentBrightness = memberName_ "CurrentBrightness"
 
 memGetBrightness :: MemberName
-memGetBrightness = "GetBrightness"
+memGetBrightness = memberName_ "GetBrightness"
 
 memMaxBrightness :: MemberName
-memMaxBrightness = "MaxBrightness"
+memMaxBrightness = memberName_ "MaxBrightness"
 
 memMinBrightness :: MemberName
-memMinBrightness = "MinBrightness"
+memMinBrightness = memberName_ "MinBrightness"
 
 memIncBrightness :: MemberName
-memIncBrightness = "IncBrightness"
+memIncBrightness = memberName_ "IncBrightness"
 
 memDecBrightness :: MemberName
-memDecBrightness = "DecBrightness"
+memDecBrightness = memberName_ "DecBrightness"
 
 brSignal :: Signal
-brSignal = signal path interface memCurrentBrightness
+brSignal = signal blPath interface memCurrentBrightness
   -- { signalDestination = Just "org.xmonad" }
 
 brMatcher :: MatchRule
 brMatcher = matchAny
-  { matchPath = Just path
+  { matchPath = Just blPath
   , matchInterface = Just interface
   , matchMember = Just memCurrentBrightness
   }
 
 callBacklight :: MemberName -> IO ()
-callBacklight method = void $ callMethod $ methodCall path interface method
+callBacklight method = void $ callMethod $ methodCall blPath interface method
 
 bodyGetBrightness :: [Variant] -> Maybe Brightness
 bodyGetBrightness [b] = fromVariant b :: Maybe Brightness
@@ -211,7 +210,7 @@ exportIntelBacklight' client = do
   maxval <- getMaxRawBrightness -- assume the max value will never change
   let stepsize = maxBrightness `div` steps
   let emit' = emitBrightness client
-  export client path defaultInterface
+  export client blPath defaultInterface
     { interfaceName = interface
     , interfaceMethods =
       [ autoMethod memMaxBrightness $ emit' =<< setBrightness maxval maxBrightness
@@ -245,7 +244,7 @@ callDecBrightness = callBacklight memDecBrightness
 
 callGetBrightness :: IO (Maybe Brightness)
 callGetBrightness = do
-  reply <- callMethod $ methodCall path interface memGetBrightness
+  reply <- callMethod $ methodCall blPath interface memGetBrightness
   return $ reply >>= bodyGetBrightness
 
 matchSignal :: (Maybe Brightness -> IO ()) -> IO SignalHandler

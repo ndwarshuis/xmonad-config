@@ -6,7 +6,12 @@
 --
 -- Use the NetworkManger interface on DBus to check status
 
-module Xmobar.Plugins.VPN (VPN(..)) where
+module Xmobar.Plugins.VPN
+  ( VPN(..)
+  , vpnAlias
+  , vpnBus
+  , vpnPath
+  ) where
 
 import           DBus
 import           DBus.Client
@@ -19,12 +24,21 @@ data VPN = VPN (String, String, String) Int
 
 callConnectionType :: Client -> IO (Either MethodError Variant)
 callConnectionType client =
-  getProperty client (methodCall "/org/freedesktop/NetworkManager"
+  getProperty client (methodCall vpnPath
                       "org.freedesktop.NetworkManager" "PrimaryConnectionType")
-    { methodCallDestination = Just "org.freedesktop.NetworkManager" }
+    { methodCallDestination = Just vpnBus }
+
+vpnBus :: BusName
+vpnBus = "org.freedesktop.NetworkManager"
+
+vpnPath :: ObjectPath
+vpnPath = "/org/freedesktop/NetworkManager"
+
+vpnAlias :: String
+vpnAlias = "vpn"
 
 instance Exec VPN where
-  alias (VPN _ _) = "vpn"
+  alias (VPN _ _) = vpnAlias
   rate  (VPN _ r) = r
   run   (VPN (text, colorOn, colorOff) _) = do
     client <- connectSystem

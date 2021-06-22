@@ -1,6 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Xmobar.Plugins.Device where
+module Xmobar.Plugins.Device
+  ( Device(..)
+  , devBus
+  , devPath
+  ) where
 
 -- TOOD this name can be more general
 --------------------------------------------------------------------------------
@@ -23,15 +27,18 @@ import           Xmobar
 data Device = Device (String, String, String, String) Int
     deriving (Read, Show)
 
-busName :: BusName
-busName = "org.freedesktop.NetworkManager"
+devBus :: BusName
+devBus = "org.freedesktop.NetworkManager"
+
+devPath :: ObjectPath
+devPath = "/org/freedesktop/NetworkManager"
 
 getDevice :: Client -> String -> IO (Maybe ObjectPath)
 getDevice client iface = do
-  let mc = methodCall "/org/freedesktop/NetworkManager"
+  let mc = methodCall devPath
         "org.freedesktop.NetworkManager" "GetDeviceByIpIface"
   reply <- call client $ mc { methodCallBody = [toVariant iface]
-                            , methodCallDestination = Just busName
+                            , methodCallDestination = Just devBus
                             }
   return $ case reply of
     Left _  -> Nothing
@@ -45,7 +52,7 @@ getDeviceConnected client objectPath = do
            "org.freedesktop.NetworkManager.Device"
            "Ip4Connectivity"
   either (const Nothing) (fmap ((> 1) :: Word32 -> Bool) . fromVariant)
-    <$> getProperty client mc { methodCallDestination = Just busName }
+    <$> getProperty client mc { methodCallDestination = Just devBus }
 
 instance Exec Device where
   alias (Device (iface, _, _, _) _) = iface

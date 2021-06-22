@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 --------------------------------------------------------------------------------
 -- | DBus module for X11 screensave/DPMS control
 
@@ -8,6 +6,7 @@ module XMonad.Internal.DBus.Screensaver
   , callToggle
   , callQuery
   , matchSignal
+  , ssPath
   , SSControls(..)
   ) where
 
@@ -56,27 +55,27 @@ query = do
 -- with the new state when called. Define another method to get the current
 -- state.
 
-path :: ObjectPath
-path = "/screensaver"
+ssPath :: ObjectPath
+ssPath = objectPath_ "/screensaver"
 
 interface :: InterfaceName
-interface = "org.xmonad.Screensaver"
+interface = interfaceName_ "org.xmonad.Screensaver"
 
 memState :: MemberName
-memState = "State"
+memState = memberName_ "State"
 
 memToggle :: MemberName
-memToggle = "Toggle"
+memToggle = memberName_ "Toggle"
 
 memQuery :: MemberName
-memQuery = "Query"
+memQuery = memberName_ "Query"
 
 sigCurrentState :: Signal
-sigCurrentState = signal path interface memState
+sigCurrentState = signal ssPath interface memState
 
 ruleCurrentState :: MatchRule
 ruleCurrentState = matchAny
-  { matchPath = Just path
+  { matchPath = Just ssPath
   , matchInterface = Just interface
   , matchMember = Just memState
   }
@@ -103,7 +102,7 @@ exportScreensaver client = do
 
 exportScreensaver' :: Client -> IO SSControls
 exportScreensaver' client = do
-  export client path defaultInterface
+  export client ssPath defaultInterface
     { interfaceName = interface
     , interfaceMethods =
       [ autoMethod memToggle $ emitState client =<< toggle
@@ -113,11 +112,11 @@ exportScreensaver' client = do
   return $ SSControls { ssToggle = callToggle }
 
 callToggle :: IO ()
-callToggle = void $ callMethod $ methodCall path interface memToggle
+callToggle = void $ callMethod $ methodCall ssPath interface memToggle
 
 callQuery :: IO (Maybe SSState)
 callQuery = do
-  reply <- callMethod $ methodCall path interface memQuery
+  reply <- callMethod $ methodCall ssPath interface memQuery
   return $ reply >>= bodyGetCurrentState
 
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler

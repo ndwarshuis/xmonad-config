@@ -6,7 +6,12 @@
 --
 -- Use the bluez interface on DBus to check status
 
-module Xmobar.Plugins.Bluetooth (Bluetooth(..)) where
+module Xmobar.Plugins.Bluetooth
+  ( Bluetooth(..)
+  , btAlias
+  , btBus
+  , btPath
+  ) where
 
 import           DBus
 import           DBus.Client
@@ -19,11 +24,21 @@ data Bluetooth = Bluetooth (String, String, String) Int
 
 callGetPowered :: Client -> IO (Either MethodError Variant)
 callGetPowered client =
-  getProperty client (methodCall "/org/bluez/hci0" "org.bluez.Adapter1" "Powered")
-    { methodCallDestination = Just "org.bluez" }
+  getProperty client (methodCall btPath "org.bluez.Adapter1" "Powered")
+    { methodCallDestination = Just btBus }
+
+btBus :: BusName
+btBus = "org.bluez"
+
+-- TODO this feels like something that shouldn't be hardcoded
+btPath :: ObjectPath
+btPath = "/org/bluez/hci0"
+
+btAlias :: String
+btAlias = "bluetooth"
 
 instance Exec Bluetooth where
-  alias (Bluetooth _ _) = "bluetooth"
+  alias (Bluetooth _ _) = btAlias
   rate  (Bluetooth _ r) = r
   run   (Bluetooth (text, colorOn, colorOff) _) = do
     client <- connectSystem
