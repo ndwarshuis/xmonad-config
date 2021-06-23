@@ -13,9 +13,15 @@ module Main (main) where
 
 import           Control.Monad                       (filterM)
 
+import           Data.Either
 import           Data.List
+import           Data.Maybe
 
 import           DBus
+
+import           System.Directory
+import           System.FilePath.Posix
+import           System.IO.Error
 
 import           Xmobar.Plugins.Bluetooth
 import           Xmobar.Plugins.Device
@@ -83,119 +89,137 @@ filterSpecs = filterM (maybe (return True) exists . csDepends)
   where
     exists DBusDepends { ddBus = b, ddPath = p, ddSys = s } = pathExists s b p
 
-myCommands :: BarRegions
-myCommands = BarRegions
-  { brLeft =
-    [ CmdSpec
-      { csAlias = "UnsafeStdinReader"
-      , csDepends = Nothing
-      , csRunnable = Run UnsafeStdinReader
-      }
-    ]
+sysfsNet :: FilePath
+sysfsNet = "/sys/class/net"
 
-  , brCenter = []
-
-  , brRight =
-    [ CmdSpec
-      { csAlias = "wlp0s20f3wi"
-      , csDepends = Nothing
-      , csRunnable = Run
-        $ Wireless "wlp0s20f3"
-        [ "-t", "<qualityipat><essid>"
-        , "--"
-        , "--quality-icon-pattern", "<icon=wifi_%%.xpm/>"
-        ] 5
-      }
-
-    , CmdSpec
-      { csAlias = "enp7s0f1"
-      , csDepends = Just $ sysDepends devBus devPath
-      , csRunnable = Run
-        $ Device ("enp7s0f1", "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
-      }
-
-    , CmdSpec
-      { csAlias = vpnAlias
-      , csDepends = Just $ sysDepends vpnBus vpnPath
-      , csRunnable = Run
-        $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor) 5
-      }
-
-    , CmdSpec
-      { csAlias = btAlias
-      , csDepends = Just $ sysDepends btBus btPath
-      , csRunnable = Run
-        $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
-      }
-
-    , CmdSpec
-      { csAlias = "alsa:default:Master"
-      , csDepends = Nothing
-      , csRunnable = Run
-        $ Alsa "default" "Master"
-        [ "-t", "<status><volume>%"
-        , "--"
-        , "-O", "<fn=1>\xf028</fn>"
-        , "-o", "<fn=1>\xf026 </fn>"
-        , "-c", T.fgColor
-        , "-C", T.fgColor
-        ]
-      }
-
-    , CmdSpec
-      { csAlias = "battery"
-      , csDepends = Nothing
-      , csRunnable = Run
-        $ Battery
-        [ "--template", "<acstatus><left>"
-        , "--Low", "10"
-        , "--High", "80"
-        , "--low", "red"
-        , "--normal", T.fgColor
-        , "--high", T.fgColor
-        , "--"
-        , "-P"
-        , "-o" , "<fn=1>\xf0e7</fn>"
-        , "-O" , "<fn=1>\xf1e6</fn>"
-        , "-i" , "<fn=1>\xf1e6</fn>"
-        ] 50
-      }
-
-    , CmdSpec
-      { csAlias = "intelbacklight"
-      , csDepends = Just $ sesDepends xmonadBus blPath
-      , csRunnable = Run $ IntelBacklight "<fn=1>\xf185</fn>"
-      }
-
-    , CmdSpec
-      { csAlias = ssAlias
-      , csDepends = Just $ sesDepends xmonadBus ssPath
-      , csRunnable = Run
-        $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
-      }
-
-    , CmdSpec
-      { csAlias = "locks"
-      , csDepends = Nothing
-      , csRunnable = Run
-        $ Locks
-        [ "-N", "<fn=3>\x1f13d</fn>"
-        , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\x1f13d</fn>"
-        , "-C", "<fn=3>\x1f132</fn>"
-        , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\x1f132</fn>"
-        , "-s", ""
-        , "-S", ""
-        , "-d", "<fn=3> </fn>"
-        ]
-      }
-
-    , CmdSpec
-      { csAlias = "date"
-      , csDepends = Nothing
-      , csRunnable = Run $ Date "%Y-%m-%d %H:%M:%S " "date" 10
-      }
-    ]
+wirelessCmd :: String -> CmdSpec
+wirelessCmd interface = CmdSpec
+  { csAlias = interface ++ "wi"
+  , csDepends = Nothing
+  , csRunnable = Run
+    $ Wireless interface
+    [ "-t", "<qualityipat><essid>"
+    , "--"
+    , "--quality-icon-pattern", "<icon=wifi_%%.xpm/>"
+    ] 5
   }
+
+getWireless :: IO (Maybe CmdSpec)
+getWireless = do
+  r <- tryIOError (listDirectory sysfsNet)
+  ns <- filterM hasWireless $ fromRight [] r
+  return $ case ns of
+    [n] -> Just $ wirelessCmd n
+    _   -> Nothing
+  where
+    hasWireless p = doesPathExist $ sysfsNet </> p </> "wireless"
+
+myCommands :: IO BarRegions
+myCommands = do
+  wirelessSpec <- getWireless
+  let left =
+        [ CmdSpec
+          { csAlias = "UnsafeStdinReader"
+          , csDepends = Nothing
+          , csRunnable = Run UnsafeStdinReader
+          }
+        ]
+  let right =
+        [ wirelessSpec
+
+        , Just $ CmdSpec
+          { csAlias = "enp7s0f1"
+          , csDepends = Just $ sysDepends devBus devPath
+          , csRunnable = Run
+            $ Device ("enp7s0f1", "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
+          }
+
+        , Just $ CmdSpec
+          { csAlias = vpnAlias
+          , csDepends = Just $ sysDepends vpnBus vpnPath
+          , csRunnable = Run
+            $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor) 5
+          }
+
+        , Just $ CmdSpec
+          { csAlias = btAlias
+          , csDepends = Just $ sysDepends btBus btPath
+          , csRunnable = Run
+            $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
+          }
+
+        , Just $ CmdSpec
+          { csAlias = "alsa:default:Master"
+          , csDepends = Nothing
+          , csRunnable = Run
+            $ Alsa "default" "Master"
+            [ "-t", "<status><volume>%"
+            , "--"
+            , "-O", "<fn=1>\xf028</fn>"
+            , "-o", "<fn=1>\xf026 </fn>"
+            , "-c", T.fgColor
+            , "-C", T.fgColor
+            ]
+          }
+
+        , Just $ CmdSpec
+          { csAlias = "battery"
+          , csDepends = Nothing
+          , csRunnable = Run
+            $ Battery
+            [ "--template", "<acstatus><left>"
+            , "--Low", "10"
+            , "--High", "80"
+            , "--low", "red"
+            , "--normal", T.fgColor
+            , "--high", T.fgColor
+            , "--"
+            , "-P"
+            , "-o" , "<fn=1>\xf0e7</fn>"
+            , "-O" , "<fn=1>\xf1e6</fn>"
+            , "-i" , "<fn=1>\xf1e6</fn>"
+            ] 50
+          }
+
+        , Just $ CmdSpec
+          { csAlias = "intelbacklight"
+          , csDepends = Just $ sesDepends xmonadBus blPath
+          , csRunnable = Run $ IntelBacklight "<fn=1>\xf185</fn>"
+          }
+
+        , Just $ CmdSpec
+          { csAlias = ssAlias
+          , csDepends = Just $ sesDepends xmonadBus ssPath
+          , csRunnable = Run
+            $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
+          }
+
+        , Just $ CmdSpec
+          { csAlias = "locks"
+          , csDepends = Nothing
+          , csRunnable = Run
+            $ Locks
+            [ "-N", "<fn=3>\x1f13d</fn>"
+            , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\x1f13d</fn>"
+            , "-C", "<fn=3>\x1f132</fn>"
+            , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\x1f132</fn>"
+            , "-s", ""
+            , "-S", ""
+            , "-d", "<fn=3> </fn>"
+            ]
+          }
+
+        , Just $ CmdSpec
+          { csAlias = "date"
+          , csDepends = Nothing
+          , csRunnable = Run $ Date "%Y-%m-%d %H:%M:%S " "date" 10
+          }
+        ]
+  return $ BarRegions
+    { brLeft = left
+    , brCenter = []
+    , brRight = catMaybes right
+    }
 
 fmtSpecs :: [CmdSpec] -> String
 fmtSpecs = intercalate sep . fmap go
@@ -264,6 +288,6 @@ config br confDir = defaultConfig
 
 main :: IO ()
 main = do
-  br <- mapRegionsM filterSpecs myCommands
+  br <- mapRegionsM filterSpecs =<< myCommands
   dir <- getXMonadDir
   xmobar $ config br dir
