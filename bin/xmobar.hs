@@ -20,8 +20,10 @@ import           Data.Maybe
 import           DBus
 
 import           System.Directory
+import           System.Exit
 import           System.FilePath.Posix
 import           System.IO.Error
+import           System.Process                      (readProcessWithExitCode)
 
 import           Xmobar.Plugins.Bluetooth
 import           Xmobar.Plugins.Device
@@ -114,9 +116,28 @@ getWireless = do
   where
     hasWireless p = doesPathExist $ sysfsNet </> p </> "wireless"
 
+vpnCmd :: CmdSpec
+vpnCmd = CmdSpec
+  { csAlias = vpnAlias
+  , csDepends = Just $ sysDepends vpnBus vpnPath
+  , csRunnable = Run
+    $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor) 5
+  }
+
+getVPN :: IO (Maybe CmdSpec)
+getVPN = do
+  -- TODO ensure nmcli exists (or guard against an exception if it doesn't)
+  (ec, out, _) <- readProcessWithExitCode "nmcli" args ""
+  return $ case ec of
+    ExitSuccess -> if "vpn" `elem` lines out then Just vpnCmd else Nothing
+    _           -> Nothing
+  where
+    args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
+
 myCommands :: IO BarRegions
 myCommands = do
   wirelessSpec <- getWireless
+  vpnSpec <- getVPN
   let left =
         [ CmdSpec
           { csAlias = "UnsafeStdinReader"
@@ -134,12 +155,7 @@ myCommands = do
             $ Device ("enp7s0f1", "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
           }
 
-        , Just $ CmdSpec
-          { csAlias = vpnAlias
-          , csDepends = Just $ sysDepends vpnBus vpnPath
-          , csRunnable = Run
-            $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor) 5
-          }
+        , vpnSpec
 
         , Just $ CmdSpec
           { csAlias = btAlias
