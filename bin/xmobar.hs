@@ -11,8 +11,6 @@ module Main (main) where
 -- * Theme integration with xmonad (shared module imported below)
 -- * A custom Locks plugin from my own forked repo
 
-import           Control.Monad                       (filterM)
-
 import           Data.Either
 import           Data.List
 import           Data.Maybe
@@ -21,6 +19,7 @@ import           DBus
 
 import           System.Directory
 import           System.Exit
+import           System.IO
 import           System.IO.Error
 import           System.Process                      (readProcessWithExitCode)
 
@@ -40,17 +39,42 @@ import           XMonad.Internal.DBus.Screensaver    (ssPath)
 import qualified XMonad.Internal.Theme               as T
 import           Xmobar
 
-sep :: String
-sep = xmobarColor T.backdropFgColor "" " : "
+main :: IO ()
+main = do
+  cs <- getAllCommands
+  d <- getXMonadDir
+  xmobar $ config cs d
 
-lSep :: Char
-lSep = '}'
+config :: BarRegions -> String -> Config
+config br confDir = defaultConfig
+  { font = barFont
+  , additionalFonts = [ iconFont, iconFontLarge, blockFont ]
+  , textOffset = 16
+  , textOffsets = [ 16, 17, 17 ]
+  , bgColor = T.bgColor
+  , fgColor = T.fgColor
+  , position = BottomSize C 100 24
+  , border = NoBorder
+  , borderColor = T.bordersColor
 
-rSep :: Char
-rSep = '{'
+  , sepChar = pSep
+  , alignSep = [lSep, rSep]
+  , template = fmtRegions br
 
-pSep :: String
-pSep = "%"
+  , lowerOnStart = False
+  , hideOnStart = False
+  , allDesktops = True
+  , overrideRedirect = True
+  , pickBroadest = False
+  , persistent = True
+  -- store the icons with the xmonad/xmobar stack project
+  , iconRoot = confDir ++ "/icons"
+
+  , commands = csRunnable <$> concatRegions br
+  }
+
+--------------------------------------------------------------------------------
+-- | command specifications
 
 data BarRegions = BarRegions
   { brLeft   :: [CmdSpec]
@@ -60,44 +84,15 @@ data BarRegions = BarRegions
 
 data CmdSpec = CmdSpec
   { csAlias    :: String
-  , csDepends  :: Maybe DBusDepends
   , csRunnable :: Runnable
   } deriving Show
-
-data DBusDepends = DBusDepends
-  { ddBus  :: BusName
-  , ddPath :: ObjectPath
-  , ddSys  :: Bool
-  } deriving Show
-
-sysDepends :: BusName -> ObjectPath -> DBusDepends
-sysDepends b p = DBusDepends b p True
-
-sesDepends :: BusName -> ObjectPath -> DBusDepends
-sesDepends b p = DBusDepends b p False
 
 concatRegions :: BarRegions -> [CmdSpec]
 concatRegions (BarRegions l c r) = l ++ c ++ r
 
-mapRegionsM :: Monad m => ([CmdSpec] -> m [CmdSpec]) -> BarRegions -> m BarRegions
-mapRegionsM f (BarRegions l c r) = do
-  l' <- f l
-  c' <- f c
-  r' <- f r
-  return $ BarRegions l' c' r'
-
-filterSpecs :: [CmdSpec] -> IO [CmdSpec]
-filterSpecs = filterM (maybe (return True) exists . csDepends)
-  where
-    exists DBusDepends { ddBus = b, ddPath = p, ddSys = s } = pathExists s b p
-
-sysfsNet :: FilePath
-sysfsNet = "/sys/class/net"
-
 wirelessCmd :: String -> CmdSpec
 wirelessCmd iface = CmdSpec
   { csAlias = iface ++ "wi"
-  , csDepends = Nothing
   , csRunnable = Run
     $ Wireless iface
     [ "-t", "<qualityipat><essid>"
@@ -109,40 +104,13 @@ wirelessCmd iface = CmdSpec
 ethernetCmd :: String -> CmdSpec
 ethernetCmd iface = CmdSpec
   { csAlias = iface
-  , csDepends = Just $ sysDepends devBus devPath
   , csRunnable = Run
     $ Device (iface, "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
   }
 
-isWireless :: String -> Bool
-isWireless ('w':'l':_) = True
-isWireless _           = False
-
-isEthernet :: String -> Bool
-isEthernet ('e':'n':_) = True
-isEthernet _           = False
-
-listInterfaces :: IO [String]
-listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
-
-getWireless :: IO (Maybe CmdSpec)
-getWireless = do
-  ns <- filter isWireless <$> listInterfaces
-  return $ case ns of
-    [n] -> Just $ wirelessCmd n
-    _   -> Nothing
-
-getEthernet :: IO (Maybe CmdSpec)
-getEthernet = do
-  ns <- filter isEthernet <$> listInterfaces
-  return $ case ns of
-    [n] -> Just $ ethernetCmd n
-    _   -> Nothing
-
 batteryCmd :: CmdSpec
 batteryCmd =  CmdSpec
   { csAlias = "battery"
-  , csDepends = Nothing
   , csRunnable = Run
     $ Battery
     [ "--template", "<acstatus><left>"
@@ -159,111 +127,186 @@ batteryCmd =  CmdSpec
     ] 50
   }
 
-getBattery :: IO (Maybe CmdSpec)
-getBattery = do
-  b <- hasBattery
-  return $ if b then Just batteryCmd else Nothing
-
 vpnCmd :: CmdSpec
 vpnCmd = CmdSpec
   { csAlias = vpnAlias
-  , csDepends = Just $ sysDepends vpnBus vpnPath
   , csRunnable = Run
     $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor) 5
   }
 
+btCmd :: CmdSpec
+btCmd = CmdSpec
+  { csAlias = btAlias
+  , csRunnable = Run
+    $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
+  }
+
+alsaCmd :: CmdSpec
+alsaCmd = CmdSpec
+  { csAlias = "alsa:default:Master"
+  , csRunnable = Run
+    $ Alsa "default" "Master"
+    [ "-t", "<status><volume>%"
+    , "--"
+    , "-O", "<fn=1>\xf028</fn>"
+    , "-o", "<fn=1>\xf026 </fn>"
+    , "-c", T.fgColor
+    , "-C", T.fgColor
+    ]
+  }
+
+blCmd :: CmdSpec
+blCmd = CmdSpec
+  { csAlias = "intelbacklight"
+  , csRunnable = Run $ IntelBacklight "<fn=1>\xf185</fn>"
+  }
+
+ssCmd :: CmdSpec
+ssCmd = CmdSpec
+  { csAlias = ssAlias
+  , csRunnable = Run
+    $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
+  }
+
+lockCmd :: CmdSpec
+lockCmd = CmdSpec
+  { csAlias = "locks"
+  , csRunnable = Run
+    $ Locks
+    [ "-N", "<fn=3>\x1f13d</fn>"
+    , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\x1f13d</fn>"
+    , "-C", "<fn=3>\x1f132</fn>"
+    , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\x1f132</fn>"
+    , "-s", ""
+    , "-S", ""
+    , "-d", "<fn=3> </fn>"
+    ]
+  }
+
+dateCmd :: CmdSpec
+dateCmd = CmdSpec
+  { csAlias = "date"
+  , csRunnable = Run $ Date "%Y-%m-%d %H:%M:%S " "date" 10
+  }
+
+--------------------------------------------------------------------------------
+-- | command runtime checks and setup
+
+-- some commands depend on the presence of interfaces that can only be
+-- determined at runtime; define these checks here
+
+noSetup :: Monad m => a -> m (Maybe a)
+noSetup = return . Just
+
+toJust :: a -> Bool -> Maybe a
+toJust x b = if b then Just x else Nothing
+
+whenDBusPath :: Bool -> BusName -> ObjectPath -> CmdSpec -> IO (Maybe CmdSpec)
+whenDBusPath usesys b p cs = toJust cs <$> pathExists usesys b p
+
+-- in the case of network interfaces, assume that the system uses systemd in
+-- which case ethernet interfaces always start with "en" and wireless
+-- interfaces always start with "wl"
+isWireless :: String -> Bool
+isWireless ('w':'l':_) = True
+isWireless _           = False
+
+isEthernet :: String -> Bool
+isEthernet ('e':'n':_) = True
+isEthernet _           = False
+
+listInterfaces :: IO [String]
+listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
+
+sysfsNet :: FilePath
+sysfsNet = "/sys/class/net"
+
+getWireless :: IO (Maybe CmdSpec)
+getWireless = do
+  ns <- filter isWireless <$> listInterfaces
+  return $ case ns of
+    [n] -> Just $ wirelessCmd n
+    _   -> Nothing
+
+getEthernet :: IO (Maybe CmdSpec)
+getEthernet = do
+  e <- pathExists True devBus devPath
+  ns <- filter isEthernet <$> listInterfaces
+  return $ case ns of
+    [n] -> toJust (ethernetCmd n) e
+    _   -> Nothing
+
+getBattery :: IO (Maybe CmdSpec)
+getBattery = toJust batteryCmd <$> hasBattery
+
 getVPN :: IO (Maybe CmdSpec)
 getVPN = do
-  -- TODO ensure nmcli exists (or guard against an exception if it doesn't)
-  (ec, out, _) <- readProcessWithExitCode "nmcli" args ""
-  return $ case ec of
-    ExitSuccess -> if "vpn" `elem` lines out then Just vpnCmd else Nothing
-    _           -> Nothing
+  res <- tryIOError $ readProcessWithExitCode "nmcli" args ""
+  case res of
+    (Right (ExitSuccess, out, _)) -> do
+      e <- pathExists True vpnBus vpnPath
+      return $ toJust vpnCmd (e && "vpn" `elem` lines out)
+    (Left _)                      -> do
+      putStrLn "WARNING: could not get list of network interfaces"
+      return Nothing
+    _                             -> return Nothing
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
-myCommands :: IO BarRegions
-myCommands = do
-  wirelessSpec <- getWireless
-  ethernetSpec <- getEthernet
-  vpnSpec <- getVPN
-  batterySpec <- getBattery
+getBt :: IO (Maybe CmdSpec)
+getBt = whenDBusPath True btBus btPath btCmd
+
+getAlsa :: IO (Maybe CmdSpec)
+getAlsa = toJust alsaCmd . isJust <$> findExecutable "alsactl"
+
+getBl :: IO (Maybe CmdSpec)
+getBl = whenDBusPath False xmonadBus blPath blCmd
+
+getSs :: IO (Maybe CmdSpec)
+getSs = whenDBusPath False xmonadBus ssPath ssCmd
+
+getAllCommands :: IO BarRegions
+getAllCommands = do
   let left =
         [ CmdSpec
           { csAlias = "UnsafeStdinReader"
-          , csDepends = Nothing
           , csRunnable = Run UnsafeStdinReader
           }
         ]
-  let right =
-        [ wirelessSpec
-
-        , ethernetSpec
-
-        , vpnSpec
-
-        , Just $ CmdSpec
-          { csAlias = btAlias
-          , csDepends = Just $ sysDepends btBus btPath
-          , csRunnable = Run
-            $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
-          }
-
-        , Just $ CmdSpec
-          { csAlias = "alsa:default:Master"
-          , csDepends = Nothing
-          , csRunnable = Run
-            $ Alsa "default" "Master"
-            [ "-t", "<status><volume>%"
-            , "--"
-            , "-O", "<fn=1>\xf028</fn>"
-            , "-o", "<fn=1>\xf026 </fn>"
-            , "-c", T.fgColor
-            , "-C", T.fgColor
-            ]
-          }
-
-        , batterySpec
-
-        , Just $ CmdSpec
-          { csAlias = "intelbacklight"
-          , csDepends = Just $ sesDepends xmonadBus blPath
-          , csRunnable = Run $ IntelBacklight "<fn=1>\xf185</fn>"
-          }
-
-        , Just $ CmdSpec
-          { csAlias = ssAlias
-          , csDepends = Just $ sesDepends xmonadBus ssPath
-          , csRunnable = Run
-            $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
-          }
-
-        , Just $ CmdSpec
-          { csAlias = "locks"
-          , csDepends = Nothing
-          , csRunnable = Run
-            $ Locks
-            [ "-N", "<fn=3>\x1f13d</fn>"
-            , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\x1f13d</fn>"
-            , "-C", "<fn=3>\x1f132</fn>"
-            , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\x1f132</fn>"
-            , "-s", ""
-            , "-S", ""
-            , "-d", "<fn=3> </fn>"
-            ]
-          }
-
-        , Just $ CmdSpec
-          { csAlias = "date"
-          , csDepends = Nothing
-          , csRunnable = Run $ Date "%Y-%m-%d %H:%M:%S " "date" 10
-          }
-        ]
+  right <- catMaybes <$> sequence
+    [ getWireless
+    , getEthernet
+    , getVPN
+    , getBt
+    , getAlsa
+    , getBattery
+    , getBl
+    , getSs
+    , noSetup lockCmd
+    , noSetup dateCmd
+    ]
+  -- this is needed to see any printed messages
+  hFlush stdout
   return $ BarRegions
     { brLeft = left
     , brCenter = []
-    , brRight = catMaybes right
+    , brRight = right
     }
+
+--------------------------------------------------------------------------------
+-- | various formatting things
+
+sep :: String
+sep = xmobarColor T.backdropFgColor "" " : "
+
+lSep :: Char
+lSep = '}'
+
+rSep :: Char
+rSep = '{'
+
+pSep :: String
+pSep = "%"
 
 fmtSpecs :: [CmdSpec] -> String
 fmtSpecs = intercalate sep . fmap go
@@ -301,37 +344,3 @@ blockFont = T.fmtFontXFT T.font
   , T.size = Just 13
   , T.weight = Just T.Bold
   }
-
-config :: BarRegions -> String -> Config
-config br confDir = defaultConfig
-  { font = barFont
-  , additionalFonts = [ iconFont, iconFontLarge, blockFont ]
-  , textOffset = 16
-  , textOffsets = [ 16, 17, 17 ]
-  , bgColor = T.bgColor
-  , fgColor = T.fgColor
-  , position = BottomSize C 100 24
-  , border = NoBorder
-  , borderColor = T.bordersColor
-
-  , sepChar = pSep
-  , alignSep = [lSep, rSep]
-  , template = fmtRegions br
-
-  , lowerOnStart = False
-  , hideOnStart = False
-  , allDesktops = True
-  , overrideRedirect = True
-  , pickBroadest = False
-  , persistent = True
-  -- store the icons with the xmonad/xmobar stack project
-  , iconRoot = confDir ++ "/icons"
-
-  , commands = csRunnable <$> concatRegions br
-  }
-
-main :: IO ()
-main = do
-  br <- mapRegionsM filterSpecs =<< myCommands
-  dir <- getXMonadDir
-  xmobar $ config br dir
