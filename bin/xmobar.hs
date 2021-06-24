@@ -110,7 +110,7 @@ ethernetCmd iface = CmdSpec
   { csAlias = iface
   , csDepends = Just $ sysDepends devBus devPath
   , csRunnable = Run
-    $ Device ("enp7s0f1", "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
+    $ Device (iface, "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
   }
 
 isWireless :: String -> Bool
