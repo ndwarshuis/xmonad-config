@@ -21,7 +21,6 @@ import           DBus
 
 import           System.Directory
 import           System.Exit
-import           System.FilePath.Posix
 import           System.IO.Error
 import           System.Process                      (readProcessWithExitCode)
 
@@ -95,26 +94,49 @@ sysfsNet :: FilePath
 sysfsNet = "/sys/class/net"
 
 wirelessCmd :: String -> CmdSpec
-wirelessCmd interface = CmdSpec
-  { csAlias = interface ++ "wi"
+wirelessCmd iface = CmdSpec
+  { csAlias = iface ++ "wi"
   , csDepends = Nothing
   , csRunnable = Run
-    $ Wireless interface
+    $ Wireless iface
     [ "-t", "<qualityipat><essid>"
     , "--"
     , "--quality-icon-pattern", "<icon=wifi_%%.xpm/>"
     ] 5
   }
 
+ethernetCmd :: String -> CmdSpec
+ethernetCmd iface = CmdSpec
+  { csAlias = iface
+  , csDepends = Just $ sysDepends devBus devPath
+  , csRunnable = Run
+    $ Device ("enp7s0f1", "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
+  }
+
+isWireless :: String -> Bool
+isWireless ('w':'l':_) = True
+isWireless _           = False
+
+isEthernet :: String -> Bool
+isEthernet ('e':'n':_) = True
+isEthernet _           = False
+
+listInterfaces :: IO [String]
+listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
+
 getWireless :: IO (Maybe CmdSpec)
 getWireless = do
-  r <- tryIOError (listDirectory sysfsNet)
-  ns <- filterM hasWireless $ fromRight [] r
+  ns <- filter isWireless <$> listInterfaces
   return $ case ns of
     [n] -> Just $ wirelessCmd n
     _   -> Nothing
-  where
-    hasWireless p = doesPathExist $ sysfsNet </> p </> "wireless"
+
+getEthernet :: IO (Maybe CmdSpec)
+getEthernet = do
+  ns <- filter isEthernet <$> listInterfaces
+  return $ case ns of
+    [n] -> Just $ ethernetCmd n
+    _   -> Nothing
 
 vpnCmd :: CmdSpec
 vpnCmd = CmdSpec
@@ -137,6 +159,7 @@ getVPN = do
 myCommands :: IO BarRegions
 myCommands = do
   wirelessSpec <- getWireless
+  ethernetSpec <- getEthernet
   vpnSpec <- getVPN
   let left =
         [ CmdSpec
@@ -148,12 +171,7 @@ myCommands = do
   let right =
         [ wirelessSpec
 
-        , Just $ CmdSpec
-          { csAlias = "enp7s0f1"
-          , csDepends = Just $ sysDepends devBus devPath
-          , csRunnable = Run
-            $ Device ("enp7s0f1", "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
-          }
+        , ethernetSpec
 
         , vpnSpec
 
