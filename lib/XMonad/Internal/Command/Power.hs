@@ -11,16 +11,20 @@ module XMonad.Internal.Command.Power
   , runSuspend
   , runSuspendPrompt
   , runQuitPrompt
+  , hasBattery
   ) where
 
 import           Control.Arrow               (first)
 
+import           Data.Either
 import qualified Data.Map                    as M
 
 import           Graphics.X11.Types
 
 import           System.Directory
 import           System.Exit
+import           System.FilePath.Posix
+import           System.IO.Error
 import           System.Process
 
 import           XMonad.Core
@@ -98,18 +102,22 @@ hasSwitchableGPU = withShellOutput cmd hasIntelAndOther
           ivendors = filter (== "Intel Corporation") vendors in
       length vendors > length ivendors && not (null ivendors)
 
--- this is hacky but so much easier than the "pure haskell" solution
-hasBattery :: IO (Maybe Bool)
-hasBattery = withShellOutput (fmtCmd "cat" ["/sys/class/power_supply/*/type"])
-  $ elem "Battery" . lines
+hasBattery :: IO Bool
+hasBattery = do
+  ps <- fromRight [] <$> tryIOError (listDirectory syspath)
+  ts <- mapM readType ps
+  return $ "Battery\n" `elem` ts
+  where
+    readType p = fromRight [] <$> tryIOError (readFile $ syspath </> p </> "type")
+    syspath = "/sys/class/power_supply"
 
 requireOptimus :: IO Bool
 requireOptimus = do
   s <- hasSwitchableGPU
   b <- hasBattery
   case (s, b) of
-    (Just True, Just True) -> return True
-    _                      -> warn >> return False
+    (Just True, True) -> return True
+    _                 -> warn >> return False
   where
     warn = putStrLn
       "WARNING: could not determine if switchable GPU present. Assuming not"

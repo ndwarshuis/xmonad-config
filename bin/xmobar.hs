@@ -32,6 +32,7 @@ import           Xmobar.Plugins.VPN
 
 import           XMonad                              (getXMonadDir)
 import           XMonad.Hooks.DynamicLog             (wrap, xmobarColor)
+import           XMonad.Internal.Command.Power       (hasBattery)
 import           XMonad.Internal.DBus.Common         (xmonadBus)
 import           XMonad.Internal.DBus.Control        (pathExists)
 import           XMonad.Internal.DBus.IntelBacklight (blPath)
@@ -138,6 +139,31 @@ getEthernet = do
     [n] -> Just $ ethernetCmd n
     _   -> Nothing
 
+batteryCmd :: CmdSpec
+batteryCmd =  CmdSpec
+  { csAlias = "battery"
+  , csDepends = Nothing
+  , csRunnable = Run
+    $ Battery
+    [ "--template", "<acstatus><left>"
+    , "--Low", "10"
+    , "--High", "80"
+    , "--low", "red"
+    , "--normal", T.fgColor
+    , "--high", T.fgColor
+    , "--"
+    , "-P"
+    , "-o" , "<fn=1>\xf0e7</fn>"
+    , "-O" , "<fn=1>\xf1e6</fn>"
+    , "-i" , "<fn=1>\xf1e6</fn>"
+    ] 50
+  }
+
+getBattery :: IO (Maybe CmdSpec)
+getBattery = do
+  b <- hasBattery
+  return $ if b then Just batteryCmd else Nothing
+
 vpnCmd :: CmdSpec
 vpnCmd = CmdSpec
   { csAlias = vpnAlias
@@ -161,6 +187,7 @@ myCommands = do
   wirelessSpec <- getWireless
   ethernetSpec <- getEthernet
   vpnSpec <- getVPN
+  batterySpec <- getBattery
   let left =
         [ CmdSpec
           { csAlias = "UnsafeStdinReader"
@@ -196,24 +223,7 @@ myCommands = do
             ]
           }
 
-        , Just $ CmdSpec
-          { csAlias = "battery"
-          , csDepends = Nothing
-          , csRunnable = Run
-            $ Battery
-            [ "--template", "<acstatus><left>"
-            , "--Low", "10"
-            , "--High", "80"
-            , "--low", "red"
-            , "--normal", T.fgColor
-            , "--high", T.fgColor
-            , "--"
-            , "-P"
-            , "-o" , "<fn=1>\xf0e7</fn>"
-            , "-O" , "<fn=1>\xf1e6</fn>"
-            , "-i" , "<fn=1>\xf1e6</fn>"
-            ] 50
-          }
+        , batterySpec
 
         , Just $ CmdSpec
           { csAlias = "intelbacklight"
