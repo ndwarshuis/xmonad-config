@@ -121,8 +121,8 @@ hasBacklight' = do
 
 msg :: Either String Bool -> IO ()
 msg (Right True)  = return ()
-msg (Right False) = print ("No backlight detected. Controls disabled" :: String)
-msg (Left m)      = print ("WARNING: " ++ m)
+msg (Right False) = putStrLn "No backlight detected. Controls disabled"
+msg (Left m)      = putStrLn $ "WARNING: " ++ m
 
 hasBacklightMsg :: IO Bool
 hasBacklightMsg = do
