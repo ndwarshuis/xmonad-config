@@ -18,7 +18,7 @@ import           Control.Monad               (void)
 
 import           Data.Char
 import           Data.Either
-import           Data.Int                    (Int16, Int32)
+import           Data.Int                    (Int32)
 import           Data.Text                   (pack, unpack)
 import           Data.Text.IO                as T (readFile, writeFile)
 
@@ -42,10 +42,7 @@ import           XMonad.Internal.DBus.Common
 
 -- use strict IO here, the data in these files is literally 1-10 bytes
 
--- TODO this is hacky but not sure if there is a cleaner way to enforce type
--- checking between these without making two new types and adding Integral
--- instances to both of them
-type Brightness = Int16
+type Brightness = Float
 
 type RawBrightness = Int32
 
@@ -64,6 +61,9 @@ maxFile = backlightDir </> "max_brightness"
 curFile :: FilePath
 curFile = backlightDir </> "brightness"
 
+toFloat :: Integral a => a -> Float
+toFloat = fromIntegral
+
 readFileInt :: FilePath -> IO RawBrightness
 readFileInt file = read . takeWhile isDigit . unpack <$> T.readFile file
 
@@ -76,18 +76,11 @@ getRawBrightness = readFileInt curFile
 setRawBrightness :: RawBrightness -> IO ()
 setRawBrightness = T.writeFile curFile . pack . show
 
--- TODO this has rounding errors that make the steps uneven
 rawToNorm :: RawBrightness -> RawBrightness -> Brightness
-rawToNorm maxRaw curRaw = fromIntegral
-  $ (curRaw - 1) * maxNorm `div` (maxRaw - 1)
-  where
-    maxNorm = fromIntegral maxBrightness :: Int32
+rawToNorm maxb cur = maxBrightness * (toFloat cur - 1) / (toFloat maxb - 1)
 
 normToRaw :: RawBrightness -> Brightness -> RawBrightness
-normToRaw maxRaw curNorm = curNorm' * (maxRaw - 1) `div` maxNorm + 1
-  where
-    curNorm' = fromIntegral curNorm :: Int32
-    maxNorm = fromIntegral maxBrightness :: Int32
+normToRaw maxb cur = round $ 1 + cur / maxBrightness * (toFloat maxb - 1)
 
 truncateNorm :: Brightness -> Brightness
 truncateNorm = min maxBrightness . max 0
@@ -187,7 +180,7 @@ callBacklight :: MemberName -> IO ()
 callBacklight method = void $ callMethod $ methodCall blPath interface method
 
 bodyGetBrightness :: [Variant] -> Maybe Brightness
-bodyGetBrightness [b] = fromVariant b :: Maybe Brightness
+bodyGetBrightness [b] = toFloat <$> (fromVariant b :: Maybe Int32)
 bodyGetBrightness _   = Nothing
 
 --------------------------------------------------------------------------------
@@ -208,7 +201,7 @@ exportIntelBacklight client = do
 exportIntelBacklight' :: Client -> IO BacklightControls
 exportIntelBacklight' client = do
   maxval <- getMaxRawBrightness -- assume the max value will never change
-  let stepsize = maxBrightness `div` steps
+  let stepsize = maxBrightness / steps
   let emit' = emitBrightness client
   export client blPath defaultInterface
     { interfaceName = interface
@@ -217,7 +210,7 @@ exportIntelBacklight' client = do
       , autoMethod memMinBrightness $ emit' =<< setBrightness maxval 0
       , autoMethod memIncBrightness $ emit' =<< changeBrightness maxval stepsize
       , autoMethod memDecBrightness $ emit' =<< changeBrightness maxval (-stepsize)
-      , autoMethod memGetBrightness $ getBrightness maxval
+      , autoMethod memGetBrightness (round <$> getBrightness maxval :: IO Int32)
       ]
     }
   return $ BacklightControls
@@ -228,7 +221,8 @@ exportIntelBacklight' client = do
     }
 
 emitBrightness :: Client -> Brightness -> IO ()
-emitBrightness client cur = emit client $ brSignal { signalBody = [toVariant cur] }
+emitBrightness client cur = emit client
+  $ brSignal { signalBody = [toVariant (round cur :: Int32)] }
 
 callMaxBrightness :: IO ()
 callMaxBrightness = callBacklight memMaxBrightness

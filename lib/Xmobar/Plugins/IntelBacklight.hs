@@ -31,5 +31,5 @@ instance Exec IntelBacklight where
     forever (threadDelay 5000000)
     where
       formatBrightness = \case
-        Just b  -> icon ++ show (b `div` 100) ++ "%"
+        Just b  -> icon ++ show (round $ b / 100 :: Integer) ++ "%"
         Nothing -> "N/A"
