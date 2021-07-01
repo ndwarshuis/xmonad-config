@@ -48,9 +48,9 @@ main = do
 config :: BarRegions -> String -> Config
 config br confDir = defaultConfig
   { font = barFont
-  , additionalFonts = [ iconFont, iconFontLarge, blockFont ]
+  , additionalFonts = [iconFont, iconFontLarge, iconFontXLarge]
   , textOffset = 16
-  , textOffsets = [ 16, 17, 17 ]
+  , textOffsets = [16, 17, 18]
   , bgColor = T.bgColor
   , fgColor = T.fgColor
   , position = BottomSize C 100 24
@@ -173,13 +173,13 @@ lockCmd = CmdSpec
   { csAlias = "locks"
   , csRunnable = Run
     $ Locks
-    [ "-N", "<fn=3>\x1f13d</fn>"
-    , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\x1f13d</fn>"
-    , "-C", "<fn=3>\x1f132</fn>"
-    , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\x1f132</fn>"
+    [ "-N", "<fn=3>\xf8a5</fn>"
+    , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\xf8a5</fn>"
+    , "-C", "<fn=3>\xf657</fn>"
+    , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\xf657</fn>"
     , "-s", ""
     , "-S", ""
-    , "-d", "<fn=3> </fn>"
+    , "-d", " "
     ]
   }
 
@@ -326,21 +326,21 @@ barFont = T.fmtFontXFT T.font
 
 iconFont :: String
 iconFont = T.fmtFontXFT T.font
-  { T.family = "FontAwesome"
+  { T.family = "Symbols Nerd Font"
   , T.size = Nothing
   , T.pixelsize = Just 13
   }
 
 iconFontLarge :: String
 iconFontLarge = T.fmtFontXFT T.font
-  { T.family = "FontAwesome"
+  { T.family = "Symbols Nerd Font"
   , T.size = Nothing
   , T.pixelsize = Just 15
   }
 
-blockFont :: String
-blockFont = T.fmtFontXFT T.font
-  { T.family = "Symbola"
-  , T.size = Just 13
-  , T.weight = Just T.Bold
+iconFontXLarge :: String
+iconFontXLarge = T.fmtFontXFT T.font
+  { T.family = "Symbols Nerd Font"
+  , T.size = Nothing
+  , T.pixelsize = Just 20
   }
