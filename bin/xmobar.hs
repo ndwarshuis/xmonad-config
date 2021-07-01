@@ -36,6 +36,7 @@ import           XMonad.Internal.DBus.Common         (xmonadBus)
 import           XMonad.Internal.DBus.Control        (pathExists)
 import           XMonad.Internal.DBus.IntelBacklight (blPath)
 import           XMonad.Internal.DBus.Screensaver    (ssPath)
+import           XMonad.Internal.Shell               (fmtCmd)
 import qualified XMonad.Internal.Theme               as T
 import           Xmobar
 
@@ -120,12 +121,21 @@ batteryCmd =  CmdSpec
     , "--normal", T.fgColor
     , "--high", T.fgColor
     , "--"
+    , "-a", notify
     , "-P"
     , "-o" , "<fn=1>\xf0e7</fn>"
     , "-O" , "<fn=1>\xf1e6</fn>"
     , "-i" , "<fn=1>\xf1e6</fn>"
     ] 50
   }
+  where
+    notify = fmtCmd "notify-send"
+      [ "-u"
+      , "critical"
+      , "-i"
+      , "'dialog-information-symbolic'"
+      , "'low battery'"
+      ]
 
 vpnCmd :: CmdSpec
 vpnCmd = CmdSpec
