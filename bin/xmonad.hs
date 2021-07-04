@@ -314,7 +314,7 @@ logXinerama h = withWindowSet $ \ws -> io
       $ W.stack
       $ W.workspace
       $ W.current ws
-    hilightBgColor = "#8fc7ff"
+    hilightBgColor = "#B4A6FF"
     hilightFgColor = T.blend' 0.5 hilightBgColor T.fgColor
     fmtTags ws t = if t == W.currentTag ws
       then xmobarColor T.fgColor hilightBgColor t
