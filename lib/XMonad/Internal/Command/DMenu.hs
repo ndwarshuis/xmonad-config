@@ -72,7 +72,7 @@ runDevMenu = runIfInstalled [exe myDmenuDevices] $ do
 
 runBwMenu :: IO MaybeX
 runBwMenu = runIfInstalled [exe myDmenuPasswords] $
-  spawnCmd myDmenuPasswords $ ["-c", "--"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
+  spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
