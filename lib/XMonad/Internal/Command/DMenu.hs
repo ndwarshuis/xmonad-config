@@ -87,7 +87,7 @@ runDMenuShowKeys kbs = runIfInstalled [exe myDmenuCmd] $ io $ do
   forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
   where
     cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
-      ++ themeArgs "#3399FF" ++ myDmenuMatchingArgs
+      ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
 
 runCmdMenu :: IO MaybeX
 runCmdMenu = spawnDmenuCmd ["-show", "run"]
