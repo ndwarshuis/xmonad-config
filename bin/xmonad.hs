@@ -432,15 +432,6 @@ internalBindings c =
     , KeyBinding "M-S-l" "shift workspace up screen" $ swapNextScreen >> nextScreen
     , KeyBinding "M-S-h" "shift workspace down screen" $ swapPrevScreen >> prevScreen
     ]
-
-  -- dummy map for dunst commands (defined separately but this makes them show
-  -- up in the help menu)
-  , KeyGroup "Dunst"
-    [ KeyBinding "M-`" "dunst history" skip
-    , KeyBinding "M-S-`" "dunst close" skip
-    , KeyBinding "M-M1-`" "dunst context menu" skip
-    , KeyBinding "M-C-`" "dunst close all" skip
-    ]
   ]
 
 mkNamedSubmap :: XConfig Layout ->  KeyGroup (X ()) -> [((KeyMask, KeySym), NamedAction)]
@@ -519,6 +510,13 @@ externalBindings bc sc ts =
     , KeyBinding "<XF86AudioLowerVolume>" "volume down" runVolumeDown
     , KeyBinding "<XF86AudioRaiseVolume>" "volume up" runVolumeUp
     , KeyBinding "<XF86AudioMute>" "volume mute" runVolumeMute
+    ]
+
+  , KeyGroup "Dunst"
+    [ KeyBinding "M-`" "dunst history" runNotificationHistory
+    , KeyBinding "M-S-`" "dunst close" runNotificationClose
+    , KeyBinding "M-M1-`" "dunst context menu" runNotificationContext
+    , KeyBinding "M-C-`" "dunst close all" runNotificationCloseAll
     ]
 
   , KeyGroup "System"

@@ -27,6 +27,10 @@ module XMonad.Internal.Command.Desktop
   , runCaptureBrowser
   , runStartISyncTimer
   , runStartISyncService
+  , runNotificationClose
+  , runNotificationCloseAll
+  , runNotificationHistory
+  , runNotificationContext
   ) where
 
 import           Control.Monad                    (void)
@@ -69,6 +73,9 @@ myCapture = "flameshot"
 
 myImageBrowser :: String
 myImageBrowser = "feh"
+
+myNotificationCtrl :: String
+myNotificationCtrl = "dunstctl"
 
 --------------------------------------------------------------------------------
 -- | Misc constants
@@ -134,6 +141,24 @@ runVolumeUp = spawnSound volumeChangeSound (return ()) $ void (raiseVolume 2)
 
 runVolumeMute :: IO MaybeX
 runVolumeMute = spawnSound volumeChangeSound (void toggleMute) $ return ()
+
+--------------------------------------------------------------------------------
+-- | Notification control
+
+runNotificationCmd :: String -> IO MaybeX
+runNotificationCmd cmd = spawnCmdIfInstalled myNotificationCtrl [cmd]
+
+runNotificationClose :: IO MaybeX
+runNotificationClose = runNotificationCmd "close"
+
+runNotificationCloseAll :: IO MaybeX
+runNotificationCloseAll = runNotificationCmd "close-all"
+
+runNotificationHistory :: IO MaybeX
+runNotificationHistory = runNotificationCmd "history-pop"
+
+runNotificationContext :: IO MaybeX
+runNotificationContext = runNotificationCmd "context"
 
 --------------------------------------------------------------------------------
 -- | System commands
