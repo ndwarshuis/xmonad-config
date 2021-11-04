@@ -173,10 +173,24 @@ xsaneDynamicWorkspace = DynWorkspace
     t = "XSANE"
     c = "Xsane"
 
+f5vpnDynamicWorkspace :: DynWorkspace
+f5vpnDynamicWorkspace = DynWorkspace
+  { dwName = "F5Vpn"
+  , dwTag = t
+  , dwClass = c
+  , dwHook = [ className =? c -?> appendShift t ]
+  , dwKey = 'i'
+  , dwCmd = Just skip
+  }
+  where
+    t = "F5VPN"
+    c = "F5 VPN"
+
 allDWs :: [DynWorkspace]
 allDWs = [ xsaneDynamicWorkspace
          , wmDynamicWorkspace
          , gimpDynamicWorkspace
+         , f5vpnDynamicWorkspace
          ]
 
 --------------------------------------------------------------------------------

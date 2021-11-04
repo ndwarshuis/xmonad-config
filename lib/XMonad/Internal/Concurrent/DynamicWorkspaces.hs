@@ -27,6 +27,7 @@
 
 module XMonad.Internal.Concurrent.DynamicWorkspaces
   ( DynWorkspace(..)
+  , appendShift
   , appendViewShift
   , removeDynamicWorkspace
   , runWorkspaceMon
@@ -175,8 +176,17 @@ spawnOrSwitch tag cmd = do
 -- | Managehook
 -- Move windows to new workspace if they are part of a dynamic workspace
 
+-- shamelessly ripped off from appendWorkspace (this analogue doesn't exist)
+appendHiddenWorkspace :: String -> X ()
+appendHiddenWorkspace = addHiddenWorkspaceAt (flip (++) . return)
+
 viewShift :: WorkspaceId -> ManageHook
 viewShift = doF . liftM2 (.) W.view W.shift
+
+-- NOTE: need to appendHidden because the regular append function will shift
+-- to the new workspace, which I don't want for this one
+appendShift :: String -> ManageHook
+appendShift tag = liftX (appendHiddenWorkspace tag) >> doF (W.shift tag)
 
 appendViewShift :: String -> ManageHook
 appendViewShift tag = liftX (appendWorkspace tag) >> viewShift tag
