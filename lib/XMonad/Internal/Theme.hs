@@ -58,10 +58,10 @@ selectedFgColor :: String
 selectedFgColor = "#ffffff"
 
 selectedBgColor :: String
-selectedBgColor = "#7f66ff"
+selectedBgColor = "#4a79c7"
 
 selectedBordersColor :: String
-selectedBordersColor = "#5948B3"
+selectedBordersColor = "#4a79c7"
 
 backdropBaseColor :: String
 backdropBaseColor = baseColor
