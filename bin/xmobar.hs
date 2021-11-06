@@ -24,6 +24,7 @@ import           System.IO.Error
 import           System.Process                      (readProcessWithExitCode)
 
 import           Xmobar.Plugins.Bluetooth
+import           Xmobar.Plugins.ClevoKeyboard
 import           Xmobar.Plugins.Device
 import           Xmobar.Plugins.IntelBacklight
 import           Xmobar.Plugins.Screensaver
@@ -171,6 +172,12 @@ blCmd = CmdSpec
   , csRunnable = Run $ IntelBacklight "<fn=1>\xf185</fn>"
   }
 
+ckCmd :: CmdSpec
+ckCmd = CmdSpec
+  { csAlias = ckAlias
+  , csRunnable = Run $ ClevoKeyboard ("<fn=1>\xf40b</fn>", T.fgColor, T.backdropFgColor)  5
+  }
+
 ssCmd :: CmdSpec
 ssCmd = CmdSpec
   { csAlias = ssAlias
@@ -291,6 +298,7 @@ getAllCommands = do
     , getAlsa
     , getBattery
     , getBl
+    , noSetup ckCmd
     , getSs
     , noSetup lockCmd
     , noSetup dateCmd
@@ -334,23 +342,18 @@ barFont = T.fmtFontXFT T.font
   , T.weight = Just T.Bold
   }
 
-iconFont :: String
-iconFont = T.fmtFontXFT T.font
+nerdFont :: Int -> String
+nerdFont size = T.fmtFontXFT T.font
   { T.family = "Symbols Nerd Font"
   , T.size = Nothing
-  , T.pixelsize = Just 13
+  , T.pixelsize = Just size
   }
+
+iconFont :: String
+iconFont = nerdFont 13
 
 iconFontLarge :: String
-iconFontLarge = T.fmtFontXFT T.font
-  { T.family = "Symbols Nerd Font"
-  , T.size = Nothing
-  , T.pixelsize = Just 15
-  }
+iconFontLarge = nerdFont 15
 
 iconFontXLarge :: String
-iconFontXLarge = T.fmtFontXFT T.font
-  { T.family = "Symbols Nerd Font"
-  , T.size = Nothing
-  , T.pixelsize = Just 20
-  }
+iconFontXLarge = nerdFont 20

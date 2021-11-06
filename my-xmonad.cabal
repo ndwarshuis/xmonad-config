@@ -21,6 +21,7 @@ library
                    , XMonad.Internal.DBus.Screensaver
                    , XMonad.Internal.Process
                    , Xmobar.Plugins.Bluetooth
+                   , Xmobar.Plugins.ClevoKeyboard
                    , Xmobar.Plugins.Device
                    , Xmobar.Plugins.IntelBacklight
                    , Xmobar.Plugins.Screensaver
