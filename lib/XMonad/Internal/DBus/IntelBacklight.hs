@@ -2,11 +2,7 @@
 -- | DBus module for Intel Backlight control
 
 module XMonad.Internal.DBus.IntelBacklight
-  ( callDecBrightness
-  , callGetBrightness
-  , callIncBrightness
-  , callMaxBrightness
-  , callMinBrightness
+  ( callGetBrightness
   , exportIntelBacklight
   , matchSignal
   , hasBacklight
@@ -16,40 +12,25 @@ module XMonad.Internal.DBus.IntelBacklight
 
 import           Control.Monad               (void)
 
-import           Data.Char
 import           Data.Either
 import           Data.Int                    (Int32)
-import           Data.Text                   (pack, unpack)
-import           Data.Text.IO                as T (readFile, writeFile)
 
 import           DBus
 import           DBus.Client
 
-import           System.Directory
 import           System.FilePath.Posix
-import           System.IO.Error
 
 import           XMonad.Internal.DBus.Common
+import           XMonad.Internal.IO
 
 --------------------------------------------------------------------------------
 -- | Low level sysfs functions
 --
--- Distinguish between "raw" brightness "normalized" brightness with two type
--- synonyms. The former is the value read directly in sysfs and generally goes
--- from 1 (min brightness) to some multiple 1000's number (note that raw values
--- of 0 turn the monitor off). The latter is the raw brightness scaled from 0 to
--- 10000 (which can easily be converted to a percent).
-
--- use strict IO here, the data in these files is literally 1-10 bytes
-
 type Brightness = Float
 
 type RawBrightness = Int32
 
-maxBrightness :: Brightness
-maxBrightness = 10000
-
-steps :: Brightness
+steps :: Int
 steps = 16
 
 backlightDir :: FilePath
@@ -61,42 +42,23 @@ maxFile = backlightDir </> "max_brightness"
 curFile :: FilePath
 curFile = backlightDir </> "brightness"
 
-toFloat :: Integral a => a -> Float
-toFloat = fromIntegral
-
-readFileInt :: FilePath -> IO RawBrightness
-readFileInt file = read . takeWhile isDigit . unpack <$> T.readFile file
-
 getMaxRawBrightness :: IO RawBrightness
-getMaxRawBrightness = readFileInt maxFile
-
-getRawBrightness :: IO RawBrightness
-getRawBrightness = readFileInt curFile
-
-setRawBrightness :: RawBrightness -> IO ()
-setRawBrightness = T.writeFile curFile . pack . show
-
-rawToNorm :: RawBrightness -> RawBrightness -> Brightness
-rawToNorm maxb cur = maxBrightness * (toFloat cur - 1) / (toFloat maxb - 1)
-
-normToRaw :: RawBrightness -> Brightness -> RawBrightness
-normToRaw maxb cur = round $ 1 + cur / maxBrightness * (toFloat maxb - 1)
-
-truncateNorm :: Brightness -> Brightness
-truncateNorm = min maxBrightness . max 0
+getMaxRawBrightness = readInt maxFile
 
 getBrightness :: RawBrightness -> IO Brightness
-getBrightness maxRaw = rawToNorm maxRaw <$> getRawBrightness
+getBrightness upper = readPercent upper curFile
 
-changeBrightness :: RawBrightness -> Brightness -> IO Brightness
-changeBrightness maxRaw delta = setBrightness maxRaw
-  . (+ delta) =<< getBrightness maxRaw
+minBrightness :: RawBrightness -> IO Brightness
+minBrightness upper = writePercentMin upper curFile
 
-setBrightness :: RawBrightness -> Brightness -> IO Brightness
-setBrightness maxRaw newNorm = do
-  let newNorm' = truncateNorm newNorm
-  setRawBrightness $ normToRaw maxRaw newNorm'
-  return newNorm'
+maxBrightness :: RawBrightness -> IO Brightness
+maxBrightness upper = writePercentMax upper curFile
+
+incBrightness :: RawBrightness -> IO Brightness
+incBrightness = incPercent steps curFile
+
+decBrightness :: RawBrightness -> IO Brightness
+decBrightness = decPercent steps curFile
 
 --------------------------------------------------------------------------------
 -- | Access checks
@@ -107,17 +69,13 @@ setBrightness maxRaw newNorm = do
 -- Left x -> backlight present but could not access (x explaining why)
 hasBacklight' :: IO (Either String Bool)
 hasBacklight' = do
-  mx <- doesFileExist maxFile
-  cx <- doesFileExist curFile
-  if not $ mx || cx
-    then return $ Right False
-    else do
-    mp <- tryIOError $ readable <$> getPermissions maxFile
-    cp <- tryIOError $ (\p -> writable p && readable p) <$> getPermissions curFile
-    return $ case (mp, cp) of
-      (Right True, Right True) -> Right True
-      (Right _, Right _) -> Left "Insufficient permissions for backlight files"
-      _                  -> Left "Could not determine backlight file permissions"
+  mx <- isReadable maxFile
+  cx <- isWritable curFile
+  return $ case (mx, cx) of
+    (NotFoundError, NotFoundError) -> Right False
+    (PermResult True, PermResult True) -> Right True
+    (PermResult _, PermResult _) -> Left "Insufficient permissions for backlight files"
+    _ -> Left "Could not determine permissions for backlight files"
 
 msg :: Either String Bool -> IO ()
 msg (Right True)  = return ()
@@ -180,7 +138,7 @@ callBacklight :: MemberName -> IO ()
 callBacklight method = void $ callMethod $ methodCall blPath interface method
 
 bodyGetBrightness :: [Variant] -> Maybe Brightness
-bodyGetBrightness [b] = toFloat <$> (fromVariant b :: Maybe Int32)
+bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)
 bodyGetBrightness _   = Nothing
 
 --------------------------------------------------------------------------------
@@ -196,28 +154,28 @@ data BacklightControls = BacklightControls
 exportIntelBacklight :: Client -> IO (Maybe BacklightControls)
 exportIntelBacklight client = do
   b <- hasBacklightMsg
-  if b then Just <$> exportIntelBacklight' client else return Nothing
+  if b then exportIntelBacklight' client >> return (Just bc) else return Nothing
+  where
+    bc =  BacklightControls
+      { backlightMax = callMaxBrightness
+      , backlightMin = callMinBrightness
+      , backlightUp = callIncBrightness
+      , backlightDown = callDecBrightness
+      }
 
-exportIntelBacklight' :: Client -> IO BacklightControls
+exportIntelBacklight' :: Client -> IO ()
 exportIntelBacklight' client = do
   maxval <- getMaxRawBrightness -- assume the max value will never change
-  let stepsize = maxBrightness / steps
-  let emit' = emitBrightness client
+  let emit' f = emitBrightness client =<< f maxval
   export client blPath defaultInterface
     { interfaceName = interface
     , interfaceMethods =
-      [ autoMethod memMaxBrightness $ emit' =<< setBrightness maxval maxBrightness
-      , autoMethod memMinBrightness $ emit' =<< setBrightness maxval 0
-      , autoMethod memIncBrightness $ emit' =<< changeBrightness maxval stepsize
-      , autoMethod memDecBrightness $ emit' =<< changeBrightness maxval (-stepsize)
+      [ autoMethod memMaxBrightness $ emit' maxBrightness
+      , autoMethod memMinBrightness $ emit' minBrightness
+      , autoMethod memIncBrightness $ emit' incBrightness
+      , autoMethod memDecBrightness $ emit' decBrightness
       , autoMethod memGetBrightness (round <$> getBrightness maxval :: IO Int32)
       ]
-    }
-  return $ BacklightControls
-    { backlightMax = callMaxBrightness
-    , backlightMin = callMinBrightness
-    , backlightUp = callIncBrightness
-    , backlightDown = callDecBrightness
     }
 
 emitBrightness :: Client -> Brightness -> IO ()
