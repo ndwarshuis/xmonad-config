@@ -21,7 +21,9 @@ import           System.Directory
 import           System.Exit
 import           System.IO
 import           System.IO.Error
-import           System.Process                      (readProcessWithExitCode)
+import           System.Process
+    ( readProcessWithExitCode
+    )
 
 import           Xmobar.Plugins.Bluetooth
 import           Xmobar.Plugins.ClevoKeyboard
@@ -30,15 +32,18 @@ import           Xmobar.Plugins.IntelBacklight
 import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
 
-import           XMonad                              (getXMonadDir)
-import           XMonad.Hooks.DynamicLog             (wrap, xmobarColor)
-import           XMonad.Internal.Command.Power       (hasBattery)
-import           XMonad.Internal.DBus.Common         (xmonadBus)
-import           XMonad.Internal.DBus.Control        (pathExists)
-import           XMonad.Internal.DBus.IntelBacklight (blPath)
-import           XMonad.Internal.DBus.Screensaver    (ssPath)
-import           XMonad.Internal.Shell               (fmtCmd)
-import qualified XMonad.Internal.Theme               as T
+import           XMonad                                         (getXMonadDir)
+import           XMonad.Hooks.DynamicLog
+    ( wrap
+    , xmobarColor
+    )
+import           XMonad.Internal.Command.Power                  (hasBattery)
+import           XMonad.Internal.DBus.Brightness.IntelBacklight (blPath)
+import           XMonad.Internal.DBus.Common                    (xmonadBus)
+import           XMonad.Internal.DBus.Control                   (pathExists)
+import           XMonad.Internal.DBus.Screensaver               (ssPath)
+import           XMonad.Internal.Shell                          (fmtCmd)
+import qualified XMonad.Internal.Theme                          as T
 import           Xmobar
 
 main :: IO ()

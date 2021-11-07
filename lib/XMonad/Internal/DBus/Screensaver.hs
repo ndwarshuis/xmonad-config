@@ -19,8 +19,8 @@ import           Graphics.X11.XScreenSaver
 import           Graphics.X11.Xlib.Display
 
 import           XMonad.Internal.DBus.Common
+import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
-import           XMonad.Internal.Shell
 
 --------------------------------------------------------------------------------
 -- | Low-level functions

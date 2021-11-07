@@ -28,8 +28,8 @@ import           System.IO.Error
 import           System.Process
 
 import           XMonad.Core
+import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process     (readCreateProcessWithExitCode')
-import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme       as T
 import           XMonad.Prompt
 import           XMonad.Prompt.ConfirmPrompt

@@ -9,6 +9,7 @@ module XMonad.Internal.DBus.Control
   , stopXMonadService
   , pathExists
   , xmonadBus
+  , DBusXMonad(..)
   ) where
 
 import           Data.Either
@@ -16,10 +17,11 @@ import           Data.Either
 import           DBus
 import           DBus.Client
 
+import           XMonad.Internal.DBus.Brightness.Common
+import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.DBus.IntelBacklight
 import           XMonad.Internal.DBus.Screensaver
-import           XMonad.Internal.Shell
+import           XMonad.Internal.Dependency
 
 introspectInterface :: InterfaceName
 introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
@@ -27,20 +29,33 @@ introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
 introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
-startXMonadService :: IO (Client, Maybe BacklightControls, MaybeExe SSControls)
+data DBusXMonad = DBusXMonad
+  { dxClient             :: Client
+  , dxIntelBacklightCtrl :: Maybe BrightnessControls
+  , dxClevoBacklightCtrl :: Maybe BrightnessControls
+  , dxScreensaverCtrl    :: MaybeExe SSControls
+  }
+
+startXMonadService :: IO DBusXMonad
 startXMonadService = do
   client <- connectSession
   requestResult <- requestName client xmonadBus []
   -- TODO if the client is not released on shutdown the owner will be
   -- different
-  if requestResult /= NamePrimaryOwner then do
+  (i, c, s) <- if requestResult /= NamePrimaryOwner then do
     putStrLn "Another service owns \"org.xmonad\""
-    return (client, Nothing, Ignore)
-  else do
+    return (Nothing, Nothing, Ignore)
+    else do
     putStrLn "Started xmonad dbus client"
     bc <- exportIntelBacklight client
     sc <- exportScreensaver client
-    return (client, bc, sc)
+    return (bc, Nothing, sc)
+  return $ DBusXMonad
+    { dxClient = client
+    , dxIntelBacklightCtrl = i
+    , dxClevoBacklightCtrl = c
+    , dxScreensaverCtrl = s
+    }
 
 stopXMonadService :: Client -> IO ()
 stopXMonadService client = do

@@ -16,7 +16,7 @@ import           Control.Monad
 
 import           Xmobar
 
-import           XMonad.Internal.DBus.IntelBacklight
+import           XMonad.Internal.DBus.Brightness.IntelBacklight
 
 newtype IntelBacklight = IntelBacklight String deriving (Read, Show)
 
@@ -26,8 +26,8 @@ blAlias = "intelbacklight"
 instance Exec IntelBacklight where
   alias (IntelBacklight _) = blAlias
   start (IntelBacklight icon) cb = do
-    _ <- matchSignal $ cb . formatBrightness
-    cb . formatBrightness =<< callGetBrightness
+    _ <- matchSignalIB $ cb . formatBrightness
+    cb . formatBrightness =<< callGetBrightnessIB
     forever (threadDelay 5000000)
     where
       formatBrightness = \case

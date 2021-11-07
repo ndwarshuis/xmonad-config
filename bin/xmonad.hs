@@ -44,9 +44,10 @@ import           XMonad.Internal.Concurrent.ACPIEvent
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Concurrent.DynamicWorkspaces
 import           XMonad.Internal.Concurrent.Removable
+import           XMonad.Internal.DBus.Brightness.Common
 import           XMonad.Internal.DBus.Control
-import           XMonad.Internal.DBus.IntelBacklight
 import           XMonad.Internal.DBus.Screensaver
+import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                        as T
@@ -66,7 +67,11 @@ import           XMonad.Util.WorkspaceCompare
 
 main :: IO ()
 main = do
-  (cl, bc, sc) <- startXMonadService
+  DBusXMonad
+    { dxClient = cl
+    , dxIntelBacklightCtrl = bc
+    , dxScreensaverCtrl = sc
+    } <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
   _ <- forkIO runPowermon
   _ <- forkIO runRemovableMon
@@ -485,7 +490,7 @@ filterExternal kgs = let kgs' = fmap go kgs in (fst <$> kgs', concatMap snd kgs'
       Ignore         -> (Nothing, [])
     flagMissing s = "[!!!]" ++ s
 
-externalBindings :: Maybe BacklightControls
+externalBindings :: Maybe BrightnessControls
   -> MaybeExe SSControls
   -> ThreadState
   -> [KeyGroup (IO MaybeX)]
@@ -534,10 +539,10 @@ externalBindings bc sc ts =
     ]
 
   , KeyGroup "System"
-    [ KeyBinding "M-." "backlight up" $ runMaybe bc backlightUp
-    , KeyBinding "M-," "backlight down" $ runMaybe bc backlightDown
-    , KeyBinding "M-M1-," "backlight min" $ runMaybe bc backlightMin
-    , KeyBinding "M-M1-." "backlight max" $ runMaybe bc backlightMax
+    [ KeyBinding "M-." "backlight up" $ runMaybe bc bctlInc
+    , KeyBinding "M-," "backlight down" $ runMaybe bc bctlDec
+    , KeyBinding "M-M1-," "backlight min" $ runMaybe bc bctlMin
+    , KeyBinding "M-M1-." "backlight max" $ runMaybe bc bctlMax
     , KeyBinding "M-<End>" "power menu" $ noCheck runPowerPrompt
     , KeyBinding "M-<Home>" "quit xmonad" $ noCheck runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" runScreenLock

@@ -15,7 +15,7 @@ import           DBus
 import           DBus.Client
 
 import           XMonad.Internal.DBus.Control (pathExists)
-import           XMonad.Internal.Shell
+import           XMonad.Internal.Dependency
 
 bus :: BusName
 bus = busName_ "org.freedesktop.UDisks2"

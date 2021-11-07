@@ -17,13 +17,13 @@ import           Control.Monad.Reader
 
 import           Graphics.X11.Types
 
-import           System.Directory         (XdgDirectory (..), getXdgDirectory)
+import           System.Directory           (XdgDirectory (..), getXdgDirectory)
 import           System.IO
 
-import           XMonad.Core              hiding (spawn)
+import           XMonad.Core                hiding (spawn)
+import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
-import           XMonad.Internal.Shell
 import           XMonad.Util.NamedActions
 
 --------------------------------------------------------------------------------
