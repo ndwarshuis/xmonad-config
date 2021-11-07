@@ -5,11 +5,11 @@ module XMonad.Internal.DBus.Brightness.IntelBacklight
   ( callGetBrightnessIB
   , matchSignalIB
   , exportIntelBacklight
-  , hasBacklight
+  -- , hasBacklight
   , blPath
   ) where
 
-import           Data.Either
+-- import           Data.Either
 import           Data.Int                               (Int32)
 
 import           DBus
@@ -18,6 +18,7 @@ import           DBus.Client
 import           System.FilePath.Posix
 
 import           XMonad.Internal.DBus.Brightness.Common
+import           XMonad.Internal.Dependency
 import           XMonad.Internal.IO
 
 --------------------------------------------------------------------------------
@@ -64,29 +65,29 @@ decBrightness = decPercent steps curFile
 -- Right True -> backlight accessible and present
 -- Right False -> backlight not present
 -- Left x -> backlight present but could not access (x explaining why)
-hasBacklight' :: IO (Either String Bool)
-hasBacklight' = do
-  mx <- isReadable maxFile
-  cx <- isWritable curFile
-  return $ case (mx, cx) of
-    (NotFoundError, NotFoundError) -> Right False
-    (PermResult True, PermResult True) -> Right True
-    (PermResult _, PermResult _) -> Left "Insufficient permissions for backlight files"
-    _ -> Left "Could not determine permissions for backlight files"
+-- hasBacklight' :: IO (Either String Bool)
+-- hasBacklight' = do
+--   mx <- isReadable maxFile
+--   cx <- isWritable curFile
+--   return $ case (mx, cx) of
+--     (NotFoundError, NotFoundError) -> Right False
+--     (PermResult True, PermResult True) -> Right True
+--     (PermResult _, PermResult _) -> Left "Insufficient permissions for backlight files"
+--     _ -> Left "Could not determine permissions for backlight files"
 
-msg :: Either String Bool -> IO ()
-msg (Right True)  = return ()
-msg (Right False) = putStrLn "No backlight detected. Controls disabled"
-msg (Left m)      = putStrLn $ "WARNING: " ++ m
+-- msg :: Either String Bool -> IO ()
+-- msg (Right True)  = return ()
+-- msg (Right False) = putStrLn "No backlight detected. Controls disabled"
+-- msg (Left m)      = putStrLn $ "WARNING: " ++ m
 
-hasBacklightMsg :: IO Bool
-hasBacklightMsg = do
-  b <- hasBacklight'
-  msg b
-  return $ fromRight False b
+-- hasBacklightMsg :: IO Bool
+-- hasBacklightMsg = do
+--   b <- hasBacklight'
+--   msg b
+--   return $ fromRight False b
 
-hasBacklight :: IO Bool
-hasBacklight = fromRight False <$> hasBacklight'
+-- hasBacklight :: IO Bool
+-- hasBacklight = fromRight False <$> hasBacklight'
 
 --------------------------------------------------------------------------------
 -- | DBus interface
@@ -112,12 +113,14 @@ intelBacklightConfig = BrightnessConfig
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-exportIntelBacklight :: Client -> IO (Maybe BrightnessControls)
-exportIntelBacklight client = do
-  b <- hasBacklightMsg
-  if b
-    then Just <$> exportBrightnessControls intelBacklightConfig client
-    else return Nothing
+exportIntelBacklight :: Client -> IO BrightnessControls
+exportIntelBacklight = exportBrightnessControls deps intelBacklightConfig
+  where
+    deps = [pathRW curFile, pathR maxFile]
+  -- b <- hasBacklightMsg
+  -- if b
+  --   then Just <$> exportBrightnessControls intelBacklightConfig client
+  --   else return Nothing
 
 callGetBrightnessIB :: IO (Maybe Brightness)
 callGetBrightnessIB = callGetBrightness intelBacklightConfig

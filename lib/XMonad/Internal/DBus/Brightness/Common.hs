@@ -9,7 +9,7 @@ module XMonad.Internal.DBus.Brightness.Common
   , matchSignal
   ) where
 
-import           Control.Monad               (void)
+import           Control.Monad               (void, when)
 
 import           Data.Int                    (Int32)
 
@@ -17,6 +17,7 @@ import           DBus
 import           DBus.Client
 
 import           XMonad.Internal.DBus.Common
+import           XMonad.Internal.Dependency
 
 --------------------------------------------------------------------------------
 -- | External API
@@ -38,24 +39,26 @@ data BrightnessConfig a b = BrightnessConfig
   }
 
 data BrightnessControls = BrightnessControls
-  { bctlMax :: IO ()
-  , bctlMin :: IO ()
-  , bctlInc :: IO ()
-  , bctlDec :: IO ()
+  { bctlMax :: MaybeExe (IO ())
+  , bctlMin :: MaybeExe (IO ())
+  , bctlInc :: MaybeExe (IO ())
+  , bctlDec :: MaybeExe (IO ())
   }
 
-exportBrightnessControls :: RealFrac b => BrightnessConfig a b -> Client
-  -> IO BrightnessControls
-exportBrightnessControls bc client = do
-  exportBrightnessControls' bc client
+exportBrightnessControls :: RealFrac b => [Dependency] -> BrightnessConfig a b
+  -> Client -> IO BrightnessControls
+exportBrightnessControls deps bc client = do
+  (req, opt) <- checkInstalled deps
+  when (null req) $
+    exportBrightnessControls' bc client
   return $ BrightnessControls
-    { bctlMax = callBacklight' memMax
-    , bctlMin = callBacklight' memMin
-    , bctlInc = callBacklight' memInc
-    , bctlDec = callBacklight' memDec
+    { bctlMax = callBacklight' req opt memMax
+    , bctlMin = callBacklight' req opt memMin
+    , bctlInc = callBacklight' req opt memInc
+    , bctlDec = callBacklight' req opt memDec
     }
   where
-    callBacklight' = callBacklight bc
+    callBacklight' r o = createInstalled r o . callBacklight bc
 
 callGetBrightness :: Num c => BrightnessConfig a b -> IO (Maybe c)
 callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } = do

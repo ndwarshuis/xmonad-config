@@ -94,9 +94,9 @@ newtype SSControls = SSControls { ssToggle :: IO () }
 
 exportScreensaver :: Client -> IO (MaybeExe SSControls)
 exportScreensaver client = do
-  d <- depInstalled dep
+  d <- depInstalled $ depData dep
   if d then flip Installed [] <$> exportScreensaver' client
-    else return $ Missing [dep]
+    else return $ Missing [depData dep] []
   where
     dep = exe "xset"
 

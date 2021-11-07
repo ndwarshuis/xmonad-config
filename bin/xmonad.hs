@@ -81,8 +81,9 @@ main = do
         , childPIDs = [p]
         , childHandles = [h]
         }
-  (ekbs, missing) <- fmap filterExternal $ evalExternal $ externalBindings bc sc ts
-  mapM_ warnMissing missing
+  ext <- evalExternal $ externalBindings bc sc ts
+  let ekbs = filterExternal ext
+  warnMissing $ externalToMissing ext
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   launch
@@ -479,18 +480,32 @@ evalExternal = mapM go
 evalKeyBinding :: Monad m => KeyBinding (m a) -> m (KeyBinding a)
 evalKeyBinding k@KeyBinding { kbAction = a } = (\b -> k { kbAction = b }) <$> a
 
-filterExternal :: [KeyGroup MaybeX] -> ([KeyGroup (X ())], [Dependency])
-filterExternal kgs = let kgs' = fmap go kgs in (fst <$> kgs', concatMap snd kgs')
+filterExternal :: [KeyGroup MaybeX] -> [KeyGroup (X ())]
+filterExternal = fmap go
   where
-    go k@KeyGroup { kgBindings = bs } = let bs' = go' <$> bs in
-      (k { kgBindings = mapMaybe fst bs' }, concatMap snd bs')
-    go' k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
-      Installed x ds -> (Just $ k{ kbAction = x }, ds)
-      Missing ds     -> (Just $ k{ kbDesc = flagMissing d, kbAction = skip }, ds)
-      Ignore         -> (Nothing, [])
-    flagMissing s = "[!!!]" ++ s
+    go k@KeyGroup { kgBindings = bs } = k { kgBindings = mapMaybe flagKeyBinding bs }
+    -- go k@KeyGroup { kgBindings = bs } =
+    --   ( k { kgBindings = mapMaybe flagKeyBinding bs }
+    --   , concatMap go' bs
+    --   )
+    -- go' KeyBinding{ kbAction = a } = case a of
+    --   Installed _ opt ->  opt
+    --   -- TODO this will mash together the optional and required deps
+    --   Missing req opt ->  req ++ opt
+    --   Ignore          ->  []
 
-externalBindings :: Maybe BrightnessControls
+externalToMissing :: [KeyGroup (MaybeExe a)] -> [MaybeExe a]
+externalToMissing = concatMap go
+  where
+    go KeyGroup { kgBindings = bs } = fmap kbAction bs
+
+flagKeyBinding :: KeyBinding MaybeX -> Maybe (KeyBinding (X ()))
+flagKeyBinding k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
+  Installed x _ -> Just $ k{ kbAction = x }
+  Missing _ _   -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
+  Ignore        -> Nothing
+
+externalBindings :: BrightnessControls
   -> MaybeExe SSControls
   -> ThreadState
   -> [KeyGroup (IO MaybeX)]
@@ -539,10 +554,10 @@ externalBindings bc sc ts =
     ]
 
   , KeyGroup "System"
-    [ KeyBinding "M-." "backlight up" $ runMaybe bc bctlInc
-    , KeyBinding "M-," "backlight down" $ runMaybe bc bctlDec
-    , KeyBinding "M-M1-," "backlight min" $ runMaybe bc bctlMin
-    , KeyBinding "M-M1-." "backlight max" $ runMaybe bc bctlMax
+    [ KeyBinding "M-." "backlight up" $ return $ io <$> bctlInc bc
+    , KeyBinding "M-," "backlight down" $ return $ io <$> bctlDec bc
+    , KeyBinding "M-M1-," "backlight min" $ return $ io <$> bctlMin bc
+    , KeyBinding "M-M1-." "backlight max" $ return $ io <$> bctlMax bc
     , KeyBinding "M-<End>" "power menu" $ noCheck runPowerPrompt
     , KeyBinding "M-<Home>" "quit xmonad" $ noCheck runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" runScreenLock
@@ -558,8 +573,8 @@ externalBindings bc sc ts =
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]
-  where
+  -- where
     -- TODO this is hacky, I shouldn't really need this data structure for
     -- something that doesn't depend on executables
-    runMaybe c f = return $ maybe Ignore (\x -> Installed (io $ f x) []) c
+    -- runMaybe c f = return $ maybe Ignore (\x -> Installed (io $ f x) []) c
 

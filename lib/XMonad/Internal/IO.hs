@@ -17,9 +17,10 @@ module XMonad.Internal.IO
   , writePercentMax
   , decPercent
   , incPercent
-  , isReadable
-  , isWritable
+  -- , isReadable
+  -- , isWritable
   , PermResult(..)
+  , getPermissionsSafe
   ) where
 
 import           Data.Char
@@ -99,10 +100,10 @@ decPercent = shiftPercent subtract -- silly (-) operator thingy error
 data PermResult a = PermResult a | NotFoundError | PermError
   deriving (Show, Eq)
 
-instance Functor PermResult where
-  fmap f (PermResult r) = PermResult $ f r
-  fmap _ NotFoundError  = NotFoundError
-  fmap _ PermError      = PermError
+-- instance Functor PermResult where
+--   fmap f (PermResult r) = PermResult $ f r
+--   fmap _ NotFoundError  = NotFoundError
+--   fmap _ PermError      = PermError
 
 getPermissionsSafe :: FilePath -> IO (PermResult Permissions)
 getPermissionsSafe f = do
@@ -115,8 +116,8 @@ getPermissionsSafe f = do
     -- so the catchall case should never happen
     _                                  -> error "Unknown permission error"
 
-isReadable :: FilePath -> IO (PermResult Bool)
-isReadable = fmap (fmap readable) . getPermissionsSafe
+-- isReadable :: FilePath -> IO (PermResult Bool)
+-- isReadable = fmap (fmap readable) . getPermissionsSafe
 
-isWritable :: FilePath -> IO (PermResult Bool)
-isWritable = fmap (fmap writable) . getPermissionsSafe
+-- isWritable :: FilePath -> IO (PermResult Bool)
+-- isWritable = fmap (fmap writable) . getPermissionsSafe

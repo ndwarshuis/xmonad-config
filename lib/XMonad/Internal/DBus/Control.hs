@@ -31,9 +31,17 @@ introspectMethod = memberName_ "Introspect"
 
 data DBusXMonad = DBusXMonad
   { dxClient             :: Client
-  , dxIntelBacklightCtrl :: Maybe BrightnessControls
-  , dxClevoBacklightCtrl :: Maybe BrightnessControls
+  , dxIntelBacklightCtrl :: BrightnessControls
+  -- , dxClevoBacklightCtrl :: MaybeExe BrightnessControls
   , dxScreensaverCtrl    :: MaybeExe SSControls
+  }
+
+blankControls :: BrightnessControls
+blankControls = BrightnessControls
+  { bctlMax = Ignore
+  , bctlMin = Ignore
+  , bctlInc = Ignore
+  , bctlDec = Ignore
   }
 
 startXMonadService :: IO DBusXMonad
@@ -42,18 +50,18 @@ startXMonadService = do
   requestResult <- requestName client xmonadBus []
   -- TODO if the client is not released on shutdown the owner will be
   -- different
-  (i, c, s) <- if requestResult /= NamePrimaryOwner then do
+  (i, s) <- if requestResult /= NamePrimaryOwner then do
     putStrLn "Another service owns \"org.xmonad\""
-    return (Nothing, Nothing, Ignore)
+    return (blankControls, Ignore)
     else do
     putStrLn "Started xmonad dbus client"
     bc <- exportIntelBacklight client
     sc <- exportScreensaver client
-    return (bc, Nothing, sc)
+    return (bc, sc)
   return $ DBusXMonad
     { dxClient = client
     , dxIntelBacklightCtrl = i
-    , dxClevoBacklightCtrl = c
+    -- , dxClevoBacklightCtrl = c
     , dxScreensaverCtrl = s
     }
 
