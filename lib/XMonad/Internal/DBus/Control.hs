@@ -33,7 +33,7 @@ data DBusXMonad = DBusXMonad
   { dxClient             :: Client
   , dxIntelBacklightCtrl :: BrightnessControls
   -- , dxClevoBacklightCtrl :: MaybeExe BrightnessControls
-  , dxScreensaverCtrl    :: MaybeExe SSControls
+  , dxScreensaverCtrl    :: SSControls
   }
 
 blankControls :: BrightnessControls
@@ -44,6 +44,9 @@ blankControls = BrightnessControls
   , bctlDec = Ignore
   }
 
+blankSSToggle :: SSControls
+blankSSToggle = SSControls { ssToggle = Ignore }
+
 startXMonadService :: IO DBusXMonad
 startXMonadService = do
   client <- connectSession
@@ -52,7 +55,7 @@ startXMonadService = do
   -- different
   (i, s) <- if requestResult /= NamePrimaryOwner then do
     putStrLn "Another service owns \"org.xmonad\""
-    return (blankControls, Ignore)
+    return (blankControls, blankSSToggle)
     else do
     putStrLn "Started xmonad dbus client"
     bc <- exportIntelBacklight client

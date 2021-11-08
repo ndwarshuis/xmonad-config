@@ -73,10 +73,8 @@ main = do
     , dxScreensaverCtrl = sc
     } <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
-  powermonAction <- runPowermon
-  removableAction <- runRemovableMon
-  mapM_ forkIO powermonAction
-  mapM_ forkIO removableAction
+  depActions <- sequence [runPowermon, runRemovableMon]
+  mapM_ (mapM_ forkIO) depActions
   _ <- forkIO $ runWorkspaceMon allDWs
   let ts = ThreadState
         { client = cl
@@ -84,13 +82,12 @@ main = do
         , childHandles = [h]
         }
   ext <- evalExternal $ externalBindings bc sc ts
-  let ekbs = filterExternal ext
-  warnMissing $ externalToMissing ext ++ fmap (fmap io) [powermonAction, removableAction]
+  warnMissing $ externalToMissing ext ++ fmap (io <$>) depActions
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   launch
     $ ewmh
-    $ addKeymap ekbs
+    $ addKeymap (filterExternal ext)
     $ def { terminal = myTerm
           , modMask = myModMask
           , layoutHook = myLayouts
@@ -507,9 +504,7 @@ flagKeyBinding k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
   Missing _ _   -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
   Ignore        -> Nothing
 
-externalBindings :: BrightnessControls
-  -> MaybeExe SSControls
-  -> ThreadState
+externalBindings :: BrightnessControls -> SSControls -> ThreadState
   -> [KeyGroup (IO MaybeX)]
 externalBindings bc sc ts =
   [ KeyGroup "Launchers"
@@ -571,7 +566,7 @@ externalBindings bc sc ts =
     , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ return $ fmap (io . ssToggle) sc
+    , KeyBinding "M-<F11>" "toggle screensaver" $ return $ io <$> ssToggle sc
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]

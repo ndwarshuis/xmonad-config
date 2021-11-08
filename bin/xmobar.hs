@@ -42,7 +42,8 @@ import           XMonad.Internal.DBus.Brightness.IntelBacklight (blPath)
 import           XMonad.Internal.DBus.Common                    (xmonadBus)
 import           XMonad.Internal.DBus.Control                   (pathExists)
 import           XMonad.Internal.DBus.Screensaver               (ssPath)
-import           XMonad.Internal.Shell                          (fmtCmd)
+import           XMonad.Internal.Dependency
+-- import           XMonad.Internal.Shell                          (fmtCmd)
 import qualified XMonad.Internal.Theme                          as T
 import           Xmobar
 
@@ -226,6 +227,19 @@ toJust x b = if b then Just x else Nothing
 whenDBusPath :: Bool -> BusName -> ObjectPath -> CmdSpec -> IO (Maybe CmdSpec)
 whenDBusPath usesys b p cs = toJust cs <$> pathExists usesys b p
 
+dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
+dbusDep usesys bus obj iface mem =
+  Dependency { depRequired = True, depData = d }
+  where
+    d = DBusEndpoint
+      { ddDbusBus = bus
+      , ddDbusSystem = usesys
+      , ddDbusObject = obj
+      , ddDbusInterface = iface
+      , ddDbusMember = mem
+      }
+
+
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
 -- interfaces always start with "wl"
@@ -275,8 +289,11 @@ getVPN = do
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
-getBt :: IO (Maybe CmdSpec)
-getBt = whenDBusPath True btBus btPath btCmd
+getBt :: IO (MaybeExe CmdSpec)
+-- getBt = whenDBusPath True btBus btPath btCmd
+getBt = runIfInstalled [dep] btCmd
+  where
+    dep = dbusDep True btBus btPath btInterface $ Property_ btPowered
 
 getAlsa :: IO (Maybe CmdSpec)
 getAlsa = toJust alsaCmd . isJust <$> findExecutable "alsactl"
@@ -289,6 +306,10 @@ getSs = whenDBusPath False xmonadBus ssPath ssCmd
 
 getAllCommands :: IO BarRegions
 getAllCommands = do
+  getBt' <- getBt
+  let bt = case getBt' of
+             (Installed x _) -> Just x
+             _               -> Nothing
   let left =
         [ CmdSpec
           { csAlias = "UnsafeStdinReader"
@@ -299,7 +320,8 @@ getAllCommands = do
     [ getWireless
     , getEthernet
     , getVPN
-    , getBt
+    -- , getBt
+    , return bt
     , getAlsa
     , getBattery
     , getBl

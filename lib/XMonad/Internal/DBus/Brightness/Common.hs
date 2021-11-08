@@ -49,16 +49,15 @@ exportBrightnessControls :: RealFrac b => [Dependency] -> BrightnessConfig a b
   -> Client -> IO BrightnessControls
 exportBrightnessControls deps bc client = do
   (req, opt) <- checkInstalled deps
+  let callBacklight' = createInstalled req opt . callBacklight bc
   when (null req) $
     exportBrightnessControls' bc client
   return $ BrightnessControls
-    { bctlMax = callBacklight' req opt memMax
-    , bctlMin = callBacklight' req opt memMin
-    , bctlInc = callBacklight' req opt memInc
-    , bctlDec = callBacklight' req opt memDec
+    { bctlMax = callBacklight' memMax
+    , bctlMin = callBacklight' memMin
+    , bctlInc = callBacklight' memInc
+    , bctlDec = callBacklight' memDec
     }
-  where
-    callBacklight' r o = createInstalled r o . callBacklight bc
 
 callGetBrightness :: Num c => BrightnessConfig a b -> IO (Maybe c)
 callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } = do

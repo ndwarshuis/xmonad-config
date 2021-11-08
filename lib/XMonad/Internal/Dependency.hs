@@ -42,12 +42,12 @@ import           Control.Arrow           ((***))
 import           Control.Monad           (filterM, join)
 import           Control.Monad.IO.Class
 
-import           Data.List               (partition, find)
-import           Data.Maybe              (isJust, listToMaybe, fromMaybe)
+import           Data.List               (find, partition)
+import           Data.Maybe              (fromMaybe, isJust, listToMaybe)
 
 import           DBus
 import           DBus.Client
-import qualified DBus.Introspection as I
+import qualified DBus.Introspection      as I
 
 import           System.Directory        (findExecutable, readable, writable)
 import           System.Exit
@@ -71,11 +71,11 @@ data DBusMember = Method_ MemberName
 data DependencyData = Executable String
   | AccessiblePath FilePath Bool Bool
   | DBusEndpoint
-    { ddDbusBus:: BusName
-    , ddDbusSystem :: Bool
-    , ddDbusObject :: ObjectPath
+    { ddDbusBus       :: BusName
+    , ddDbusSystem    :: Bool
+    , ddDbusObject    :: ObjectPath
     , ddDbusInterface :: InterfaceName
-    , ddDbusMember :: DBusMember
+    , ddDbusMember    :: DBusMember
     }
   | Systemd UnitType String
   deriving (Eq, Show)
@@ -174,15 +174,18 @@ pathAccessible p testread testwrite = do
         -- (_, Just False)          -> Just "file not writable"
         -- _                        -> Nothing
 
+introspectInterface :: InterfaceName
+introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
+
+introspectMethod :: MemberName
+introspectMethod = memberName_ "Introspect"
+
 dbusInstalled :: BusName -> Bool -> ObjectPath -> InterfaceName -> DBusMember
   -> IO Bool
 dbusInstalled bus usesystem objpath iface mem = do
   client <- if usesystem then connectSystem else connectSession
-  reply <- call_ client (methodCall objpath
-                         (interfaceName_ "org.freedesktop.DBus.Introspectable")
-                         (memberName_ "Introspect"))
-           { methodCallDestination = Just bus
-           }
+  reply <- call_ client (methodCall objpath introspectInterface introspectMethod)
+           { methodCallDestination = Just bus }
   let res = findMem =<< I.parseXML objpath =<< fromVariant
         =<< listToMaybe (methodReturnBody reply)
   disconnect client
@@ -218,7 +221,8 @@ createInstalled req opt x = if null req then Installed x opt else Missing req op
 filterMissing :: [Dependency] -> IO [Dependency]
 filterMissing = filterM (fmap not . depInstalled . depData)
 
-runIfInstalled :: MonadIO m => [Dependency] -> m a -> IO (MaybeExe (m a))
+-- runIfInstalled :: MonadIO m => [Dependency] -> m a -> IO (MaybeExe (m a))
+runIfInstalled :: [Dependency] -> a -> IO (MaybeExe a)
 runIfInstalled ds x = do
   (req, opt) <- checkInstalled ds
   return $ createInstalled req opt x

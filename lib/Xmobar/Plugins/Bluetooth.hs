@@ -11,6 +11,8 @@ module Xmobar.Plugins.Bluetooth
   , btAlias
   , btBus
   , btPath
+  , btPowered
+  , btInterface
   ) where
 
 import           DBus
@@ -24,8 +26,16 @@ data Bluetooth = Bluetooth (String, String, String) Int
 
 callGetPowered :: Client -> IO (Either MethodError Variant)
 callGetPowered client =
-  getProperty client (methodCall btPath "org.bluez.Adapter1" "Powered")
+  getProperty client (methodCall btPath btInterface $ memberName_ btPowered)
     { methodCallDestination = Just btBus }
+
+btInterface :: InterfaceName
+btInterface = "org.bluez.Adapter1"
+
+-- weird that this is a string when introspecting but a member name when calling
+-- a method, not sure if it is supposed to work like that
+btPowered :: String
+btPowered = "Powered"
 
 btBus :: BusName
 btBus = "org.bluez"

@@ -10,7 +10,7 @@ module XMonad.Internal.DBus.Screensaver
   , SSControls(..)
   ) where
 
-import           Control.Monad               (void)
+import           Control.Monad               (void, when)
 
 import           DBus
 import           DBus.Client
@@ -90,17 +90,16 @@ bodyGetCurrentState _   = Nothing
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-newtype SSControls = SSControls { ssToggle :: IO () }
+newtype SSControls = SSControls { ssToggle :: MaybeExe (IO ()) }
 
-exportScreensaver :: Client -> IO (MaybeExe SSControls)
+exportScreensaver :: Client -> IO SSControls
 exportScreensaver client = do
-  d <- depInstalled $ depData dep
-  if d then flip Installed [] <$> exportScreensaver' client
-    else return $ Missing [depData dep] []
-  where
-    dep = exe "xset"
+  (req, opt) <- checkInstalled [exe "xset"]
+  when (null req) $
+    exportScreensaver' client
+  return $ SSControls { ssToggle = createInstalled req opt callToggle }
 
-exportScreensaver' :: Client -> IO SSControls
+exportScreensaver' :: Client -> IO ()
 exportScreensaver' client = do
   export client ssPath defaultInterface
     { interfaceName = interface
@@ -109,7 +108,6 @@ exportScreensaver' client = do
       , autoMethod memQuery query
       ]
     }
-  return $ SSControls { ssToggle = callToggle }
 
 callToggle :: IO ()
 callToggle = void $ callMethod $ methodCall ssPath interface memToggle
