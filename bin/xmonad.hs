@@ -73,8 +73,10 @@ main = do
     , dxScreensaverCtrl = sc
     } <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
-  _ <- forkIO runPowermon
-  _ <- forkIO runRemovableMon
+  powermonAction <- runPowermon
+  removableAction <- runRemovableMon
+  mapM_ forkIO powermonAction
+  mapM_ forkIO removableAction
   _ <- forkIO $ runWorkspaceMon allDWs
   let ts = ThreadState
         { client = cl
@@ -83,7 +85,7 @@ main = do
         }
   ext <- evalExternal $ externalBindings bc sc ts
   let ekbs = filterExternal ext
-  warnMissing $ externalToMissing ext
+  warnMissing $ externalToMissing ext ++ fmap (fmap io) [powermonAction, removableAction]
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   launch

@@ -9,12 +9,12 @@ module XMonad.Internal.Concurrent.Removable (runRemovableMon) where
 import           Control.Concurrent
 import           Control.Monad
 
-import           Data.Map.Lazy                (Map, member)
+import           Data.Map.Lazy              (Map, member)
 
 import           DBus
 import           DBus.Client
 
-import           XMonad.Internal.DBus.Control (pathExists)
+-- import           XMonad.Internal.DBus.Control (pathExists)
 import           XMonad.Internal.Dependency
 
 bus :: BusName
@@ -31,6 +31,23 @@ memAdded = memberName_ "InterfacesAdded"
 
 memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
+
+dbusDep :: MemberName -> Dependency
+dbusDep m = Dependency { depRequired = True, depData = d }
+  where
+    d = DBusEndpoint
+      { ddDbusBus = bus
+      , ddDbusSystem = True
+      , ddDbusObject = path
+      , ddDbusInterface = interface
+      , ddDbusMember = Signal_ m
+      }
+
+addedDep :: Dependency
+addedDep = dbusDep memAdded
+
+removedDep :: Dependency
+removedDep = dbusDep memRemoved
 
 driveInsertedSound :: FilePath
 driveInsertedSound = "smb_powerup.wav"
@@ -74,8 +91,5 @@ listenDevices = do
     addMatch' client m p f = addMatch client ruleUdisks { matchMember = Just m }
       $ playSoundMaybe p . f . signalBody
 
-runRemovableMon :: IO ()
-runRemovableMon = do
-  e <- pathExists True bus path
-  if e then listenDevices else
-    putStrLn "WARNING: udisks not running. Super Mario disk sounds disabled."
+runRemovableMon :: IO (MaybeExe (IO ()))
+runRemovableMon = runIfInstalled [addedDep, removedDep] listenDevices

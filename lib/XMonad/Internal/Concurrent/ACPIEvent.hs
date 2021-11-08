@@ -18,7 +18,7 @@ import           Data.Connection
 
 import           Text.Read                                (readMaybe)
 
-import           System.Directory                         (doesPathExist)
+-- import           System.Directory                         (doesPathExist)
 import           System.IO.Streams                        as S (read)
 import           System.IO.Streams.UnixSocket
 
@@ -94,11 +94,8 @@ acpiPath = "/var/run/acpid.socket"
 
 -- | Spawn a new thread that will listen for ACPI events on the acpid socket
 -- and send ClientMessage events when it receives them
-runPowermon :: IO ()
-runPowermon = do
-  e <- doesPathExist acpiPath
-  if e then listenACPI else
-    print ("WARNING: ACPI socket not found; disabling ACPI event management" :: String)
+runPowermon :: IO (MaybeExe (IO ()))
+runPowermon = runIfInstalled [pathR acpiPath] listenACPI
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)

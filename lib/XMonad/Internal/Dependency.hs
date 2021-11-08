@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveTraversable #-}
+
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
 
@@ -6,6 +8,7 @@ module XMonad.Internal.Dependency
   , UnitType(..)
   , Dependency(..)
   , DependencyData(..)
+  , DBusMember(..)
   , MaybeX
   , exe
   , systemUnit
@@ -39,8 +42,12 @@ import           Control.Arrow           ((***))
 import           Control.Monad           (filterM, join)
 import           Control.Monad.IO.Class
 
-import           Data.List               (partition)
-import           Data.Maybe              (isJust)
+import           Data.List               (partition, find)
+import           Data.Maybe              (isJust, listToMaybe, fromMaybe)
+
+import           DBus
+import           DBus.Client
+import qualified DBus.Introspection as I
 
 import           System.Directory        (findExecutable, readable, writable)
 import           System.Exit
@@ -56,8 +63,20 @@ import           XMonad.Internal.Shell
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
 
+data DBusMember = Method_ MemberName
+  | Signal_ MemberName
+  | Property_ String
+  deriving (Eq, Show)
+
 data DependencyData = Executable String
   | AccessiblePath FilePath Bool Bool
+  | DBusEndpoint
+    { ddDbusBus:: BusName
+    , ddDbusSystem :: Bool
+    , ddDbusObject :: ObjectPath
+    , ddDbusInterface :: InterfaceName
+    , ddDbusMember :: DBusMember
+    }
   | Systemd UnitType String
   deriving (Eq, Show)
 
@@ -105,7 +124,7 @@ userUnit = unit UserUnit
 data MaybeExe a = Installed a [DependencyData]
   | Missing [DependencyData] [DependencyData]
   | Ignore
-  deriving (Eq, Show)
+  deriving (Eq, Show, Foldable, Traversable)
 
 instance Functor MaybeExe where
   fmap f (Installed x ds)  = Installed (f x) ds
@@ -155,12 +174,38 @@ pathAccessible p testread testwrite = do
         -- (_, Just False)          -> Just "file not writable"
         -- _                        -> Nothing
 
+dbusInstalled :: BusName -> Bool -> ObjectPath -> InterfaceName -> DBusMember
+  -> IO Bool
+dbusInstalled bus usesystem objpath iface mem = do
+  client <- if usesystem then connectSystem else connectSession
+  reply <- call_ client (methodCall objpath
+                         (interfaceName_ "org.freedesktop.DBus.Introspectable")
+                         (memberName_ "Introspect"))
+           { methodCallDestination = Just bus
+           }
+  let res = findMem =<< I.parseXML objpath =<< fromVariant
+        =<< listToMaybe (methodReturnBody reply)
+  disconnect client
+  return $ fromMaybe False res
+  where
+    findMem obj = fmap (matchMem mem)
+      $ find (\i -> I.interfaceName i == iface)
+      $ I.objectInterfaces obj
+    matchMem (Method_ n) = elem n . fmap I.methodName . I.interfaceMethods
+    matchMem (Signal_ n) = elem n . fmap I.signalName . I.interfaceSignals
+    matchMem (Property_ n) = elem n . fmap I.propertyName . I.interfaceProperties
+
 -- TODO somehow get this to preserve error messages if something isn't found
 depInstalled :: DependencyData -> IO Bool
 depInstalled (Executable n)         = exeInstalled n
 depInstalled (Systemd t n)          = unitInstalled t n
 depInstalled (AccessiblePath p r w) = pathAccessible p r w
-    -- (AccessiblePath p r w) -> pathAccessible p r w
+depInstalled DBusEndpoint { ddDbusBus = b
+                          , ddDbusSystem = s
+                          , ddDbusObject = o
+                          , ddDbusInterface = i
+                          , ddDbusMember = m
+                          } = dbusInstalled b s o i m
 
 checkInstalled :: [Dependency] -> IO ([DependencyData], [DependencyData])
 checkInstalled = fmap go . filterMissing
@@ -218,6 +263,7 @@ partitionMissing = foldl (\(a, b) -> ((a++) *** (b++)) . go) ([], [])
 
 fmtMissing :: DependencyData -> String
 -- TODO this error message is lame
+fmtMissing DBusEndpoint {} = "some random dbus path is missing"
 fmtMissing (AccessiblePath p True False) = "path '" ++ p ++ "' not readable"
 fmtMissing (AccessiblePath p False True) = "path '" ++ p ++ "' not writable"
 fmtMissing (AccessiblePath p True True) = "path '" ++ p ++ "' not readable/writable"
