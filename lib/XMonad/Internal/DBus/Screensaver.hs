@@ -7,6 +7,7 @@ module XMonad.Internal.DBus.Screensaver
   , callQuery
   , matchSignal
   , ssPath
+  , ssDep
   , SSControls(..)
   ) where
 
@@ -27,11 +28,17 @@ import           XMonad.Internal.Process
 
 type SSState = Bool -- true is enabled
 
+ssExecutable :: String
+ssExecutable = "xset"
+
+ssDep :: Dependency
+ssDep = exe ssExecutable
+
 toggle :: IO SSState
 toggle = do
   st <- query
   -- TODO figure out how not to do this with shell commands
-  void $ createProcess' $ proc "xset" $ "s" : args st
+  void $ createProcess' $ proc ssExecutable $ "s" : args st
   -- TODO this assumes the command succeeds
   return $ not st
   where
@@ -94,7 +101,7 @@ newtype SSControls = SSControls { ssToggle :: MaybeExe (IO ()) }
 
 exportScreensaver :: Client -> IO SSControls
 exportScreensaver client = do
-  (req, opt) <- checkInstalled [exe "xset"]
+  (req, opt) <- checkInstalled [ssDep]
   when (null req) $
     exportScreensaver' client
   return $ SSControls { ssToggle = createInstalled req opt callToggle }

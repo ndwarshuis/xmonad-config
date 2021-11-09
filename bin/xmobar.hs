@@ -11,6 +11,7 @@ module Main (main) where
 -- * Theme integration with xmonad (shared module imported below)
 -- * A custom Locks plugin from my own forked repo
 
+import           Control.Monad                                  (unless)
 import           Data.Either
 import           Data.List
 import           Data.Maybe
@@ -38,10 +39,13 @@ import           XMonad.Hooks.DynamicLog
     , xmobarColor
     )
 import           XMonad.Internal.Command.Power                  (hasBattery)
-import           XMonad.Internal.DBus.Brightness.IntelBacklight (blPath)
-import           XMonad.Internal.DBus.Common                    (xmonadBus)
-import           XMonad.Internal.DBus.Control                   (pathExists)
-import           XMonad.Internal.DBus.Screensaver               (ssPath)
+import           XMonad.Internal.DBus.Brightness.IntelBacklight
+    ( curFileDep
+    , maxFileDep
+    )
+-- import           XMonad.Internal.DBus.Common                    (xmonadBus)
+-- import           XMonad.Internal.DBus.Control                   (pathExists)
+import           XMonad.Internal.DBus.Screensaver               (ssDep)
 import           XMonad.Internal.Dependency
 -- import           XMonad.Internal.Shell                          (fmtCmd)
 import qualified XMonad.Internal.Theme                          as T
@@ -49,8 +53,12 @@ import           Xmobar
 
 main :: IO ()
 main = do
-  cs <- getAllCommands
+  rs <- sequence rightPlugins
+  warnMissing rs
+  cs <- getAllCommands rs
   d <- getXMonadDir
+  -- this is needed to see any printed messages
+  hFlush stdout
   xmobar $ config cs d
 
 config :: BarRegions -> String -> Config
@@ -218,14 +226,11 @@ dateCmd = CmdSpec
 -- some commands depend on the presence of interfaces that can only be
 -- determined at runtime; define these checks here
 
-noSetup :: Monad m => a -> m (Maybe a)
-noSetup = return . Just
+-- noSetup :: Monad m => a -> m (Maybe a)
+-- noSetup = return . Just
 
-toJust :: a -> Bool -> Maybe a
-toJust x b = if b then Just x else Nothing
-
-whenDBusPath :: Bool -> BusName -> ObjectPath -> CmdSpec -> IO (Maybe CmdSpec)
-whenDBusPath usesys b p cs = toJust cs <$> pathExists usesys b p
+-- toJust :: a -> Bool -> Maybe a
+-- toJust x b = if b then Just x else Nothing
 
 dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
 dbusDep usesys bus obj iface mem =
@@ -238,7 +243,6 @@ dbusDep usesys bus obj iface mem =
       , ddDbusInterface = iface
       , ddDbusMember = mem
       }
-
 
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
@@ -257,86 +261,101 @@ listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
 sysfsNet :: FilePath
 sysfsNet = "/sys/class/net"
 
-getWireless :: IO (Maybe CmdSpec)
-getWireless = do
-  ns <- filter isWireless <$> listInterfaces
-  return $ case ns of
-    [n] -> Just $ wirelessCmd n
-    _   -> Nothing
+readInterface :: (String -> Bool) -> IO (Maybe String)
+readInterface f = do
+  ns <- filter f <$> listInterfaces
+  case ns of
+    (x:xs) -> do
+      unless (null xs) $
+        putStrLn $ "WARNING: extra interfaces found, using " ++ x
+      return $ Just x
+    _     -> return Nothing
 
-getEthernet :: IO (Maybe CmdSpec)
-getEthernet = do
-  e <- pathExists True devBus devPath
-  ns <- filter isEthernet <$> listInterfaces
-  return $ case ns of
-    [n] -> toJust (ethernetCmd n) e
-    _   -> Nothing
-
-getBattery :: IO (Maybe CmdSpec)
-getBattery = toJust batteryCmd <$> hasBattery
-
-getVPN :: IO (Maybe CmdSpec)
-getVPN = do
+vpnPresent :: IO (Maybe Bool)
+vpnPresent = do
   res <- tryIOError $ readProcessWithExitCode "nmcli" args ""
-  case res of
-    (Right (ExitSuccess, out, _)) -> do
-      e <- pathExists True vpnBus vpnPath
-      return $ toJust vpnCmd (e && "vpn" `elem` lines out)
-    (Left _)                      -> do
-      putStrLn "WARNING: could not get list of network interfaces"
-      return Nothing
-    _                             -> return Nothing
+  -- TODO provide some error messages
+  return $ case res of
+    (Right (ExitSuccess, out, _)) -> Just $ "vpn" `elem` lines out
+    _                             -> Nothing
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
+rightPlugins :: [IO (MaybeExe CmdSpec)]
+rightPlugins =
+  [ getWireless
+  , getEthernet
+  , getVPN
+  , getBt
+  , getAlsa
+  , getBattery
+  , getBl
+  , nocheck ckCmd
+  , getSs
+  , nocheck lockCmd
+  , nocheck dateCmd
+  ]
+  where
+    nocheck = return . flip Installed []
+
+getWireless :: IO (MaybeExe CmdSpec)
+getWireless = do
+  i <- readInterface isWireless
+  return $ maybe Ignore (flip Installed [] . wirelessCmd) i
+
+getEthernet :: IO (MaybeExe CmdSpec)
+getEthernet = do
+  i <- readInterface isEthernet
+  maybe (return Ignore) (runIfInstalled [dep] . ethernetCmd) i
+  where
+    dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
+
+getBattery :: IO (MaybeExe CmdSpec)
+getBattery = go <$> hasBattery
+  where
+    -- TODO refactor this pattern
+    go True  = Installed batteryCmd []
+    go False = Ignore
+
+getVPN :: IO (MaybeExe CmdSpec)
+getVPN = do
+  v <- vpnPresent
+  case v of
+    (Just True) -> runIfInstalled [dep] vpnCmd
+    _           -> return Ignore
+  where
+    dep = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
+
 getBt :: IO (MaybeExe CmdSpec)
--- getBt = whenDBusPath True btBus btPath btCmd
 getBt = runIfInstalled [dep] btCmd
   where
     dep = dbusDep True btBus btPath btInterface $ Property_ btPowered
 
-getAlsa :: IO (Maybe CmdSpec)
-getAlsa = toJust alsaCmd . isJust <$> findExecutable "alsactl"
+getAlsa :: IO (MaybeExe CmdSpec)
+getAlsa = runIfInstalled [exe "alsactl"] alsaCmd
 
-getBl :: IO (Maybe CmdSpec)
-getBl = whenDBusPath False xmonadBus blPath blCmd
+getBl :: IO (MaybeExe CmdSpec)
+getBl = runIfInstalled [curFileDep, maxFileDep] blCmd
 
-getSs :: IO (Maybe CmdSpec)
-getSs = whenDBusPath False xmonadBus ssPath ssCmd
+getSs :: IO (MaybeExe CmdSpec)
+getSs = runIfInstalled [ssDep] ssCmd
 
-getAllCommands :: IO BarRegions
-getAllCommands = do
-  getBt' <- getBt
-  let bt = case getBt' of
-             (Installed x _) -> Just x
-             _               -> Nothing
+getAllCommands :: [MaybeExe CmdSpec] -> IO BarRegions
+getAllCommands right = do
   let left =
         [ CmdSpec
           { csAlias = "UnsafeStdinReader"
           , csRunnable = Run UnsafeStdinReader
           }
         ]
-  right <- catMaybes <$> sequence
-    [ getWireless
-    , getEthernet
-    , getVPN
-    -- , getBt
-    , return bt
-    , getAlsa
-    , getBattery
-    , getBl
-    , noSetup ckCmd
-    , getSs
-    , noSetup lockCmd
-    , noSetup dateCmd
-    ]
-  -- this is needed to see any printed messages
-  hFlush stdout
   return $ BarRegions
     { brLeft = left
     , brCenter = []
-    , brRight = right
+    , brRight = mapMaybe eval right
     }
+  where
+    eval (Installed x _) = Just x
+    eval _               = Nothing
 
 --------------------------------------------------------------------------------
 -- | various formatting things

@@ -11,6 +11,8 @@ module Xmobar.Plugins.VPN
   , vpnAlias
   , vpnBus
   , vpnPath
+  , vpnInterface
+  , vpnConnType
   ) where
 
 import           DBus
@@ -24,8 +26,7 @@ data VPN = VPN (String, String, String) Int
 
 callConnectionType :: Client -> IO (Either MethodError Variant)
 callConnectionType client =
-  getProperty client (methodCall vpnPath
-                      "org.freedesktop.NetworkManager" "PrimaryConnectionType")
+  getProperty client (methodCall vpnPath vpnInterface $ memberName_ vpnConnType)
     { methodCallDestination = Just vpnBus }
 
 vpnBus :: BusName
@@ -33,6 +34,12 @@ vpnBus = "org.freedesktop.NetworkManager"
 
 vpnPath :: ObjectPath
 vpnPath = "/org/freedesktop/NetworkManager"
+
+vpnInterface :: InterfaceName
+vpnInterface = "org.freedesktop.NetworkManager"
+
+vpnConnType :: String
+vpnConnType = "PrimaryConnectionType"
 
 vpnAlias :: String
 vpnAlias = "vpn"

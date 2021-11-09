@@ -4,6 +4,8 @@ module Xmobar.Plugins.Device
   ( Device(..)
   , devBus
   , devPath
+  , devInterface
+  , devGetByIP
   ) where
 
 -- TOOD this name can be more general
@@ -33,10 +35,15 @@ devBus = "org.freedesktop.NetworkManager"
 devPath :: ObjectPath
 devPath = "/org/freedesktop/NetworkManager"
 
+devInterface :: InterfaceName
+devInterface = "org.freedesktop.NetworkManager"
+
+devGetByIP :: MemberName
+devGetByIP = "GetDeviceByIpIface"
+
 getDevice :: Client -> String -> IO (Maybe ObjectPath)
 getDevice client iface = do
-  let mc = methodCall devPath
-        "org.freedesktop.NetworkManager" "GetDeviceByIpIface"
+  let mc = methodCall devPath devInterface devGetByIP
   reply <- call client $ mc { methodCallBody = [toVariant iface]
                             , methodCallDestination = Just devBus
                             }

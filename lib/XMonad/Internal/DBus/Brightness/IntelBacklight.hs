@@ -5,11 +5,11 @@ module XMonad.Internal.DBus.Brightness.IntelBacklight
   ( callGetBrightnessIB
   , matchSignalIB
   , exportIntelBacklight
-  -- , hasBacklight
+  , curFileDep
+  , maxFileDep
   , blPath
   ) where
 
--- import           Data.Either
 import           Data.Int                               (Int32)
 
 import           DBus
@@ -113,10 +113,15 @@ intelBacklightConfig = BrightnessConfig
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
+curFileDep :: Dependency
+curFileDep = pathRW curFile
+
+maxFileDep :: Dependency
+maxFileDep = pathR maxFile
+
 exportIntelBacklight :: Client -> IO BrightnessControls
-exportIntelBacklight = exportBrightnessControls deps intelBacklightConfig
-  where
-    deps = [pathRW curFile, pathR maxFile]
+exportIntelBacklight =
+  exportBrightnessControls [curFileDep, maxFileDep] intelBacklightConfig
   -- b <- hasBacklightMsg
   -- if b
   --   then Just <$> exportBrightnessControls intelBacklightConfig client
