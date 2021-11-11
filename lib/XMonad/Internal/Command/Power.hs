@@ -25,11 +25,9 @@ import           System.Directory
 import           System.Exit
 import           System.FilePath.Posix
 import           System.IO.Error
-import           System.Process
 
 import           XMonad.Core
 import           XMonad.Internal.Dependency
-import           XMonad.Internal.Process     (readCreateProcessWithExitCode')
 import qualified XMonad.Internal.Theme       as T
 import           XMonad.Prompt
 import           XMonad.Prompt.ConfirmPrompt
@@ -79,29 +77,6 @@ runQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
 isUsingNvidia :: IO Bool
 isUsingNvidia = doesDirectoryExist "/sys/module/nvidia"
 
-withShellOutput :: Show a => String -> (String -> a) -> IO (Maybe a)
-withShellOutput cmd f = do
-  (rc, out, _) <- readCreateProcessWithExitCode' (shell cmd) ""
-  return $ case rc of
-    ExitSuccess -> Just $ f out
-    _           -> Nothing
-
--- TODO this will work for most of my use cases but won't work in general
--- because it assumes "Intel" means "integrated graphics" ...sorry AMD
--- TODO this is hacky AF, I really only need the lspci command and the rest
--- can be parsed with some simple string matching if I use the -vmm option
-hasSwitchableGPU :: IO (Maybe Bool)
-hasSwitchableGPU = withShellOutput cmd hasIntelAndOther
-  where
-    cmd = fmtCmd "lspci" ["-mm"]
-        #!| fmtCmd "grep" ["VGA"]
-        #!| fmtCmd "sed" ["'s/ \"\\([^\"]*\\)\"*/|\\1/g'"]
-        #!| fmtCmd "cut" ["-f3", "-d'|'"]
-    hasIntelAndOther out =
-      let vendors = lines out
-          ivendors = filter (== "Intel Corporation") vendors in
-      length vendors > length ivendors && not (null ivendors)
-
 hasBattery :: IO Bool
 hasBattery = do
   ps <- fromRight [] <$> tryIOError (listDirectory syspath)
@@ -110,17 +85,6 @@ hasBattery = do
   where
     readType p = fromRight [] <$> tryIOError (readFile $ syspath </> p </> "type")
     syspath = "/sys/class/power_supply"
-
-requireOptimus :: IO Bool
-requireOptimus = do
-  s <- hasSwitchableGPU
-  b <- hasBattery
-  case (s, b) of
-    (Just True, True) -> return True
-    _                 -> warn >> return False
-  where
-    warn = putStrLn
-      "WARNING: could not determine if switchable GPU present. Assuming not"
 
 runOptimusPrompt' :: X ()
 runOptimusPrompt' = do
@@ -135,10 +99,7 @@ runOptimusPrompt' = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: IO MaybeX
-runOptimusPrompt = do
-  g <- requireOptimus
-  if g then runIfInstalled [exe myOptimusManager] runOptimusPrompt'
-    else return Ignore
+runOptimusPrompt = runIfInstalled [exe myOptimusManager] runOptimusPrompt'
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt
@@ -184,6 +145,8 @@ runPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
     sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
     executeAction a = case toEnum $ read a of
       Poweroff  -> runPowerOff
+      -- TODO these dependency functions need to be assembled elsewhere and fed
+      -- to this function
       Shutdown  -> (io runScreenLock >>= whenInstalled) >> runSuspend
       Hibernate -> (io runScreenLock >>= whenInstalled) >> runHibernate
       Reboot    -> runReboot
