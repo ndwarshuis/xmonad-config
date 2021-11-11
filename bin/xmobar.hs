@@ -232,7 +232,7 @@ dateCmd = CmdSpec
 -- toJust :: a -> Bool -> Maybe a
 -- toJust x b = if b then Just x else Nothing
 
-dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
+dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency a
 dbusDep usesys bus obj iface mem =
   Dependency { depRequired = True, depData = d }
   where

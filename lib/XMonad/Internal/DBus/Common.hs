@@ -6,10 +6,13 @@ module XMonad.Internal.DBus.Common
   , callMethod'
   , addMatchCallback
   , xmonadBus
+  , initControls
   ) where
 
 import           DBus
 import           DBus.Client
+
+import           XMonad.Internal.Dependency
 
 xmonadBus :: BusName
 xmonadBus = busName_ "org.xmonad"
@@ -36,3 +39,13 @@ addMatchCallback :: MatchRule -> ([Variant] -> IO ()) -> IO SignalHandler
 addMatchCallback rule cb = do
   client <- connectSession
   addMatch client rule $ cb . signalBody
+
+initControls :: Client -> (Client -> Feature (IO ()) (IO ()))
+  -> (Feature (IO ()) (IO ()) -> IO a) -> IO a
+initControls client exporter controls = do
+  let x = exporter client
+  e <- evalFeature x
+  case e of
+    (Installed c _) -> c
+    _               -> return ()
+  controls x

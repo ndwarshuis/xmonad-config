@@ -32,7 +32,7 @@ memAdded = memberName_ "InterfacesAdded"
 memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
-dbusDep :: MemberName -> Dependency
+dbusDep :: MemberName -> Dependency (IO a)
 dbusDep m = Dependency { depRequired = True, depData = d }
   where
     d = DBusEndpoint
@@ -43,10 +43,10 @@ dbusDep m = Dependency { depRequired = True, depData = d }
       , ddDbusMember = Signal_ m
       }
 
-addedDep :: Dependency
+addedDep :: Dependency (IO a)
 addedDep = dbusDep memAdded
 
-removedDep :: Dependency
+removedDep :: Dependency (IO a)
 removedDep = dbusDep memRemoved
 
 driveInsertedSound :: FilePath

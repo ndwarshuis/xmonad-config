@@ -17,7 +17,7 @@ module XMonad.Internal.Command.Desktop
   , runVolumeUp
   , runVolumeMute
   , runToggleBluetooth
-  , runToggleDPMS
+  -- , runToggleDPMS
   , runToggleEthernet
   , runRestart
   , runRecompile
@@ -33,7 +33,7 @@ module XMonad.Internal.Command.Desktop
   , runNotificationContext
   ) where
 
-import           Control.Monad                    (void)
+import           Control.Monad              (void)
 
 import           System.Directory
     ( createDirectoryIfMissing
@@ -43,8 +43,8 @@ import           System.Environment
 import           System.FilePath
 
 import           XMonad.Actions.Volume
-import           XMonad.Core                      hiding (spawn)
-import           XMonad.Internal.DBus.Screensaver
+import           XMonad.Core                hiding (spawn)
+-- import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
@@ -93,7 +93,11 @@ runTerm :: IO MaybeX
 runTerm = spawnIfInstalled myTerm
 
 runTMux :: IO MaybeX
-runTMux = runIfInstalled [exe myTerm, exe "tmux", exe "bash"] cmd
+runTMux = evalFeature $ Feature
+  { ftrAction = cmd
+  , ftrSilent = False
+  , ftrChildren  = [exe myTerm, exe "tmux", exe "bash"]
+  }
   where
     cmd = spawn
       $ "tmux has-session"
@@ -171,8 +175,8 @@ runToggleBluetooth = runIfInstalled [exe myBluetooth] $ spawn
   #!>> fmtCmd myBluetooth ["power", "$a", ">", "/dev/null"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
-runToggleDPMS :: X ()
-runToggleDPMS = io $ void callToggle
+-- runToggleDPMS :: IO MaybeX
+-- runToggleDPMS = io <$> evalFeature callToggle
 
 runToggleEthernet :: IO MaybeX
 runToggleEthernet = runIfInstalled [exe "nmcli"] $ spawn

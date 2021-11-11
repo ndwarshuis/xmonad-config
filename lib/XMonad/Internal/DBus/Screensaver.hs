@@ -11,7 +11,7 @@ module XMonad.Internal.DBus.Screensaver
   , SSControls(..)
   ) where
 
-import           Control.Monad               (void, when)
+import           Control.Monad               (void)
 
 import           DBus
 import           DBus.Client
@@ -31,7 +31,7 @@ type SSState = Bool -- true is enabled
 ssExecutable :: String
 ssExecutable = "xset"
 
-ssDep :: Dependency
+ssDep :: Dependency (IO a)
 ssDep = exe ssExecutable
 
 toggle :: IO SSState
@@ -100,24 +100,35 @@ bodyGetCurrentState _   = Nothing
 newtype SSControls = SSControls { ssToggle :: MaybeExe (IO ()) }
 
 exportScreensaver :: Client -> IO SSControls
-exportScreensaver client = do
-  (req, opt) <- checkInstalled [ssDep]
-  when (null req) $
-    exportScreensaver' client
-  return $ SSControls { ssToggle = createInstalled req opt callToggle }
+exportScreensaver client = initControls client exportScreensaver' controls
+  where
+    controls exporter = do
+      t <- evalFeature $ callToggle exporter
+      return $ SSControls { ssToggle = t }
 
-exportScreensaver' :: Client -> IO ()
-exportScreensaver' client = do
-  export client ssPath defaultInterface
-    { interfaceName = interface
-    , interfaceMethods =
-      [ autoMethod memToggle $ emitState client =<< toggle
-      , autoMethod memQuery query
-      ]
-    }
+exportScreensaver' :: Client -> Feature (IO ()) (IO ())
+exportScreensaver' client = Feature
+  { ftrAction = cmd
+  , ftrSilent = False
+  , ftrChildren = [ssDep]
+  }
+  where
+    cmd = export client ssPath defaultInterface
+      { interfaceName = interface
+      , interfaceMethods =
+        [ autoMethod memToggle $ emitState client =<< toggle
+        , autoMethod memQuery query
+        ]
+      }
 
-callToggle :: IO ()
-callToggle = void $ callMethod $ methodCall ssPath interface memToggle
+callToggle :: Feature (IO ()) (IO ()) -> Feature (IO ()) (IO ())
+callToggle exporter = Feature
+  { ftrAction = cmd
+  , ftrSilent = False
+  , ftrChildren = [SubFeature exporter]
+  }
+  where
+    cmd = void $ callMethod $ methodCall ssPath interface memToggle
 
 callQuery :: IO (Maybe SSState)
 callQuery = do

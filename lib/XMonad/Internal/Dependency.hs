@@ -10,6 +10,8 @@ module XMonad.Internal.Dependency
   , DependencyData(..)
   , DBusMember(..)
   , MaybeX
+  , Feature(..)
+  , evalFeature
   , exe
   , systemUnit
   , userUnit
@@ -80,43 +82,69 @@ data DependencyData = Executable String
   | Systemd UnitType String
   deriving (Eq, Show)
 
-data Dependency = Dependency
+-- data Dependency = Dependency
+--   { depRequired :: Bool
+--   , depData     :: DependencyData
+--   }
+--   deriving (Eq, Show)
+
+data Dependency a = SubFeature (Feature a a)
+  | Dependency
   { depRequired :: Bool
   , depData     :: DependencyData
-  }
-  deriving (Eq, Show)
+  } deriving (Eq, Show)
 
-exe :: String -> Dependency
+data Feature a b = Feature
+  { ftrAction   :: a
+  , ftrSilent   :: Bool
+  , ftrChildren :: [Dependency b]
+  } deriving (Eq, Show)
+
+evalFeature :: Feature a b -> IO (MaybeExe a)
+evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
+  c' <- concat <$> mapM go c
+  return $ case foldl groupResult ([], []) c' of
+    ([], opt)  -> Installed a opt
+    (req, opt) -> if s then Ignore else Missing req opt
+  where
+    go (SubFeature Feature { ftrChildren = cs }) = concat <$> mapM go cs
+    go Dependency { depRequired = r, depData = d } = do
+      i <- depInstalled d
+      return [(r, d) | not i ]
+    groupResult (x, y) (True, z)  = (z:x, y)
+    groupResult (x, y) (False, z) = (x, z:y)
+
+exe :: String -> Dependency a
 exe n = Dependency
   { depRequired = True
   , depData = Executable n
   }
 
-unit :: UnitType -> String -> Dependency
+unit :: UnitType -> String -> Dependency a
 unit t n = Dependency
   { depRequired = True
   , depData = Systemd t n
   }
 
-path :: Bool -> Bool -> String -> Dependency
+path :: Bool -> Bool -> String -> Dependency a
 path r w n = Dependency
   { depRequired = True
   , depData = AccessiblePath n r w
   }
 
-pathR :: String -> Dependency
+pathR :: String -> Dependency a
 pathR = path True False
 
-pathW :: String -> Dependency
+pathW :: String -> Dependency a
 pathW = path False True
 
-pathRW :: String -> Dependency
+pathRW :: String -> Dependency a
 pathRW = path True True
 
-systemUnit :: String -> Dependency
+systemUnit :: String -> Dependency a
 systemUnit = unit SystemUnit
 
-userUnit :: String -> Dependency
+userUnit :: String -> Dependency a
 userUnit = unit UserUnit
 
 -- TODO this is poorly named. This actually represents an action that has
@@ -210,7 +238,7 @@ depInstalled DBusEndpoint { ddDbusBus = b
                           , ddDbusMember = m
                           } = dbusInstalled b s o i m
 
-checkInstalled :: [Dependency] -> IO ([DependencyData], [DependencyData])
+checkInstalled :: [Dependency a] -> IO ([DependencyData], [DependencyData])
 checkInstalled = fmap go . filterMissing
   where
     go = join (***) (fmap depData) . partition depRequired
@@ -218,14 +246,16 @@ checkInstalled = fmap go . filterMissing
 createInstalled :: [DependencyData] -> [DependencyData] -> a -> MaybeExe a
 createInstalled req opt x = if null req then Installed x opt else Missing req opt
 
-filterMissing :: [Dependency] -> IO [Dependency]
+filterMissing :: [Dependency a] -> IO [Dependency a]
 filterMissing = filterM (fmap not . depInstalled . depData)
 
--- runIfInstalled :: MonadIO m => [Dependency] -> m a -> IO (MaybeExe (m a))
-runIfInstalled :: [Dependency] -> a -> IO (MaybeExe a)
-runIfInstalled ds x = do
-  (req, opt) <- checkInstalled ds
-  return $ createInstalled req opt x
+runIfInstalled :: [Dependency a] -> b -> IO (MaybeExe b)
+runIfInstalled ds x = evalFeature $
+  Feature
+  { ftrAction = x
+  , ftrSilent = False
+  , ftrChildren = ds
+  }
 
 spawnIfInstalled :: MonadIO m => String -> IO (MaybeExe (m ()))
 spawnIfInstalled n = runIfInstalled [exe n] $ spawn n
