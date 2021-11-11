@@ -19,7 +19,6 @@ module XMonad.Internal.Dependency
   , pathW
   , pathRW
   , checkInstalled
-  , createInstalled
   , runIfInstalled
   , depInstalled
   , warnMissing
@@ -242,9 +241,6 @@ checkInstalled :: [Dependency a] -> IO ([DependencyData], [DependencyData])
 checkInstalled = fmap go . filterMissing
   where
     go = join (***) (fmap depData) . partition depRequired
-
-createInstalled :: [DependencyData] -> [DependencyData] -> a -> MaybeExe a
-createInstalled req opt x = if null req then Installed x opt else Missing req opt
 
 filterMissing :: [Dependency a] -> IO [Dependency a]
 filterMissing = filterM (fmap not . depInstalled . depData)
