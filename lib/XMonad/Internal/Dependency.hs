@@ -71,6 +71,7 @@ data DBusMember = Method_ MemberName
 
 data DependencyData = Executable String
   | AccessiblePath FilePath Bool Bool
+  | IOTest (IO Bool)
   | DBusEndpoint
     { ddDbusBus       :: BusName
     , ddDbusSystem    :: Bool
@@ -79,27 +80,24 @@ data DependencyData = Executable String
     , ddDbusMember    :: DBusMember
     }
   | Systemd UnitType String
-  deriving (Eq, Show)
-
--- data Dependency = Dependency
---   { depRequired :: Bool
---   , depData     :: DependencyData
---   }
---   deriving (Eq, Show)
 
 data Dependency a = SubFeature (Feature a a)
   | Dependency
+  -- TODO when would this ever be false?
   { depRequired :: Bool
   , depData     :: DependencyData
-  } deriving (Eq, Show)
+  }
 
 data Feature a b = Feature
   { ftrAction   :: a
+  -- TODO add a 'default' action that will proceed in case of failure
   , ftrSilent   :: Bool
+  -- TODO this should be a semigroup
   , ftrChildren :: [Dependency b]
-  } deriving (Eq, Show)
+  } | ConstFeature a
 
 evalFeature :: Feature a b -> IO (MaybeExe a)
+evalFeature (ConstFeature x) = return $ Installed x []
 evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
   c' <- concat <$> mapM go c
   return $ case foldl groupResult ([], []) c' of
@@ -107,6 +105,7 @@ evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
     (req, opt) -> if s then Ignore else Missing req opt
   where
     go (SubFeature Feature { ftrChildren = cs }) = concat <$> mapM go cs
+    go (SubFeature (ConstFeature _)) = return []
     go Dependency { depRequired = r, depData = d } = do
       i <- depInstalled d
       return [(r, d) | not i ]
@@ -151,7 +150,7 @@ userUnit = unit UserUnit
 data MaybeExe a = Installed a [DependencyData]
   | Missing [DependencyData] [DependencyData]
   | Ignore
-  deriving (Eq, Show, Foldable, Traversable)
+  deriving (Foldable, Traversable)
 
 instance Functor MaybeExe where
   fmap f (Installed x ds)  = Installed (f x) ds
@@ -228,6 +227,7 @@ dbusInstalled bus usesystem objpath iface mem = do
 -- TODO somehow get this to preserve error messages if something isn't found
 depInstalled :: DependencyData -> IO Bool
 depInstalled (Executable n)         = exeInstalled n
+depInstalled (IOTest t)             = t
 depInstalled (Systemd t n)          = unitInstalled t n
 depInstalled (AccessiblePath p r w) = pathAccessible p r w
 depInstalled DBusEndpoint { ddDbusBus = b
@@ -293,6 +293,7 @@ partitionMissing = foldl (\(a, b) -> ((a++) *** (b++)) . go) ([], [])
 
 fmtMissing :: DependencyData -> String
 -- TODO this error message is lame
+fmtMissing (IOTest _) = "some random test failed"
 fmtMissing DBusEndpoint {} = "some random dbus path is missing"
 fmtMissing (AccessiblePath p True False) = "path '" ++ p ++ "' not readable"
 fmtMissing (AccessiblePath p False True) = "path '" ++ p ++ "' not writable"
