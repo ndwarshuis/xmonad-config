@@ -271,13 +271,13 @@ readInterface f = do
       return $ Just x
     _     -> return Nothing
 
-vpnPresent :: IO (Maybe Bool)
+vpnPresent :: IO (Either String Bool)
 vpnPresent = do
   res <- tryIOError $ readProcessWithExitCode "nmcli" args ""
   -- TODO provide some error messages
   return $ case res of
-    (Right (ExitSuccess, out, _)) -> Just $ "vpn" `elem` lines out
-    _                             -> Nothing
+    (Right (ExitSuccess, out, _)) -> Right $ "vpn" `elem` lines out
+    _                             -> Left "puke"
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
@@ -285,13 +285,13 @@ rightPlugins :: [IO (MaybeExe CmdSpec)]
 rightPlugins =
   [ getWireless
   , getEthernet
-  , getVPN
-  , getBt
-  , getAlsa
-  , getBattery
-  , getBl
+  , evalFeature getVPN
+  , evalFeature getBt
+  , evalFeature getAlsa
+  , evalFeature getBattery
+  , evalFeature getBl
   , nocheck ckCmd
-  , getSs
+  , evalFeature getSs
   , nocheck lockCmd
   , nocheck dateCmd
   ]
@@ -310,35 +310,54 @@ getEthernet = do
   where
     dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
 
-getBattery :: IO (MaybeExe CmdSpec)
-getBattery = go <$> hasBattery
-  where
-    -- TODO refactor this pattern
-    go True  = Installed batteryCmd []
-    go False = Ignore
+getBattery :: BarFeature
+getBattery = Feature
+  { ftrAction = batteryCmd
+  , ftrSilent = False
+  , ftrChildren = [Dependency { depRequired = True, depData = IOTest hasBattery }]
+  }
 
-getVPN :: IO (MaybeExe CmdSpec)
-getVPN = do
-  v <- vpnPresent
-  case v of
-    (Just True) -> runIfInstalled [dep] vpnCmd
-    _           -> return Ignore
-  where
-    dep = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
+type BarFeature = Feature CmdSpec (IO ())
 
-getBt :: IO (MaybeExe CmdSpec)
-getBt = runIfInstalled [dep] btCmd
+getVPN :: BarFeature
+getVPN = Feature
+  { ftrAction = vpnCmd
+  , ftrSilent = False
+  , ftrChildren = [d, v]
+  }
+  where
+    d = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
+    v = Dependency { depRequired = True, depData = IOTest vpnPresent }
+
+getBt :: BarFeature
+getBt = Feature
+  { ftrAction = btCmd
+  , ftrSilent = False
+  , ftrChildren = [dep]
+  }
   where
     dep = dbusDep True btBus btPath btInterface $ Property_ btPowered
 
-getAlsa :: IO (MaybeExe CmdSpec)
-getAlsa = runIfInstalled [exe "alsactl"] alsaCmd
+getAlsa :: BarFeature
+getAlsa = Feature
+  { ftrAction = alsaCmd
+  , ftrSilent = False
+  , ftrChildren = [exe "alsactl"]
+  }
 
-getBl :: IO (MaybeExe CmdSpec)
-getBl = runIfInstalled [curFileDep, maxFileDep] blCmd
+getBl :: BarFeature
+getBl = Feature
+  { ftrAction = blCmd
+  , ftrSilent = False
+  , ftrChildren = [curFileDep, maxFileDep]
+  }
 
-getSs :: IO (MaybeExe CmdSpec)
-getSs = runIfInstalled [ssDep] ssCmd
+getSs :: BarFeature
+getSs = Feature
+  { ftrAction = ssCmd
+  , ftrSilent = False
+  , ftrChildren = [ssDep]
+  }
 
 getAllCommands :: [MaybeExe CmdSpec] -> IO BarRegions
 getAllCommands right = do

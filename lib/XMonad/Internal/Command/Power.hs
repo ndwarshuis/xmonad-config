@@ -77,11 +77,12 @@ runQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
 isUsingNvidia :: IO Bool
 isUsingNvidia = doesDirectoryExist "/sys/module/nvidia"
 
-hasBattery :: IO Bool
+hasBattery :: IO (Either String Bool)
 hasBattery = do
   ps <- fromRight [] <$> tryIOError (listDirectory syspath)
   ts <- mapM readType ps
-  return $ "Battery\n" `elem` ts
+  -- TODO this is obviously stupid
+  return $ Right $ "Battery\n" `elem` ts
   where
     readType p = fromRight [] <$> tryIOError (readFile $ syspath </> p </> "type")
     syspath = "/sys/class/power_supply"

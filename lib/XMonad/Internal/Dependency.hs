@@ -43,6 +43,7 @@ import           Control.Arrow           ((***))
 import           Control.Monad           (filterM, join)
 import           Control.Monad.IO.Class
 
+import           Data.Either             (isRight)
 import           Data.List               (find, partition)
 import           Data.Maybe              (fromMaybe, isJust, listToMaybe)
 
@@ -71,7 +72,7 @@ data DBusMember = Method_ MemberName
 
 data DependencyData = Executable String
   | AccessiblePath FilePath Bool Bool
-  | IOTest (IO Bool)
+  | IOTest (IO (Either String Bool))
   | DBusEndpoint
     { ddDbusBus       :: BusName
     , ddDbusSystem    :: Bool
@@ -227,7 +228,7 @@ dbusInstalled bus usesystem objpath iface mem = do
 -- TODO somehow get this to preserve error messages if something isn't found
 depInstalled :: DependencyData -> IO Bool
 depInstalled (Executable n)         = exeInstalled n
-depInstalled (IOTest t)             = t
+depInstalled (IOTest t)             = isRight <$> t
 depInstalled (Systemd t n)          = unitInstalled t n
 depInstalled (AccessiblePath p r w) = pathAccessible p r w
 depInstalled DBusEndpoint { ddDbusBus = b
