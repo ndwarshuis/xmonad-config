@@ -91,9 +91,8 @@ data Dependency a = SubFeature (Feature a a)
 
 data Feature a b = Feature
   { ftrAction   :: a
-  -- TODO add a 'default' action that will proceed in case of failure
+  , ftrDefault  :: Maybe a
   , ftrSilent   :: Bool
-  -- TODO this should be a semigroup
   , ftrChildren :: [Dependency b]
   } | ConstFeature a
 
@@ -250,6 +249,7 @@ runIfInstalled :: [Dependency a] -> b -> IO (MaybeExe b)
 runIfInstalled ds x = evalFeature $
   Feature
   { ftrAction = x
+  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = ds
   }

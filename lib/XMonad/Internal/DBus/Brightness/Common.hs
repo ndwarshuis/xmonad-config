@@ -102,6 +102,7 @@ brightnessExporter :: RealFrac b => [Dependency (IO ())]
   -> BrightnessConfig a b -> Client -> Feature (IO ()) (IO ())
 brightnessExporter deps bc client = Feature
   { ftrAction = exportBrightnessControls' bc client
+  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = deps
   }
@@ -137,6 +138,7 @@ callBacklight :: BrightnessConfig a b -> Feature (IO ()) (IO ()) -> MemberName
 callBacklight BrightnessConfig { bcPath = p, bcInterface = i } exporter mem =
   Feature
   { ftrAction = void $ callMethod $ methodCall p i mem
+  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = [SubFeature exporter]
   }
