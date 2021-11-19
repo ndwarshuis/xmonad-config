@@ -500,9 +500,9 @@ externalToMissing = concatMap go
 
 flagKeyBinding :: KeyBinding MaybeX -> Maybe (KeyBinding (X ()))
 flagKeyBinding k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
-  Installed x _ -> Just $ k{ kbAction = x }
-  Missing _ _   -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
-  Ignore        -> Nothing
+  (Right x) -> Just $ k{ kbAction = x }
+  (Left _)  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
+  -- _                     -> Nothing
 
 externalBindings :: BrightnessControls -> SSControls -> ThreadState
   -> [KeyGroup (IO MaybeX)]

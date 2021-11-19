@@ -21,7 +21,7 @@ import           XMonad.Internal.DBus.Brightness.Common
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
-import           XMonad.Internal.Dependency
+-- import           XMonad.Internal.Dependency
 
 introspectInterface :: InterfaceName
 introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
@@ -38,14 +38,14 @@ data DBusXMonad = DBusXMonad
 
 blankControls :: BrightnessControls
 blankControls = BrightnessControls
-  { bctlMax = Ignore
-  , bctlMin = Ignore
-  , bctlInc = Ignore
-  , bctlDec = Ignore
+  { bctlMax = Left []
+  , bctlMin = Left []
+  , bctlInc = Left []
+  , bctlDec = Left []
   }
 
 blankSSToggle :: SSControls
-blankSSToggle = SSControls { ssToggle = Ignore }
+blankSSToggle = SSControls { ssToggle = Left [] }
 
 startXMonadService :: IO DBusXMonad
 startXMonadService = do

@@ -46,6 +46,6 @@ initControls client exporter controls = do
   let x = exporter client
   e <- evalFeature x
   case e of
-    (Installed c _) -> c
-    _               -> return ()
+    (Right c) -> c
+    _         -> return ()
   controls x

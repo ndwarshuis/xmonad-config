@@ -33,7 +33,7 @@ memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
 dbusDep :: MemberName -> Dependency (IO a)
-dbusDep m = Dependency { depRequired = True, depData = d }
+dbusDep m = Dependency d
   where
     d = DBusEndpoint
       { ddDbusBus = bus

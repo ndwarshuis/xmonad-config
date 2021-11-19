@@ -234,7 +234,7 @@ dateCmd = CmdSpec
 
 dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency a
 dbusDep usesys bus obj iface mem =
-  Dependency { depRequired = True, depData = d }
+  Dependency d
   where
     d = DBusEndpoint
       { ddDbusBus = bus
@@ -271,13 +271,13 @@ readInterface f = do
       return $ Just x
     _     -> return Nothing
 
-vpnPresent :: IO (Either String Bool)
+vpnPresent :: IO (Maybe String)
 vpnPresent = do
   res <- tryIOError $ readProcessWithExitCode "nmcli" args ""
   -- TODO provide some error messages
   return $ case res of
-    (Right (ExitSuccess, out, _)) -> Right $ "vpn" `elem` lines out
-    _                             -> Left "puke"
+    (Right (ExitSuccess, out, _)) -> if "vpn" `elem` lines out then Nothing else Just "vpn not found"
+    _                             -> Just "puke"
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
@@ -296,17 +296,17 @@ rightPlugins =
   , nocheck dateCmd
   ]
   where
-    nocheck = return . flip Installed []
+    nocheck = return . Right
 
 getWireless :: IO (MaybeExe CmdSpec)
 getWireless = do
   i <- readInterface isWireless
-  return $ maybe Ignore (flip Installed [] . wirelessCmd) i
+  return $ maybe (Left []) (Right . wirelessCmd) i
 
 getEthernet :: IO (MaybeExe CmdSpec)
 getEthernet = do
   i <- readInterface isEthernet
-  maybe (return Ignore) (runIfInstalled [dep] . ethernetCmd) i
+  maybe (return $ Left []) (runIfInstalled [dep] . ethernetCmd) i
   where
     dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
 
@@ -315,7 +315,7 @@ getBattery = Feature
   { ftrAction = batteryCmd
   , ftrSilent = False
   , ftrDefault = Nothing
-  , ftrChildren = [Dependency { depRequired = True, depData = IOTest hasBattery }]
+  , ftrChildren = [Dependency $ IOTest hasBattery]
   }
 
 type BarFeature = Feature CmdSpec (IO ())
@@ -329,7 +329,7 @@ getVPN = Feature
   }
   where
     d = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
-    v = Dependency { depRequired = True, depData = IOTest vpnPresent }
+    v = Dependency $ IOTest vpnPresent
 
 getBt :: BarFeature
 getBt = Feature
@@ -379,8 +379,8 @@ getAllCommands right = do
     , brRight = mapMaybe eval right
     }
   where
-    eval (Installed x _) = Just x
-    eval _               = Nothing
+    eval (Right x) = Just x
+    eval _         = Nothing
 
 --------------------------------------------------------------------------------
 -- | various formatting things
