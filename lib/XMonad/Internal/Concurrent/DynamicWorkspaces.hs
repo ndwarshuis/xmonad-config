@@ -57,6 +57,7 @@ import           XMonad.Core
     ( ManageHook
     , WorkspaceId
     , X
+    , io
     , withWindowSet
     )
 import           XMonad.Hooks.ManageHelpers               (MaybeManageHook)
@@ -106,9 +107,6 @@ instance Applicative W where
 
 runW :: WConf -> W a -> IO a
 runW c (W a) = runReaderT a c
-
-io :: MonadIO m => IO a -> m a
-io = liftIO
 
 runWorkspaceMon :: [DynWorkspace] -> IO ()
 runWorkspaceMon dws = do
