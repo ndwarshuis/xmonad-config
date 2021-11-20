@@ -7,7 +7,11 @@
 module Main (main) where
 
 import           Control.Concurrent
-import           Control.Monad                                  (unless)
+import           Control.Monad
+    ( forM_
+    , unless
+    , void
+    )
 
 import           Data.List
     ( isPrefixOf
@@ -73,19 +77,17 @@ main :: IO ()
 main = do
   cl <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
-  dbusActions <- mapM evalFeature [exportScreensaver cl, exportIntelBacklight cl]
-  depActions <- mapM evalFeature [runPowermon, runRemovableMon]
-  mapM_ whenInstalled dbusActions
-  mapM_ (mapM_ forkIO) depActions
-  _ <- forkIO $ runWorkspaceMon allDWs
+  mapM_ (applyFeature_ forkIO_) [runPowermon, runRemovableMon]
+  forkIO_ $ runWorkspaceMon allDWs
   let ts = ThreadState
-        { client = cl
-        , childPIDs = [p]
-        , childHandles = [h]
+        { tsClient = cl
+        , tsChildPIDs = [p]
+        , tsChildHandles = [h]
         }
-  lock <- whenInstalled <$> evalFeature runScreenLock
+  lockRes <- evalFeature runScreenLock
+  let lock = whenInstalled lockRes
   ext <- evalExternal $ externalBindings ts lock
-  warnMissing $ externalToMissing ext ++ fmap (io <$>) (depActions ++ dbusActions)
+  warnMissing $ externalToMissing ext
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   launch
@@ -104,21 +106,23 @@ main = do
           , normalBorderColor = T.bordersColor
           , focusedBorderColor = T.selectedBordersColor
           }
+  where
+    forkIO_ = void . forkIO
 
 --------------------------------------------------------------------------------
 -- | Concurrency configuration
 
 data ThreadState = ThreadState
-    { client       :: Client
-    , childPIDs    :: [ProcessHandle]
-    , childHandles :: [Handle]
+    { tsClient       :: Maybe Client
+    , tsChildPIDs    :: [ProcessHandle]
+    , tsChildHandles :: [Handle]
     }
 
 -- TODO shouldn't this be run by a signal handler?
 runCleanup :: ThreadState -> X ()
 runCleanup ts = io $ do
-  mapM_ killHandle $ childPIDs ts
-  stopXMonadService $ client ts
+  mapM_ killHandle $ tsChildPIDs ts
+  forM_ (tsClient ts) stopXMonadService
 
 --------------------------------------------------------------------------------
 -- | Startuphook configuration

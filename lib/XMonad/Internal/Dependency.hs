@@ -26,6 +26,10 @@ module XMonad.Internal.Dependency
   , ifInstalled
   , fmtCmd
   , spawnCmd
+  , executeFeature
+  , executeFeature_
+  , applyFeature
+  , applyFeature_
   ) where
 
 import           Control.Monad.IO.Class
@@ -40,7 +44,7 @@ import qualified DBus.Introspection      as I
 import           System.Directory        (findExecutable, readable, writable)
 import           System.Exit
 
-import           XMonad.Core             (X)
+import           XMonad.Core             (X, io)
 import           XMonad.Internal.IO
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
@@ -213,4 +217,21 @@ ifInstalled (Right x) _ = x
 ifInstalled _ alt       = alt
 
 warnMissing :: [MaybeExe a] -> IO ()
-warnMissing xs = mapM_ putStrLn $ fmap ("[WARNING] "++) $ concat $ [ m | (Left m) <- xs ]
+warnMissing xs = warnMissing' $ fmap ("[WARNING] "++) $ concat $ [ m | (Left m) <- xs ]
+
+warnMissing' :: [String] -> IO ()
+warnMissing' = mapM_ putStrLn
+
+applyFeature :: MonadIO m => (m a -> m a) -> a -> Feature (IO a) -> m a
+applyFeature iof def ftr = do
+  a <- io $ evalFeature ftr
+  either (\es -> io $ warnMissing' es >> return def) (iof . io) a
+
+applyFeature_ :: MonadIO m => (m () -> m ()) -> Feature (IO ()) -> m ()
+applyFeature_ iof = applyFeature iof ()
+
+executeFeature :: MonadIO m => a -> Feature (IO a) -> m a
+executeFeature = applyFeature id
+
+executeFeature_ :: Feature (IO ()) -> IO ()
+executeFeature_ = executeFeature ()
