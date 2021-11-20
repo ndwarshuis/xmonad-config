@@ -6,6 +6,7 @@ module XMonad.Internal.DBus.Common
   , callMethod'
   , addMatchCallback
   , xmonadBus
+  , xDbusDep
   , initControls
   ) where
 
@@ -16,6 +17,15 @@ import           XMonad.Internal.Dependency
 
 xmonadBus :: BusName
 xmonadBus = busName_ "org.xmonad"
+
+xDbusDep :: ObjectPath -> InterfaceName -> DBusMember -> Dependency
+xDbusDep o i m = DBusEndpoint
+  { ddDbusBus = xmonadBus
+  , ddDbusSystem = False
+  , ddDbusObject = o
+  , ddDbusInterface = i
+  , ddDbusMember = m
+  }
 
 -- | Call a method and return its result if successful
 callMethod :: MethodCall -> IO (Maybe [Variant])

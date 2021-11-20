@@ -5,7 +5,6 @@ module XMonad.Internal.Dependency
   ( MaybeExe
   , UnitType(..)
   , Dependency(..)
-  , DependencyData(..)
   , DBusMember(..)
   , MaybeX
   , FeatureX
@@ -56,7 +55,8 @@ data DBusMember = Method_ MemberName
   | Property_ String
   deriving (Eq, Show)
 
-data DependencyData = Executable String
+-- data DependencyData = Executable String
+data Dependency = Executable String
   | AccessiblePath FilePath Bool Bool
   | IOTest (IO (Maybe String))
   | DBusEndpoint
@@ -68,32 +68,27 @@ data DependencyData = Executable String
     }
   | Systemd UnitType String
 
-data Dependency a = SubFeature (Feature a a)
-  | Dependency DependencyData
+-- data Dependency a = SubFeature (Feature a a)
+--   | Dependency DependencyData
 
-data Feature a b = Feature
+data Feature a = Feature
   { ftrAction   :: a
   , ftrSilent   :: Bool
-  , ftrChildren :: [Dependency b]
+  , ftrChildren :: [Dependency]
   }
   | ConstFeature a
   | BlankFeature
 
-type FeatureX = Feature (X ()) (X ())
+type FeatureX = Feature (X ())
 
-type FeatureIO = Feature (IO ()) (IO ())
+type FeatureIO = Feature (IO ())
 
-ioFeature :: (MonadIO m, MonadIO n) => Feature (IO a) (IO b) -> Feature (m a) (n b)
-ioFeature f@Feature { ftrAction = a, ftrChildren = ds } =
-  f { ftrAction = liftIO a, ftrChildren = fmap go ds }
-  where
-    go :: MonadIO o => Dependency (IO b) -> Dependency (o b)
-    go (SubFeature s) = SubFeature $ ioFeature s
-    go (Dependency d) = Dependency d
-ioFeature (ConstFeature f) = ConstFeature $ liftIO f
-ioFeature BlankFeature = BlankFeature
+ioFeature :: (MonadIO m) => Feature (IO a) -> Feature (m a)
+ioFeature f@Feature { ftrAction = a } = f { ftrAction = liftIO a }
+ioFeature (ConstFeature f)            = ConstFeature $ liftIO f
+ioFeature BlankFeature                = BlankFeature
 
-evalFeature :: Feature a b -> IO (MaybeExe a)
+evalFeature :: Feature a -> IO (MaybeExe a)
 evalFeature (ConstFeature x) = return $ Right x
 evalFeature BlankFeature = return $ Left []
 evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
@@ -102,35 +97,28 @@ evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
     []  -> Right a
     es' -> Left (if s then [] else es')
   where
-    go (SubFeature Feature { ftrChildren = cs }) = concat <$> mapM go cs
-    go (Dependency d) = do
-      e <- depInstalled d
-      return $ maybeToList e
-    go (SubFeature _) = return []
+    go = fmap maybeToList . depInstalled
 
-exe :: String -> Dependency a
-exe = Dependency . Executable
+exe :: String -> Dependency
+exe = Executable
 
-unit :: UnitType -> String -> Dependency a
-unit t = Dependency . Systemd t
+path :: Bool -> Bool -> String -> Dependency
+path r w n = AccessiblePath n r w
 
-path :: Bool -> Bool -> String -> Dependency a
-path r w n = Dependency $ AccessiblePath n r w
-
-pathR :: String -> Dependency a
+pathR :: String -> Dependency
 pathR = path True False
 
-pathW :: String -> Dependency a
+pathW :: String -> Dependency
 pathW = path False True
 
-pathRW :: String -> Dependency a
+pathRW :: String -> Dependency
 pathRW = path True True
 
-systemUnit :: String -> Dependency a
-systemUnit = unit SystemUnit
+systemUnit :: String -> Dependency
+systemUnit = Systemd SystemUnit
 
-userUnit :: String -> Dependency a
-userUnit = unit UserUnit
+userUnit :: String -> Dependency
+userUnit = Systemd UserUnit
 
 -- TODO this is poorly named. This actually represents an action that has
 -- one or more dependencies (where "action" is not necessarily executing an exe)
@@ -138,17 +126,17 @@ type MaybeExe a = Either [String] a
 
 type MaybeX = MaybeExe (X ())
 
-featureRun :: [Dependency a] -> b -> Feature b a
+featureRun :: [Dependency] -> a -> Feature a
 featureRun ds x = Feature
   { ftrAction = x
   , ftrSilent = False
   , ftrChildren = ds
   }
 
-featureSpawnCmd :: MonadIO m => String -> [String] -> Feature (m ()) (m ())
+featureSpawnCmd :: MonadIO m => String -> [String] -> Feature (m ())
 featureSpawnCmd cmd args = featureRun [exe cmd] $ spawnCmd cmd args
 
-featureSpawn :: MonadIO m => String -> Feature (m ()) (m ())
+featureSpawn :: MonadIO m => String -> Feature (m ())
 featureSpawn cmd = featureSpawnCmd cmd []
 
 exeInstalled :: String -> IO (Maybe String)
@@ -212,7 +200,7 @@ dbusInstalled bus usesystem objpath iface mem = do
     matchMem (Signal_ n) = elem n . fmap I.signalName . I.interfaceSignals
     matchMem (Property_ n) = elem n . fmap I.propertyName . I.interfaceProperties
 
-depInstalled :: DependencyData -> IO (Maybe String)
+depInstalled :: Dependency -> IO (Maybe String)
 depInstalled (Executable n)         = exeInstalled n
 depInstalled (IOTest t)             = t
 depInstalled (Systemd t n)          = unitInstalled t n

@@ -31,8 +31,8 @@ type SSState = Bool -- true is enabled
 ssExecutable :: String
 ssExecutable = "xset"
 
-ssDep :: Dependency (IO a)
-ssDep = exe ssExecutable
+ssDep :: Dependency
+ssDep = Executable ssExecutable
 
 toggle :: IO SSState
 toggle = do
@@ -102,7 +102,7 @@ newtype SSControls = SSControls { ssToggle :: FeatureIO }
 exportScreensaver :: Client -> IO SSControls
 exportScreensaver client = initControls client exportScreensaver' controls
   where
-    controls exporter = SSControls { ssToggle = callToggle exporter }
+    controls _ = SSControls { ssToggle = callToggle }
 
 exportScreensaver' :: Client -> FeatureIO
 exportScreensaver' client = Feature
@@ -119,14 +119,15 @@ exportScreensaver' client = Feature
         ]
       }
 
-callToggle :: FeatureIO -> FeatureIO
-callToggle exporter = Feature
+callToggle :: FeatureIO
+callToggle = Feature
   { ftrAction = cmd
   , ftrSilent = False
-  , ftrChildren = [SubFeature exporter]
+  , ftrChildren = mkDep <$> [memQuery, memState, memToggle]
   }
   where
     cmd = void $ callMethod $ methodCall ssPath interface memToggle
+    mkDep = xDbusDep ssPath interface . Method_
 
 callQuery :: IO (Maybe SSState)
 callQuery = do

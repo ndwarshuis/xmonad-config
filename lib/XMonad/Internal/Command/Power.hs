@@ -45,7 +45,7 @@ myOptimusManager = "optimus-manager"
 --------------------------------------------------------------------------------
 -- | Core commands
 
-runScreenLock :: Feature (X ()) (X ())
+runScreenLock :: Feature (X ())
 runScreenLock = Feature
   { ftrAction = spawn myScreenlock
   , ftrSilent = False

@@ -232,17 +232,14 @@ dateCmd = CmdSpec
 -- toJust :: a -> Bool -> Maybe a
 -- toJust x b = if b then Just x else Nothing
 
-dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency a
-dbusDep usesys bus obj iface mem =
-  Dependency d
-  where
-    d = DBusEndpoint
-      { ddDbusBus = bus
-      , ddDbusSystem = usesys
-      , ddDbusObject = obj
-      , ddDbusInterface = iface
-      , ddDbusMember = mem
-      }
+dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
+dbusDep usesys bus obj iface mem = DBusEndpoint
+  { ddDbusBus = bus
+  , ddDbusSystem = usesys
+  , ddDbusObject = obj
+  , ddDbusInterface = iface
+  , ddDbusMember = mem
+  }
 
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
@@ -314,10 +311,10 @@ getBattery :: BarFeature
 getBattery = Feature
   { ftrAction = batteryCmd
   , ftrSilent = False
-  , ftrChildren = [Dependency $ IOTest hasBattery]
+  , ftrChildren = [IOTest hasBattery]
   }
 
-type BarFeature = Feature CmdSpec (IO ())
+type BarFeature = Feature CmdSpec
 
 getVPN :: BarFeature
 getVPN = Feature
@@ -327,7 +324,7 @@ getVPN = Feature
   }
   where
     d = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
-    v = Dependency $ IOTest vpnPresent
+    v = IOTest vpnPresent
 
 getBt :: BarFeature
 getBt = Feature

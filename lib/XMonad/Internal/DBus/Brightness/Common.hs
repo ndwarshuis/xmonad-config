@@ -45,12 +45,12 @@ data BrightnessControls = BrightnessControls
   , bctlDec :: FeatureIO
   }
 
-exportBrightnessControls :: RealFrac b => [Dependency (IO ())] -> BrightnessConfig a b
+exportBrightnessControls :: RealFrac b => [Dependency] -> BrightnessConfig a b
   -> Client -> IO BrightnessControls
 exportBrightnessControls deps bc client =
   initControls client (brightnessExporter deps bc) controls
   where
-    controls exporter = let callBacklight' = callBacklight bc exporter in
+    controls _ = let callBacklight' = callBacklight bc in
       BrightnessControls
         { bctlMax = callBacklight' memMax
         , bctlMin = callBacklight' memMin
@@ -93,7 +93,7 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
 --       ]
 --     }
 
-brightnessExporter :: RealFrac b => [Dependency (IO ())]
+brightnessExporter :: RealFrac b => [Dependency]
   -> BrightnessConfig a b -> Client -> FeatureIO
 brightnessExporter deps bc client = Feature
   { ftrAction = exportBrightnessControls' bc client
@@ -127,13 +127,15 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
 -- callBacklight BrightnessConfig { bcPath = p, bcInterface = i } mem =
 --   void $ callMethod $ methodCall p i mem
 
-callBacklight :: BrightnessConfig a b -> FeatureIO -> MemberName -> FeatureIO
-callBacklight BrightnessConfig { bcPath = p, bcInterface = i } exporter mem =
+callBacklight :: BrightnessConfig a b -> MemberName -> FeatureIO
+callBacklight BrightnessConfig { bcPath = p, bcInterface = i } mem =
   Feature
   { ftrAction = void $ callMethod $ methodCall p i mem
   , ftrSilent = False
-  , ftrChildren = [SubFeature exporter]
+  , ftrChildren = [mkDep mem]
   }
+  where
+    mkDep = xDbusDep p i . Method_
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)
