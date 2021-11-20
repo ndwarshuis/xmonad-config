@@ -109,7 +109,6 @@ exportScreensaver client = initControls client exportScreensaver' controls
 exportScreensaver' :: Client -> Feature (IO ()) (IO ())
 exportScreensaver' client = Feature
   { ftrAction = cmd
-  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = [ssDep]
   }
@@ -125,7 +124,6 @@ exportScreensaver' client = Feature
 callToggle :: Feature (IO ()) (IO ()) -> Feature (IO ()) (IO ())
 callToggle exporter = Feature
   { ftrAction = cmd
-  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = [SubFeature exporter]
   }

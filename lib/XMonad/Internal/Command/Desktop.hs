@@ -96,7 +96,6 @@ runTMux :: IO MaybeX
 runTMux = evalFeature $ Feature
   { ftrAction = cmd
   , ftrSilent = False
-  , ftrDefault = Nothing
   , ftrChildren  = [exe myTerm, exe "tmux", exe "bash"]
   }
   where

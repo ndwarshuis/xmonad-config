@@ -82,7 +82,6 @@ data Dependency a = SubFeature (Feature a a)
 
 data Feature a b = Feature
   { ftrAction   :: a
-  , ftrDefault  :: Maybe a
   , ftrSilent   :: Bool
   , ftrChildren :: [Dependency b]
   } | ConstFeature a
@@ -261,7 +260,6 @@ runIfInstalled :: [Dependency a] -> b -> IO (MaybeExe b)
 runIfInstalled ds x = evalFeature $
   Feature
   { ftrAction = x
-  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = ds
   }

@@ -314,7 +314,6 @@ getBattery :: BarFeature
 getBattery = Feature
   { ftrAction = batteryCmd
   , ftrSilent = False
-  , ftrDefault = Nothing
   , ftrChildren = [Dependency $ IOTest hasBattery]
   }
 
@@ -324,7 +323,6 @@ getVPN :: BarFeature
 getVPN = Feature
   { ftrAction = vpnCmd
   , ftrSilent = False
-  , ftrDefault = Nothing
   , ftrChildren = [d, v]
   }
   where
@@ -335,7 +333,6 @@ getBt :: BarFeature
 getBt = Feature
   { ftrAction = btCmd
   , ftrSilent = False
-  , ftrDefault = Nothing
   , ftrChildren = [dep]
   }
   where
@@ -344,7 +341,6 @@ getBt = Feature
 getAlsa :: BarFeature
 getAlsa = Feature
   { ftrAction = alsaCmd
-  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = [exe "alsactl"]
   }
@@ -352,7 +348,6 @@ getAlsa = Feature
 getBl :: BarFeature
 getBl = Feature
   { ftrAction = blCmd
-  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = [curFileDep, maxFileDep]
   }
@@ -360,7 +355,6 @@ getBl = Feature
 getSs :: BarFeature
 getSs = Feature
   { ftrAction = ssCmd
-  , ftrDefault = Nothing
   , ftrSilent = False
   , ftrChildren = [ssDep]
   }
