@@ -9,6 +9,7 @@ module Main (main) where
 import           Control.Concurrent
 import           Control.Monad                                (unless)
 
+import           Data.Either                                  (fromRight)
 import           Data.List
     ( isPrefixOf
     , sortBy
@@ -81,7 +82,8 @@ main = do
         , childPIDs = [p]
         , childHandles = [h]
         }
-  ext <- evalExternal $ externalBindings bc sc ts
+  lock <- fromRight skip <$> evalFeature runScreenLock
+  ext <- evalExternal $ externalBindings bc sc ts lock
   warnMissing $ externalToMissing ext ++ fmap (io <$>) depActions
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
@@ -92,7 +94,7 @@ main = do
           , modMask = myModMask
           , layoutHook = myLayouts
           , manageHook = myManageHook
-          , handleEventHook = myEventHook
+          , handleEventHook = myEventHook lock
           , startupHook = myStartupHook
           , workspaces = myWorkspaces
           , logHook = myLoghook h
@@ -375,19 +377,19 @@ manageApps = composeOne $ concatMap dwHook allDWs ++
 --------------------------------------------------------------------------------
 -- | Eventhook configuration
 
-myEventHook :: Event -> X All
-myEventHook = xMsgEventHook <+> docksEventHook <+> handleEventHook def
+myEventHook :: X () -> Event -> X All
+myEventHook lock = xMsgEventHook lock <+> docksEventHook <+> handleEventHook def
 
 -- | React to ClientMessage events from concurrent threads
-xMsgEventHook :: Event -> X All
-xMsgEventHook ClientMessageEvent { ev_message_type = t, ev_data = d }
+xMsgEventHook :: X () -> Event -> X All
+xMsgEventHook lock ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (xtype, tag) = splitXMsg d
     case xtype of
       Workspace -> removeDynamicWorkspace tag
-      ACPI      -> handleACPI tag
+      ACPI      -> handleACPI lock tag
     return (All True)
-xMsgEventHook _ = return (All True)
+xMsgEventHook _ _ = return (All True)
 
 --------------------------------------------------------------------------------
 -- | Keymap configuration
@@ -504,9 +506,9 @@ flagKeyBinding k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
   (Left _)  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
   -- _                     -> Nothing
 
-externalBindings :: BrightnessControls -> SSControls -> ThreadState
+externalBindings :: BrightnessControls -> SSControls -> ThreadState -> X ()
   -> [KeyGroup (IO MaybeX)]
-externalBindings bc sc ts =
+externalBindings bc sc ts lock =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
     , KeyBinding "M-g" "launch clipboard manager" runClipMenu
@@ -555,9 +557,10 @@ externalBindings bc sc ts =
     , KeyBinding "M-," "backlight down" $ return $ io <$> bctlDec bc
     , KeyBinding "M-M1-," "backlight min" $ return $ io <$> bctlMin bc
     , KeyBinding "M-M1-." "backlight max" $ return $ io <$> bctlMax bc
-    , KeyBinding "M-<End>" "power menu" $ noCheck runPowerPrompt
+    , KeyBinding "M-<End>" "power menu" $ noCheck $ runPowerPrompt lock
     , KeyBinding "M-<Home>" "quit xmonad" $ noCheck runQuitPrompt
-    , KeyBinding "M-<Delete>" "lock screen" runScreenLock
+    -- TODO this won't be aware of when the lock doesn't exist
+    , KeyBinding "M-<Delete>" "lock screen" $ noCheck lock
     -- M-<F1> reserved for showing the keymap
     , KeyBinding "M-<F2>" "restart xmonad" $ noCheck (runCleanup ts >> runRestart)
     , KeyBinding "M-<F3>" "recompile xmonad" $ noCheck runRecompile

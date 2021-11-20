@@ -44,8 +44,15 @@ myOptimusManager = "optimus-manager"
 --------------------------------------------------------------------------------
 -- | Core commands
 
-runScreenLock :: IO MaybeX
-runScreenLock = spawnIfInstalled myScreenlock
+-- runScreenLock :: IO MaybeX
+-- runScreenLock = spawnIfInstalled myScreenlock
+
+runScreenLock :: Feature (X ()) (X ())
+runScreenLock = Feature
+  { ftrAction = spawn myScreenlock
+  , ftrSilent = False
+  , ftrChildren = [exe myScreenlock]
+  }
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -101,6 +108,12 @@ runOptimusPrompt' = do
 
 runOptimusPrompt :: IO MaybeX
 runOptimusPrompt = runIfInstalled [exe myOptimusManager] runOptimusPrompt'
+-- runOptimusPrompt :: Feature (X ()) (X ())
+-- runOptimusPrompt = Feature
+--   { ftrAction = runOptimusPrompt'
+--   , ftrSilent = False
+--   , ftrChildren = [exe myOptimusManager]
+--   }
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt
@@ -128,8 +141,8 @@ data PowerPrompt = PowerPrompt
 instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
 
-runPowerPrompt :: X ()
-runPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
+runPowerPrompt :: X () -> X ()
+runPowerPrompt lock = mkXPrompt PowerPrompt theme comp executeAction
   where
     comp = mkComplFunFromList []
     theme = T.promptTheme { promptKeymap = keymap }
@@ -148,6 +161,34 @@ runPowerPrompt = mkXPrompt PowerPrompt theme comp executeAction
       Poweroff  -> runPowerOff
       -- TODO these dependency functions need to be assembled elsewhere and fed
       -- to this function
-      Shutdown  -> (io runScreenLock >>= whenInstalled) >> runSuspend
-      Hibernate -> (io runScreenLock >>= whenInstalled) >> runHibernate
+      -- Shutdown  -> (io runScreenLock >>= whenInstalled) >> runSuspend
+      -- Hibernate -> (io runScreenLock >>= whenInstalled) >> runHibernate
+      Shutdown  -> lock >> runSuspend
+      Hibernate -> lock >> runHibernate
       Reboot    -> runReboot
+
+-- runPowerPrompt :: Feature (X ()) (X ()) -> IO (X ())
+-- runPowerPrompt lock = do
+--   lock' <- evalFeature lock
+--   return $ mkXPrompt PowerPrompt theme comp $ executeAction $ fromRight (return ()) lock'
+--   where
+--     comp = mkComplFunFromList []
+--     theme = T.promptTheme { promptKeymap = keymap }
+--     keymap = M.fromList
+--       $ ((controlMask, xK_g), quit) :
+--       map (first $ (,) 0)
+--       [ (xK_p, sendAction Poweroff)
+--       , (xK_s, sendAction Shutdown)
+--       , (xK_h, sendAction Hibernate)
+--       , (xK_r, sendAction Reboot)
+--       , (xK_Return, quit)
+--       , (xK_Escape, quit)
+--       ]
+--     sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
+--     executeAction l a = case toEnum $ read a of
+--       Poweroff  -> runPowerOff
+--       -- TODO these dependency functions need to be assembled elsewhere and fed
+--       -- to this function
+--       Shutdown  -> l >> runSuspend
+--       Hibernate -> l >> runHibernate
+--       Reboot    -> runReboot

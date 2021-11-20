@@ -99,15 +99,16 @@ runPowermon = runIfInstalled [pathR acpiPath] listenACPI
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)
-handleACPI :: String -> X ()
-handleACPI tag = do
+handleACPI :: X () -> String -> X ()
+handleACPI lock tag = do
   let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
   forM_ acpiTag $ \case
-    Power -> runPowerPrompt
+    Power -> runPowerPrompt lock
     Sleep -> runSuspendPrompt
     LidClose -> do
       status <- io isDischarging
       -- only run suspend if battery exists and is discharging
       forM_ status $ flip when runSuspend
-      io runScreenLock >>= whenInstalled
+      -- io runScreenLock >>= whenInstalled
+      lock
 
