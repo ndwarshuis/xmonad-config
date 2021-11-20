@@ -7,15 +7,18 @@
 module Main (main) where
 
 import           Control.Concurrent
-import           Control.Monad                                (unless)
+import           Control.Monad                                  (unless)
 
 import           Data.List
     ( isPrefixOf
     , sortBy
     , sortOn
     )
-import           Data.Maybe                                   (isJust, mapMaybe)
-import           Data.Monoid                                  (All (..))
+import           Data.Maybe
+    ( isJust
+    , mapMaybe
+    )
+import           Data.Monoid                                    (All (..))
 
 import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
@@ -45,35 +48,34 @@ import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Concurrent.DynamicWorkspaces
 import           XMonad.Internal.Concurrent.Removable
 import           XMonad.Internal.DBus.Brightness.Common
+import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
-import qualified XMonad.Internal.Theme                        as T
+import qualified XMonad.Internal.Theme                          as T
 import           XMonad.Layout.MultiToggle
 import           XMonad.Layout.NoBorders
 import           XMonad.Layout.NoFrillsDecoration
 import           XMonad.Layout.PerWorkspace
 import           XMonad.Layout.Renamed
 import           XMonad.Layout.Tabbed
-import qualified XMonad.Operations                            as O
-import qualified XMonad.StackSet                              as W
+import qualified XMonad.Operations                              as O
+import qualified XMonad.StackSet                                as W
 import           XMonad.Util.Cursor
 import           XMonad.Util.EZConfig
-import qualified XMonad.Util.ExtensibleState                  as E
+import qualified XMonad.Util.ExtensibleState                    as E
 import           XMonad.Util.NamedActions
 import           XMonad.Util.WorkspaceCompare
 
 main :: IO ()
 main = do
-  DBusXMonad
-    { dxClient = cl
-    , dxIntelBacklightCtrl = bc
-    , dxScreensaverCtrl = sc
-    } <- startXMonadService
+  cl <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
+  dbusActions <- mapM evalFeature [exportScreensaver cl, exportIntelBacklight cl]
   depActions <- mapM evalFeature [runPowermon, runRemovableMon]
+  mapM_ whenInstalled dbusActions
   mapM_ (mapM_ forkIO) depActions
   _ <- forkIO $ runWorkspaceMon allDWs
   let ts = ThreadState
@@ -82,8 +84,8 @@ main = do
         , childHandles = [h]
         }
   lock <- whenInstalled <$> evalFeature runScreenLock
-  ext <- evalExternal $ externalBindings bc sc ts lock
-  warnMissing $ externalToMissing ext ++ fmap (io <$>) depActions
+  ext <- evalExternal $ externalBindings ts lock
+  warnMissing $ externalToMissing ext ++ fmap (io <$>) (depActions ++ dbusActions)
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   launch
@@ -496,9 +498,8 @@ flagKeyBinding k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
   (Right x) -> Just $ k{ kbAction = x }
   (Left _)  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
 
-externalBindings :: BrightnessControls -> SSControls -> ThreadState -> X ()
-  -> [KeyGroup FeatureX]
-externalBindings bc sc ts lock =
+externalBindings :: ThreadState -> X () -> [KeyGroup FeatureX]
+externalBindings ts lock =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
     , KeyBinding "M-g" "launch clipboard manager" runClipMenu
@@ -543,10 +544,10 @@ externalBindings bc sc ts lock =
     ]
 
   , KeyGroup "System"
-    [ KeyBinding "M-." "backlight up" $ ioFeature $ bctlInc bc
-    , KeyBinding "M-," "backlight down" $ ioFeature $ bctlDec bc
-    , KeyBinding "M-M1-," "backlight min" $ ioFeature $ bctlMin bc
-    , KeyBinding "M-M1-." "backlight max" $ ioFeature $ bctlMax bc
+    [ KeyBinding "M-." "backlight up" $ ioFeature $ bctlInc intelBacklightControls
+    , KeyBinding "M-," "backlight down" $ ioFeature $ bctlDec intelBacklightControls
+    , KeyBinding "M-M1-," "backlight min" $ ioFeature $ bctlMin intelBacklightControls
+    , KeyBinding "M-M1-." "backlight max" $ ioFeature $ bctlMax intelBacklightControls
     , KeyBinding "M-<End>" "power menu" $ ConstFeature $ runPowerPrompt lock
     , KeyBinding "M-<Home>" "quit xmonad" $ ConstFeature runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" runScreenLock
@@ -558,7 +559,7 @@ externalBindings bc sc ts lock =
     , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ ioFeature $ ssToggle sc
+    , KeyBinding "M-<F11>" "toggle screensaver" $ ioFeature callToggle
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]

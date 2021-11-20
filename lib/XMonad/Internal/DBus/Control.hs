@@ -18,10 +18,10 @@ import           DBus
 import           DBus.Client
 
 import           XMonad.Internal.DBus.Brightness.Common
-import           XMonad.Internal.DBus.Brightness.IntelBacklight
+-- import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
-import           XMonad.Internal.Dependency
+-- import           XMonad.Internal.Dependency
 
 introspectInterface :: InterfaceName
 introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
@@ -36,37 +36,47 @@ data DBusXMonad = DBusXMonad
   , dxScreensaverCtrl    :: SSControls
   }
 
-blankControls :: BrightnessControls
-blankControls = BrightnessControls
-  { bctlMax = BlankFeature
-  , bctlMin = BlankFeature
-  , bctlInc = BlankFeature
-  , bctlDec = BlankFeature
-  }
+-- blankControls :: BrightnessControls
+-- blankControls = BrightnessControls
+--   { bctlMax = BlankFeature
+--   , bctlMin = BlankFeature
+--   , bctlInc = BlankFeature
+--   , bctlDec = BlankFeature
+--   }
 
-blankSSToggle :: SSControls
-blankSSToggle = SSControls { ssToggle = BlankFeature }
+-- blankSSToggle :: SSControls
+-- blankSSToggle = SSControls { ssToggle = BlankFeature }
 
-startXMonadService :: IO DBusXMonad
+-- xmonadService :: Feature (IO Client)
+-- xmonadService = Feature
+--   { ftrAction = undefined
+--   , ftr
+
+
+startXMonadService :: IO Client
 startXMonadService = do
   client <- connectSession
-  requestResult <- requestName client xmonadBus []
+  res <- requestName client xmonadBus []
+  case res of
+    NamePrimaryOwner -> return ()
+    _                -> putStrLn $ "error when requesting '" ++ formatBusName xmonadBus ++ "'"
   -- TODO if the client is not released on shutdown the owner will be
   -- different
-  (i, s) <- if requestResult /= NamePrimaryOwner then do
-    putStrLn "Another service owns \"org.xmonad\""
-    return (blankControls, blankSSToggle)
-    else do
-    putStrLn "Started xmonad dbus client"
-    bc <- exportIntelBacklight client
-    sc <- exportScreensaver client
-    return (bc, sc)
-  return $ DBusXMonad
-    { dxClient = client
-    , dxIntelBacklightCtrl = i
-    -- , dxClevoBacklightCtrl = c
-    , dxScreensaverCtrl = s
-    }
+  -- (i, s) <- if requestResult /= NamePrimaryOwner then do
+  --   putStrLn "Another service owns \"org.xmonad\""
+  --   return (blankControls, blankSSToggle)
+  --   else do
+  --   putStrLn "Started xmonad dbus client"
+  --   bc <- exportIntelBacklight client
+  --   sc <- exportScreensaver client
+  --   return (bc, sc)
+  return client
+  -- return $ DBusXMonad
+  --   { dxClient = client
+  --   , dxIntelBacklightCtrl = i
+  --   -- , dxClevoBacklightCtrl = c
+  --   , dxScreensaverCtrl = s
+  --   }
 
 stopXMonadService :: Client -> IO ()
 stopXMonadService client = do

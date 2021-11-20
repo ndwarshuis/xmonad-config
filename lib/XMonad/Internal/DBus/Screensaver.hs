@@ -99,13 +99,13 @@ bodyGetCurrentState _   = Nothing
 
 newtype SSControls = SSControls { ssToggle :: FeatureIO }
 
-exportScreensaver :: Client -> IO SSControls
-exportScreensaver client = initControls client exportScreensaver' controls
-  where
-    controls _ = SSControls { ssToggle = callToggle }
+-- exportScreensaver :: Client -> IO SSControls
+-- exportScreensaver client = initControls client exportScreensaver' controls
+--   where
+--     controls _ = SSControls { ssToggle = callToggle }
 
-exportScreensaver' :: Client -> FeatureIO
-exportScreensaver' client = Feature
+exportScreensaver :: Client -> FeatureIO
+exportScreensaver client = Feature
   { ftrAction = cmd
   , ftrSilent = False
   , ftrChildren = [ssDep]
@@ -123,11 +123,10 @@ callToggle :: FeatureIO
 callToggle = Feature
   { ftrAction = cmd
   , ftrSilent = False
-  , ftrChildren = mkDep <$> [memQuery, memState, memToggle]
+  , ftrChildren = [xDbusDep ssPath interface $ Method_ memToggle]
   }
   where
     cmd = void $ callMethod $ methodCall ssPath interface memToggle
-    mkDep = xDbusDep ssPath interface . Method_
 
 callQuery :: IO (Maybe SSState)
 callQuery = do

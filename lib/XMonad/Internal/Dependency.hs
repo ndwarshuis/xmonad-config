@@ -55,7 +55,6 @@ data DBusMember = Method_ MemberName
   | Property_ String
   deriving (Eq, Show)
 
--- data DependencyData = Executable String
 data Dependency = Executable String
   | AccessiblePath FilePath Bool Bool
   | IOTest (IO (Maybe String))
@@ -67,9 +66,6 @@ data Dependency = Executable String
     , ddDbusMember    :: DBusMember
     }
   | Systemd UnitType String
-
--- data Dependency a = SubFeature (Feature a a)
---   | Dependency DependencyData
 
 data Feature a = Feature
   { ftrAction   :: a
@@ -102,17 +98,14 @@ evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
 exe :: String -> Dependency
 exe = Executable
 
-path :: Bool -> Bool -> String -> Dependency
-path r w n = AccessiblePath n r w
-
 pathR :: String -> Dependency
-pathR = path True False
+pathR n = AccessiblePath n True False
 
 pathW :: String -> Dependency
-pathW = path False True
+pathW n = AccessiblePath n False True
 
 pathRW :: String -> Dependency
-pathRW = path True True
+pathRW n = AccessiblePath n True True
 
 systemUnit :: String -> Dependency
 systemUnit = Systemd SystemUnit
