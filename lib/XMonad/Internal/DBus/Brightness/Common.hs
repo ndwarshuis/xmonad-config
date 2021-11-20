@@ -39,10 +39,10 @@ data BrightnessConfig a b = BrightnessConfig
   }
 
 data BrightnessControls = BrightnessControls
-  { bctlMax :: MaybeExe (IO ())
-  , bctlMin :: MaybeExe (IO ())
-  , bctlInc :: MaybeExe (IO ())
-  , bctlDec :: MaybeExe (IO ())
+  { bctlMax :: FeatureIO
+  , bctlMin :: FeatureIO
+  , bctlInc :: FeatureIO
+  , bctlDec :: FeatureIO
   }
 
 exportBrightnessControls :: RealFrac b => [Dependency (IO ())] -> BrightnessConfig a b
@@ -50,17 +50,12 @@ exportBrightnessControls :: RealFrac b => [Dependency (IO ())] -> BrightnessConf
 exportBrightnessControls deps bc client =
   initControls client (brightnessExporter deps bc) controls
   where
-    controls exporter = do
-      let callBacklight' = evalFeature . callBacklight bc exporter
-      mx <- callBacklight' memMax
-      mn <- callBacklight' memMin
-      ic <- callBacklight' memInc
-      dc <- callBacklight' memDec
-      return $ BrightnessControls
-        { bctlMax = mx
-        , bctlMin = mn
-        , bctlInc = ic
-        , bctlDec = dc
+    controls exporter = let callBacklight' = callBacklight bc exporter in
+      BrightnessControls
+        { bctlMax = callBacklight' memMax
+        , bctlMin = callBacklight' memMin
+        , bctlInc = callBacklight' memInc
+        , bctlDec = callBacklight' memDec
         }
 
 callGetBrightness :: Num c => BrightnessConfig a b -> IO (Maybe c)
@@ -99,7 +94,7 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
 --     }
 
 brightnessExporter :: RealFrac b => [Dependency (IO ())]
-  -> BrightnessConfig a b -> Client -> Feature (IO ()) (IO ())
+  -> BrightnessConfig a b -> Client -> FeatureIO
 brightnessExporter deps bc client = Feature
   { ftrAction = exportBrightnessControls' bc client
   , ftrSilent = False
@@ -132,8 +127,7 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
 -- callBacklight BrightnessConfig { bcPath = p, bcInterface = i } mem =
 --   void $ callMethod $ methodCall p i mem
 
-callBacklight :: BrightnessConfig a b -> Feature (IO ()) (IO ()) -> MemberName
-  -> Feature (IO ()) (IO ())
+callBacklight :: BrightnessConfig a b -> FeatureIO -> MemberName -> FeatureIO
 callBacklight BrightnessConfig { bcPath = p, bcInterface = i } exporter mem =
   Feature
   { ftrAction = void $ callMethod $ methodCall p i mem

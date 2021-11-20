@@ -28,6 +28,7 @@ import           System.IO.Error
 
 import           XMonad.Core
 import           XMonad.Internal.Dependency
+import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme       as T
 import           XMonad.Prompt
 import           XMonad.Prompt.ConfirmPrompt
@@ -43,9 +44,6 @@ myOptimusManager = "optimus-manager"
 
 --------------------------------------------------------------------------------
 -- | Core commands
-
--- runScreenLock :: IO MaybeX
--- runScreenLock = spawnIfInstalled myScreenlock
 
 runScreenLock :: Feature (X ()) (X ())
 runScreenLock = Feature
@@ -69,6 +67,7 @@ runReboot = spawn "systemctl reboot"
 --------------------------------------------------------------------------------
 -- | Confirm prompt wrappers
 
+-- TODO doesn't this need to also lock the screen?
 runSuspendPrompt :: X ()
 runSuspendPrompt = confirmPrompt T.promptTheme "suspend?" runSuspend
 
@@ -88,7 +87,6 @@ hasBattery :: IO (Maybe String)
 hasBattery = do
   ps <- fromRight [] <$> tryIOError (listDirectory syspath)
   ts <- mapM readType ps
-  -- TODO this is obviously stupid
   return $ if "Battery\n" `elem` ts then Nothing else Just "battery not found"
   where
     readType p = fromRight [] <$> tryIOError (readFile $ syspath </> p </> "type")
@@ -106,14 +104,8 @@ runOptimusPrompt' = do
       #!&& unwords [myOptimusManager, "--switch", mode, "--no-confirm"]
       #!&& "killall xmonad"
 
-runOptimusPrompt :: IO MaybeX
-runOptimusPrompt = runIfInstalled [exe myOptimusManager] runOptimusPrompt'
--- runOptimusPrompt :: Feature (X ()) (X ())
--- runOptimusPrompt = Feature
---   { ftrAction = runOptimusPrompt'
---   , ftrSilent = False
---   , ftrChildren = [exe myOptimusManager]
---   }
+runOptimusPrompt :: FeatureX
+runOptimusPrompt = featureRun [exe myOptimusManager] runOptimusPrompt'
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt
@@ -159,36 +151,6 @@ runPowerPrompt lock = mkXPrompt PowerPrompt theme comp executeAction
     sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
     executeAction a = case toEnum $ read a of
       Poweroff  -> runPowerOff
-      -- TODO these dependency functions need to be assembled elsewhere and fed
-      -- to this function
-      -- Shutdown  -> (io runScreenLock >>= whenInstalled) >> runSuspend
-      -- Hibernate -> (io runScreenLock >>= whenInstalled) >> runHibernate
       Shutdown  -> lock >> runSuspend
       Hibernate -> lock >> runHibernate
       Reboot    -> runReboot
-
--- runPowerPrompt :: Feature (X ()) (X ()) -> IO (X ())
--- runPowerPrompt lock = do
---   lock' <- evalFeature lock
---   return $ mkXPrompt PowerPrompt theme comp $ executeAction $ fromRight (return ()) lock'
---   where
---     comp = mkComplFunFromList []
---     theme = T.promptTheme { promptKeymap = keymap }
---     keymap = M.fromList
---       $ ((controlMask, xK_g), quit) :
---       map (first $ (,) 0)
---       [ (xK_p, sendAction Poweroff)
---       , (xK_s, sendAction Shutdown)
---       , (xK_h, sendAction Hibernate)
---       , (xK_r, sendAction Reboot)
---       , (xK_Return, quit)
---       , (xK_Escape, quit)
---       ]
---     sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
---     executeAction l a = case toEnum $ read a of
---       Poweroff  -> runPowerOff
---       -- TODO these dependency functions need to be assembled elsewhere and fed
---       -- to this function
---       Shutdown  -> l >> runSuspend
---       Hibernate -> l >> runHibernate
---       Reboot    -> runReboot

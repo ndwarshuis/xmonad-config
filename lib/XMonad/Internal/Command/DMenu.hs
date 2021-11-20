@@ -47,8 +47,8 @@ myDmenuNetworks = "networkmanager_dmenu"
 --------------------------------------------------------------------------------
 -- | Other internal functions
 
-spawnDmenuCmd :: [String] -> IO MaybeX
-spawnDmenuCmd = spawnCmdIfInstalled myDmenuCmd
+spawnDmenuCmd :: [String] -> FeatureX
+spawnDmenuCmd = featureSpawnCmd myDmenuCmd
 
 themeArgs :: String -> [String]
 themeArgs hexColor =
@@ -62,41 +62,42 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 --------------------------------------------------------------------------------
 -- | Exported Commands
 
-runDevMenu :: IO MaybeX
-runDevMenu = runIfInstalled [exe myDmenuDevices] $ do
+runDevMenu :: FeatureX
+runDevMenu = featureRun [exe myDmenuDevices] $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
     ++ "--" : themeArgs "#999933"
     ++ myDmenuMatchingArgs
 
-runBwMenu :: IO MaybeX
-runBwMenu = runIfInstalled [exe myDmenuPasswords] $
+runBwMenu :: FeatureX
+runBwMenu = featureRun [exe myDmenuPasswords] $
   spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
+-- TODO this is weirdly inverted
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
-  s <- io $ runDMenuShowKeys x
+  s <- io $ evalFeature $ runDMenuShowKeys x
   ifInstalled s
     $ spawnNotify
     $ defNoteError { body = Just $ Text "could not display keymap" }
 
-runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> IO MaybeX
-runDMenuShowKeys kbs = runIfInstalled [exe myDmenuCmd] $ io $ do
+runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> FeatureX
+runDMenuShowKeys kbs = featureRun [exe myDmenuCmd] $ io $ do
   (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
   forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
   where
     cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
       ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
 
-runCmdMenu :: IO MaybeX
+runCmdMenu :: FeatureX
 runCmdMenu = spawnDmenuCmd ["-show", "run"]
 
-runAppMenu :: IO MaybeX
+runAppMenu :: FeatureX
 runAppMenu = spawnDmenuCmd ["-show", "drun"]
 
-runClipMenu :: IO MaybeX
-runClipMenu = runIfInstalled [exe myDmenuCmd, exe "greenclip"]
+runClipMenu :: FeatureX
+runClipMenu = featureRun [exe myDmenuCmd, exe "greenclip"]
   $ spawnCmd myDmenuCmd args
   where
     args = [ "-modi", "\"clipboard:greenclip print\""
@@ -104,11 +105,11 @@ runClipMenu = runIfInstalled [exe myDmenuCmd, exe "greenclip"]
            , "-run-command", "'{cmd}'"
            ] ++ themeArgs "#00c44e"
 
-runWinMenu :: IO MaybeX
+runWinMenu :: FeatureX
 runWinMenu = spawnDmenuCmd ["-show", "window"]
 
-runNetMenu :: IO MaybeX
-runNetMenu = spawnCmdIfInstalled myDmenuNetworks $ themeArgs "#ff3333"
+runNetMenu :: FeatureX
+runNetMenu = featureSpawnCmd myDmenuNetworks $ themeArgs "#ff3333"
 
-runAutorandrMenu :: IO MaybeX
-runAutorandrMenu = spawnCmdIfInstalled myDmenuMonitors $ themeArgs "#ff0066"
+runAutorandrMenu :: FeatureX
+runAutorandrMenu = featureSpawnCmd myDmenuMonitors $ themeArgs "#ff0066"

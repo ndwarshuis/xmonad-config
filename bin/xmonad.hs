@@ -9,7 +9,6 @@ module Main (main) where
 import           Control.Concurrent
 import           Control.Monad                                (unless)
 
-import           Data.Either                                  (fromRight)
 import           Data.List
     ( isPrefixOf
     , sortBy
@@ -74,7 +73,7 @@ main = do
     , dxScreensaverCtrl = sc
     } <- startXMonadService
   (h, p) <- spawnPipe "xmobar"
-  depActions <- sequence [runPowermon, runRemovableMon]
+  depActions <- mapM evalFeature [runPowermon, runRemovableMon]
   mapM_ (mapM_ forkIO) depActions
   _ <- forkIO $ runWorkspaceMon allDWs
   let ts = ThreadState
@@ -82,7 +81,7 @@ main = do
         , childPIDs = [p]
         , childHandles = [h]
         }
-  lock <- fromRight skip <$> evalFeature runScreenLock
+  lock <- whenInstalled <$> evalFeature runScreenLock
   ext <- evalExternal $ externalBindings bc sc ts lock
   warnMissing $ externalToMissing ext ++ fmap (io <$>) depActions
   -- IDK why this is necessary; nothing prior to this line will print if missing
@@ -472,28 +471,20 @@ data KeyGroup a = KeyGroup
   , kgBindings :: [KeyBinding a]
   }
 
-evalExternal :: [KeyGroup (IO MaybeX)] -> IO [KeyGroup MaybeX]
+evalExternal :: [KeyGroup FeatureX] -> IO [KeyGroup MaybeX]
 evalExternal = mapM go
   where
     go k@KeyGroup { kgBindings = bs } =
       (\bs' -> k { kgBindings = bs' }) <$> mapM evalKeyBinding bs
 
-evalKeyBinding :: Monad m => KeyBinding (m a) -> m (KeyBinding a)
-evalKeyBinding k@KeyBinding { kbAction = a } = (\b -> k { kbAction = b }) <$> a
+evalKeyBinding :: KeyBinding FeatureX -> IO (KeyBinding MaybeX)
+evalKeyBinding k@KeyBinding { kbAction = a } =
+  (\f -> k { kbAction = f }) <$> evalFeature a
 
 filterExternal :: [KeyGroup MaybeX] -> [KeyGroup (X ())]
 filterExternal = fmap go
   where
     go k@KeyGroup { kgBindings = bs } = k { kgBindings = mapMaybe flagKeyBinding bs }
-    -- go k@KeyGroup { kgBindings = bs } =
-    --   ( k { kgBindings = mapMaybe flagKeyBinding bs }
-    --   , concatMap go' bs
-    --   )
-    -- go' KeyBinding{ kbAction = a } = case a of
-    --   Installed _ opt ->  opt
-    --   -- TODO this will mash together the optional and required deps
-    --   Missing req opt ->  req ++ opt
-    --   Ignore          ->  []
 
 externalToMissing :: [KeyGroup (MaybeExe a)] -> [MaybeExe a]
 externalToMissing = concatMap go
@@ -504,10 +495,9 @@ flagKeyBinding :: KeyBinding MaybeX -> Maybe (KeyBinding (X ()))
 flagKeyBinding k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
   (Right x) -> Just $ k{ kbAction = x }
   (Left _)  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
-  -- _                     -> Nothing
 
 externalBindings :: BrightnessControls -> SSControls -> ThreadState -> X ()
-  -> [KeyGroup (IO MaybeX)]
+  -> [KeyGroup FeatureX]
 externalBindings bc sc ts lock =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
@@ -525,9 +515,9 @@ externalBindings bc sc ts lock =
     ]
 
   , KeyGroup "Actions"
-    [ KeyBinding "M-q" "close window" $ noCheck kill1
+    [ KeyBinding "M-q" "close window" $ ConstFeature kill1
     , KeyBinding "M-r" "run program" runCmdMenu
-    , KeyBinding "M-<Space>" "warp pointer" $ noCheck $ warpToWindow 0.5 0.5
+    , KeyBinding "M-<Space>" "warp pointer" $ ConstFeature $ warpToWindow 0.5 0.5
     , KeyBinding "M-C-s" "capture area" runAreaCapture
     , KeyBinding "M-C-S-s" "capture screen" runScreenCapture
     , KeyBinding "M-C-d" "capture desktop" runDesktopCapture
@@ -553,28 +543,22 @@ externalBindings bc sc ts lock =
     ]
 
   , KeyGroup "System"
-    [ KeyBinding "M-." "backlight up" $ return $ io <$> bctlInc bc
-    , KeyBinding "M-," "backlight down" $ return $ io <$> bctlDec bc
-    , KeyBinding "M-M1-," "backlight min" $ return $ io <$> bctlMin bc
-    , KeyBinding "M-M1-." "backlight max" $ return $ io <$> bctlMax bc
-    , KeyBinding "M-<End>" "power menu" $ noCheck $ runPowerPrompt lock
-    , KeyBinding "M-<Home>" "quit xmonad" $ noCheck runQuitPrompt
-    -- TODO this won't be aware of when the lock doesn't exist
-    , KeyBinding "M-<Delete>" "lock screen" $ noCheck lock
+    [ KeyBinding "M-." "backlight up" $ ioFeature $ bctlInc bc
+    , KeyBinding "M-," "backlight down" $ ioFeature $ bctlDec bc
+    , KeyBinding "M-M1-," "backlight min" $ ioFeature $ bctlMin bc
+    , KeyBinding "M-M1-." "backlight max" $ ioFeature $ bctlMax bc
+    , KeyBinding "M-<End>" "power menu" $ ConstFeature $ runPowerPrompt lock
+    , KeyBinding "M-<Home>" "quit xmonad" $ ConstFeature runQuitPrompt
+    , KeyBinding "M-<Delete>" "lock screen" runScreenLock
     -- M-<F1> reserved for showing the keymap
-    , KeyBinding "M-<F2>" "restart xmonad" $ noCheck (runCleanup ts >> runRestart)
-    , KeyBinding "M-<F3>" "recompile xmonad" $ noCheck runRecompile
+    , KeyBinding "M-<F2>" "restart xmonad" $ ConstFeature (runCleanup ts >> runRestart)
+    , KeyBinding "M-<F3>" "recompile xmonad" $ ConstFeature runRecompile
     , KeyBinding "M-<F7>" "start Isync Service" runStartISyncService
     , KeyBinding "M-C-<F7>" "start Isync Timer" runStartISyncTimer
     , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ return $ io <$> ssToggle sc
+    , KeyBinding "M-<F11>" "toggle screensaver" $ ioFeature $ ssToggle sc
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]
-  -- where
-    -- TODO this is hacky, I shouldn't really need this data structure for
-    -- something that doesn't depend on executables
-    -- runMaybe c f = return $ maybe Ignore (\x -> Installed (io $ f x) []) c
-

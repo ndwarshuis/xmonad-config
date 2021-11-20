@@ -97,16 +97,14 @@ bodyGetCurrentState _   = Nothing
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-newtype SSControls = SSControls { ssToggle :: MaybeExe (IO ()) }
+newtype SSControls = SSControls { ssToggle :: FeatureIO }
 
 exportScreensaver :: Client -> IO SSControls
 exportScreensaver client = initControls client exportScreensaver' controls
   where
-    controls exporter = do
-      t <- evalFeature $ callToggle exporter
-      return $ SSControls { ssToggle = t }
+    controls exporter = SSControls { ssToggle = callToggle exporter }
 
-exportScreensaver' :: Client -> Feature (IO ()) (IO ())
+exportScreensaver' :: Client -> FeatureIO
 exportScreensaver' client = Feature
   { ftrAction = cmd
   , ftrSilent = False
@@ -121,7 +119,7 @@ exportScreensaver' client = Feature
         ]
       }
 
-callToggle :: Feature (IO ()) (IO ()) -> Feature (IO ()) (IO ())
+callToggle :: FeatureIO -> FeatureIO
 callToggle exporter = Feature
   { ftrAction = cmd
   , ftrSilent = False

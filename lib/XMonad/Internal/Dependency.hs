@@ -8,7 +8,10 @@ module XMonad.Internal.Dependency
   , DependencyData(..)
   , DBusMember(..)
   , MaybeX
+  , FeatureX
+  , FeatureIO
   , Feature(..)
+  , ioFeature
   , evalFeature
   , exe
   , systemUnit
@@ -16,25 +19,14 @@ module XMonad.Internal.Dependency
   , pathR
   , pathW
   , pathRW
-  -- , checkInstalled
-  , runIfInstalled
-  , depInstalled
+  , featureRun
+  , featureSpawnCmd
+  , featureSpawn
   , warnMissing
   , whenInstalled
   , ifInstalled
-  , spawnIfInstalled
-  , spawnCmdIfInstalled
-  , noCheck
   , fmtCmd
   , spawnCmd
-  , doubleQuote
-  , singleQuote
-  , (#!&&)
-  , (#!||)
-  , (#!|)
-  , (#!>>)
-  , playSound
-  , spawnSound
   ) where
 
 import           Control.Monad.IO.Class
@@ -48,9 +40,8 @@ import qualified DBus.Introspection      as I
 
 import           System.Directory        (findExecutable, readable, writable)
 import           System.Exit
-import           System.FilePath
 
-import           XMonad.Core             (X, getXMonadDir)
+import           XMonad.Core             (X)
 import           XMonad.Internal.IO
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
@@ -84,44 +75,38 @@ data Feature a b = Feature
   { ftrAction   :: a
   , ftrSilent   :: Bool
   , ftrChildren :: [Dependency b]
-  } | ConstFeature a
+  }
+  | ConstFeature a
+  | BlankFeature
 
--- data Chain a = Chain
---   { chainAction   :: a
---   , chainChildren :: [Feature a a]
---   , chainCompose  :: a -> a -> a
---   }
+type FeatureX = Feature (X ()) (X ())
+
+type FeatureIO = Feature (IO ()) (IO ())
+
+ioFeature :: (MonadIO m, MonadIO n) => Feature (IO a) (IO b) -> Feature (m a) (n b)
+ioFeature f@Feature { ftrAction = a, ftrChildren = ds } =
+  f { ftrAction = liftIO a, ftrChildren = fmap go ds }
+  where
+    go :: MonadIO o => Dependency (IO b) -> Dependency (o b)
+    go (SubFeature s) = SubFeature $ ioFeature s
+    go (Dependency d) = Dependency d
+ioFeature (ConstFeature f) = ConstFeature $ liftIO f
+ioFeature BlankFeature = BlankFeature
 
 evalFeature :: Feature a b -> IO (MaybeExe a)
 evalFeature (ConstFeature x) = return $ Right x
+evalFeature BlankFeature = return $ Left []
 evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
   es <- mapM go c
   return $ case concat es of
     []  -> Right a
     es' -> Left (if s then [] else es')
-  -- return $ case foldl groupResult ([], []) c' of
-  --   ([], opt)  -> Installed a opt
-  --   (req, opt) -> if s then Ignore else Missing req opt
   where
     go (SubFeature Feature { ftrChildren = cs }) = concat <$> mapM go cs
-    go (SubFeature (ConstFeature _)) = return []
     go (Dependency d) = do
       e <- depInstalled d
       return $ maybeToList e
-    -- groupResult (x, y) (True, z)  = (z:x, y)
-    -- groupResult (x, y) (False, z) = (x, z:y)
-
--- evalChain :: Chain a -> IO (MaybeExe a)
--- evalChain Chain { chainAction = a, chainChildren = cs , chainCompose = f } =
---   flip Installed [] <$> foldM go a cs
---   where
---     go acc child = do
---       c <- evalFeature child
---       -- TODO need a way to get error messages out of this for anything
---       -- that's missing
---       return $ case c of
---         (Installed x _) -> f x acc
---         _               -> acc
+    go (SubFeature _) = return []
 
 exe :: String -> Dependency a
 exe = Dependency . Executable
@@ -149,18 +134,22 @@ userUnit = unit UserUnit
 
 -- TODO this is poorly named. This actually represents an action that has
 -- one or more dependencies (where "action" is not necessarily executing an exe)
--- data MaybeExe a = Installed a [DependencyData]
---   | Missing [DependencyData] [DependencyData]
---   | Ignore
---   deriving (Foldable, Traversable)
--- data MaybeExe a = MaybeExe (Maybe a) [String]
 type MaybeExe a = Either [String] a
---   deriving (Foldable, Traversable)
-
--- instance Functor MaybeExe where
---   fmap f (MaybeExe x m)    = MaybeExe (f <$> x) m
 
 type MaybeX = MaybeExe (X ())
+
+featureRun :: [Dependency a] -> b -> Feature b a
+featureRun ds x = Feature
+  { ftrAction = x
+  , ftrSilent = False
+  , ftrChildren = ds
+  }
+
+featureSpawnCmd :: MonadIO m => String -> [String] -> Feature (m ()) (m ())
+featureSpawnCmd cmd args = featureRun [exe cmd] $ spawnCmd cmd args
+
+featureSpawn :: MonadIO m => String -> Feature (m ()) (m ())
+featureSpawn cmd = featureSpawnCmd cmd []
 
 exeInstalled :: String -> IO (Maybe String)
 exeInstalled x = do
@@ -180,34 +169,22 @@ unitInstalled u x = do
     unitType SystemUnit = "system"
     unitType UserUnit   = "user"
 
--- pathAccessible :: FilePath -> Bool -> Bool -> IO (Maybe String)
 pathAccessible :: FilePath -> Bool -> Bool -> IO (Maybe String)
 pathAccessible p testread testwrite = do
   res <- getPermissionsSafe p
   let msg = permMsg res
   return msg
-  -- return $ fmap (\m -> m ++ ": " ++ p) msg
   where
     testPerm False _ _ = Nothing
     testPerm True f r  = Just $ f r
     permMsg NotFoundError            = Just "file not found"
     permMsg PermError                = Just "could not get permissions"
-    -- permMsg NotFoundError            = False
-    -- permMsg PermError                = False
     permMsg (PermResult r) =
       case (testPerm testread readable r, testPerm testwrite writable r) of
         (Just False, Just False) -> Just "file not readable or writable"
         (Just False, _)          -> Just "file not readable"
         (_, Just False)          -> Just "file not writable"
         _                        -> Nothing
-        -- (Just True, Just True)   -> True
-        -- (Just True, Nothing)     -> True
-        -- (Nothing, Just True)     -> True
-        -- _                        -> False
-        -- (Just False, Just False) -> Just "file not readable or writable"
-        -- (Just False, _)          -> Just "file not readable"
-        -- (_, Just False)          -> Just "file not writable"
-        -- _                        -> Nothing
 
 introspectInterface :: InterfaceName
 introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
@@ -227,7 +204,6 @@ dbusInstalled bus usesystem objpath iface mem = do
   return $ case res of
     Just _ -> Nothing
     _      -> Just "some random dbus interface not found"
-  -- return $ fromMaybe False res
   where
     findMem obj = fmap (matchMem mem)
       $ find (\i -> I.interfaceName i == iface)
@@ -248,28 +224,6 @@ depInstalled DBusEndpoint { ddDbusBus = b
                           , ddDbusMember = m
                           } = dbusInstalled b s o i m
 
--- checkInstalled :: [Dependency a] -> IO ([DependencyData], [DependencyData])
--- checkInstalled = fmap go . filterMissing
---   where
---     go = join (***) (fmap depData) . partition depRequired
-
--- filterMissing :: [Dependency a] -> IO [Dependency a]
--- filterMissing = filterM (fmap not . depInstalled . depData)
-
-runIfInstalled :: [Dependency a] -> b -> IO (MaybeExe b)
-runIfInstalled ds x = evalFeature $
-  Feature
-  { ftrAction = x
-  , ftrSilent = False
-  , ftrChildren = ds
-  }
-
-spawnIfInstalled :: MonadIO m => String -> IO (MaybeExe (m ()))
-spawnIfInstalled n = runIfInstalled [exe n] $ spawn n
-
-spawnCmdIfInstalled :: MonadIO m => String -> [String] -> IO (MaybeExe (m ()))
-spawnCmdIfInstalled n args = runIfInstalled [exe n] $ spawnCmd n args
-
 whenInstalled :: Monad m => MaybeExe (m ()) -> m ()
 whenInstalled = flip ifInstalled skip
 
@@ -277,62 +231,5 @@ ifInstalled ::  MaybeExe a -> a -> a
 ifInstalled (Right x) _ = x
 ifInstalled _ alt       = alt
 
-noCheck :: Monad m => a () -> m (MaybeExe (a ()))
-noCheck = return . Right
-
--- not sure what to do with these
-
-soundDir :: FilePath
-soundDir = "sound"
-
-spawnSound :: MonadIO m => FilePath -> m () -> m () -> IO (MaybeExe (m ()))
-spawnSound file pre post = runIfInstalled [exe "paplay"]
-  $ pre >> playSound file >> post
-
-playSound :: MonadIO m => FilePath -> m ()
-playSound file = do
-  p <- (</> soundDir </> file) <$> getXMonadDir
-  -- paplay seems to have less latency than aplay
-  spawnCmd "paplay" [p]
-
--- partitionMissing :: [MaybeExe a] -> ([DependencyData], [DependencyData])
--- partitionMissing = foldl (\(a, b) -> ((a++) *** (b++)) . go) ([], [])
---   where
---     go (Installed _ opt) = ([], opt)
---     go (Missing req opt) = (req, opt)
---     go Ignore            = ([], [])
-
--- fmtMissing :: DependencyData -> String
--- -- TODO this error message is lame
--- fmtMissing (IOTest _) = "some random test failed"
--- fmtMissing DBusEndpoint {} = "some random dbus path is missing"
--- fmtMissing (AccessiblePath p True False) = "path '" ++ p ++ "' not readable"
--- fmtMissing (AccessiblePath p False True) = "path '" ++ p ++ "' not writable"
--- fmtMissing (AccessiblePath p True True) = "path '" ++ p ++ "' not readable/writable"
--- fmtMissing (AccessiblePath p _ _) = "path '" ++ p ++ "' not ...something"
--- fmtMissing (Executable n) = "executable '" ++ n ++ "' not found"
--- fmtMissing (Systemd st n) = "systemd " ++ unitType st ++ " unit '"
---   ++ n ++ "' not found"
---   where
---     unitType SystemUnit = "system"
---     unitType UserUnit   = "user"
-
--- fmtMsgs :: [DependencyData] -> [DependencyData] -> [String]
--- fmtMsgs req opt = ("[WARNING] "++)
---   <$> (("[REQUIRED DEP] "++) . fmtMissing <$> req)
---   ++ (("[OPTIONAL DEP] "++) . fmtMissing <$> opt)
-
--- warnMsg ::
--- warnMsg xs = mapM_ putStrLn
---   $ [ "[WARNING] " ++ m | (MaybeExe _ (Just m)) <- xs ]
-
 warnMissing :: [MaybeExe a] -> IO ()
 warnMissing xs = mapM_ putStrLn $ fmap ("[WARNING] "++) $ concat $ [ m | (Left m) <- xs ]
-
--- fmtType (AccessiblePath _ _ _) = undefined
-
--- splitDeps :: [MaybeExe a] -> ([a], [String])
--- splitDeps xs = undefined
-
--- splitDeps' :: [m (MaybeExe a)] -> ([m a], [String])
--- splitDeps' xs = undefined

@@ -9,12 +9,13 @@ module XMonad.Internal.Concurrent.Removable (runRemovableMon) where
 import           Control.Concurrent
 import           Control.Monad
 
-import           Data.Map.Lazy              (Map, member)
+import           Data.Map.Lazy                   (Map, member)
 
 import           DBus
 import           DBus.Client
 
 -- import           XMonad.Internal.DBus.Control (pathExists)
+import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.Dependency
 
 bus :: BusName
@@ -91,5 +92,5 @@ listenDevices = do
     addMatch' client m p f = addMatch client ruleUdisks { matchMember = Just m }
       $ playSoundMaybe p . f . signalBody
 
-runRemovableMon :: IO (MaybeExe (IO ()))
-runRemovableMon = runIfInstalled [addedDep, removedDep] listenDevices
+runRemovableMon :: FeatureIO
+runRemovableMon = featureRun [addedDep, removedDep] listenDevices

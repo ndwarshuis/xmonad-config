@@ -40,12 +40,11 @@ addMatchCallback rule cb = do
   client <- connectSession
   addMatch client rule $ cb . signalBody
 
-initControls :: Client -> (Client -> Feature (IO ()) (IO ()))
-  -> (Feature (IO ()) (IO ()) -> IO a) -> IO a
+initControls :: Client -> (Client -> FeatureIO) -> (FeatureIO -> a) -> IO a
 initControls client exporter controls = do
   let x = exporter client
   e <- evalFeature x
   case e of
     (Right c) -> c
     _         -> return ()
-  controls x
+  return $ controls x

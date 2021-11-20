@@ -17,7 +17,6 @@ module XMonad.Internal.Command.Desktop
   , runVolumeUp
   , runVolumeMute
   , runToggleBluetooth
-  -- , runToggleDPMS
   , runToggleEthernet
   , runRestart
   , runRecompile
@@ -31,9 +30,11 @@ module XMonad.Internal.Command.Desktop
   , runNotificationCloseAll
   , runNotificationHistory
   , runNotificationContext
+  , playSound
   ) where
 
 import           Control.Monad              (void)
+import           Control.Monad.IO.Class
 
 import           System.Directory
     ( createDirectoryIfMissing
@@ -44,10 +45,10 @@ import           System.FilePath
 
 import           XMonad.Actions.Volume
 import           XMonad.Core                hiding (spawn)
--- import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
+import           XMonad.Internal.Shell
 import           XMonad.Operations
 
 --------------------------------------------------------------------------------
@@ -89,15 +90,11 @@ ethernetIface = "enp7s0f1"
 --------------------------------------------------------------------------------
 -- | Some nice apps
 
-runTerm :: IO MaybeX
-runTerm = spawnIfInstalled myTerm
+runTerm :: FeatureX
+runTerm = featureSpawn myTerm
 
-runTMux :: IO MaybeX
-runTMux = evalFeature $ Feature
-  { ftrAction = cmd
-  , ftrSilent = False
-  , ftrChildren  = [exe myTerm, exe "tmux", exe "bash"]
-  }
+runTMux :: FeatureX
+runTMux = featureRun [exe myTerm, exe "tmux", exe "bash"] cmd
   where
     cmd = spawn
       $ "tmux has-session"
@@ -106,95 +103,108 @@ runTMux = evalFeature $ Feature
     c = "exec tmux attach-session -d"
     msg = "could not connect to tmux session"
 
-runCalc :: IO MaybeX
-runCalc = runIfInstalled [exe myTerm, exe "R"] $ spawnCmd myTerm ["-e", "R"]
+runCalc :: FeatureX
+runCalc = featureRun [exe myTerm, exe "R"] $ spawnCmd myTerm ["-e", "R"]
 
-runBrowser :: IO MaybeX
-runBrowser = spawnIfInstalled myBrowser
+runBrowser :: FeatureX
+runBrowser = featureSpawn myBrowser
 
-runEditor :: IO MaybeX
-runEditor = spawnCmdIfInstalled myEditor
+runEditor :: FeatureX
+runEditor = featureSpawnCmd myEditor
   ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
 
-runFileManager :: IO MaybeX
-runFileManager = spawnIfInstalled "pcmanfm"
+runFileManager :: FeatureX
+runFileManager = featureSpawn "pcmanfm"
 
 --------------------------------------------------------------------------------
 -- | Multimedia Commands
 
-runMultimediaIfInstalled :: String -> IO MaybeX
-runMultimediaIfInstalled cmd = spawnCmdIfInstalled myMultimediaCtl [cmd]
+runMultimediaIfInstalled :: String -> FeatureX
+runMultimediaIfInstalled cmd = featureSpawnCmd myMultimediaCtl [cmd]
 
-runTogglePlay :: IO MaybeX
+runTogglePlay :: FeatureX
 runTogglePlay = runMultimediaIfInstalled "play-pause"
 
-runPrevTrack :: IO MaybeX
+runPrevTrack :: FeatureX
 runPrevTrack = runMultimediaIfInstalled "previous"
 
-runNextTrack :: IO MaybeX
+runNextTrack :: FeatureX
 runNextTrack = runMultimediaIfInstalled "next"
 
-runStopPlay :: IO MaybeX
+runStopPlay :: FeatureX
 runStopPlay = runMultimediaIfInstalled "stop"
 
-runVolumeDown :: IO MaybeX
-runVolumeDown =  spawnSound volumeChangeSound (return ()) $ void (lowerVolume 2)
+--------------------------------------------------------------------------------
+-- | Volume Commands
 
-runVolumeUp :: IO MaybeX
-runVolumeUp = spawnSound volumeChangeSound (return ()) $ void (raiseVolume 2)
+soundDir :: FilePath
+soundDir = "sound"
 
-runVolumeMute :: IO MaybeX
-runVolumeMute = spawnSound volumeChangeSound (void toggleMute) $ return ()
+playSound :: MonadIO m => FilePath -> m ()
+playSound file = do
+  p <- (</> soundDir </> file) <$> getXMonadDir
+  -- paplay seems to have less latency than aplay
+  spawnCmd "paplay" [p]
+
+featureSound :: FilePath -> X () -> X () -> FeatureX
+featureSound file pre post = featureRun [exe "paplay"]
+  $ pre >> playSound file >> post
+
+runVolumeDown :: FeatureX
+runVolumeDown = featureSound volumeChangeSound (return ()) $ void (lowerVolume 2)
+
+runVolumeUp :: FeatureX
+runVolumeUp = featureSound volumeChangeSound (return ()) $ void (raiseVolume 2)
+
+runVolumeMute :: FeatureX
+runVolumeMute = featureSound volumeChangeSound (void toggleMute) $ return ()
 
 --------------------------------------------------------------------------------
 -- | Notification control
 
-runNotificationCmd :: String -> IO MaybeX
-runNotificationCmd cmd = spawnCmdIfInstalled myNotificationCtrl [cmd]
+runNotificationCmd :: String -> FeatureX
+runNotificationCmd cmd = featureSpawnCmd myNotificationCtrl [cmd]
 
-runNotificationClose :: IO MaybeX
+runNotificationClose :: FeatureX
 runNotificationClose = runNotificationCmd "close"
 
-runNotificationCloseAll :: IO MaybeX
+runNotificationCloseAll :: FeatureX
 runNotificationCloseAll = runNotificationCmd "close-all"
 
-runNotificationHistory :: IO MaybeX
+runNotificationHistory :: FeatureX
 runNotificationHistory = runNotificationCmd "history-pop"
 
-runNotificationContext :: IO MaybeX
+runNotificationContext :: FeatureX
 runNotificationContext = runNotificationCmd "context"
 
 --------------------------------------------------------------------------------
 -- | System commands
 
-runToggleBluetooth :: IO MaybeX
-runToggleBluetooth = runIfInstalled [exe myBluetooth] $ spawn
+runToggleBluetooth :: FeatureX
+runToggleBluetooth = featureRun [exe myBluetooth] $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
   #!|| "a=off"
   #!>> fmtCmd myBluetooth ["power", "$a", ">", "/dev/null"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
--- runToggleDPMS :: IO MaybeX
--- runToggleDPMS = io <$> evalFeature callToggle
-
-runToggleEthernet :: IO MaybeX
-runToggleEthernet = runIfInstalled [exe "nmcli"] $ spawn
+runToggleEthernet :: FeatureX
+runToggleEthernet = featureRun [exe "nmcli"] $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
   #!|| "a=disconnect"
   #!>> fmtCmd "nmcli" ["device", "$a", ethernetIface]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
-runStartISyncTimer :: IO MaybeX
-runStartISyncTimer = runIfInstalled [userUnit "mbsync.timer"]
+runStartISyncTimer :: FeatureX
+runStartISyncTimer = featureRun [userUnit "mbsync.timer"]
   $ spawn
   $ "systemctl --user start mbsync.timer"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
   #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
-runStartISyncService :: IO MaybeX
-runStartISyncService = runIfInstalled [userUnit "mbsync.service"]
+runStartISyncService :: FeatureX
+runStartISyncService = featureRun [userUnit "mbsync.service"]
   $ spawn
   $ "systemctl --user start mbsync.service"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
@@ -238,25 +248,25 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
-runFlameshot :: String -> IO MaybeX
-runFlameshot mode = runIfInstalled [exe myCapture] $ do
+runFlameshot :: String -> FeatureX
+runFlameshot mode = featureRun [exe myCapture] $ do
   ssDir <- io getCaptureDir
   spawnCmd myCapture $ mode : ["-p", ssDir]
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
-runAreaCapture :: IO MaybeX
+runAreaCapture :: FeatureX
 runAreaCapture = runFlameshot "gui"
 
 -- myWindowCap = "screencap -w" --external script
 
-runDesktopCapture :: IO MaybeX
+runDesktopCapture :: FeatureX
 runDesktopCapture = runFlameshot "full"
 
-runScreenCapture :: IO MaybeX
+runScreenCapture :: FeatureX
 runScreenCapture = runFlameshot "screen"
 
-runCaptureBrowser :: IO MaybeX
-runCaptureBrowser = runIfInstalled [exe myImageBrowser] $ do
+runCaptureBrowser :: FeatureX
+runCaptureBrowser = featureRun [exe myImageBrowser] $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

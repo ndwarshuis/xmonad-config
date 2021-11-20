@@ -306,7 +306,7 @@ getWireless = do
 getEthernet :: IO (MaybeExe CmdSpec)
 getEthernet = do
   i <- readInterface isEthernet
-  maybe (return $ Left []) (runIfInstalled [dep] . ethernetCmd) i
+  evalFeature $ maybe BlankFeature (featureRun [dep] . ethernetCmd) i
   where
     dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
 
