@@ -39,6 +39,7 @@ import           XMonad.Hooks.DynamicLog
     , xmobarColor
     )
 import           XMonad.Internal.Command.Power                  (hasBattery)
+import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.Shell
 -- import           XMonad.Internal.DBus.Common                    (xmonadBus)
@@ -273,7 +274,7 @@ rightPlugins =
   , evalFeature getAlsa
   , evalFeature getBattery
   , evalFeature getBl
-  , nocheck ckCmd
+  , evalFeature getCk
   , evalFeature getSs
   , nocheck lockCmd
   , nocheck dateCmd
@@ -338,6 +339,14 @@ getBl = Feature
   , ftrName = "Intel backlight indicator"
   , ftrWarning = Default
   , ftrChildren = [intelBacklightSignalDep]
+  }
+
+getCk :: BarFeature
+getCk = Feature
+  { ftrMaybeAction = ckCmd
+  , ftrName = "Clevo keyboard indicator"
+  , ftrWarning = Default
+  , ftrChildren = [clevoKeyboardSignalDep]
   }
 
 getSs :: BarFeature

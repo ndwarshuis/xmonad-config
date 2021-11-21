@@ -50,8 +50,8 @@ data BrightnessControls = BrightnessControls
   , bctlDec :: FeatureIO
   }
 
-brightnessControls :: BrightnessConfig a b -> BrightnessControls
-brightnessControls bc =
+brightnessControls :: BrightnessConfig a b -> Client -> BrightnessControls
+brightnessControls bc client =
   BrightnessControls
   { bctlMax = cb "max brightness" memMax
   , bctlMin = cb "min brightness" memMin
@@ -59,12 +59,12 @@ brightnessControls bc =
   , bctlDec = cb "decrease brightness" memDec
   }
   where
-    cb = callBacklight bc
+    cb = callBacklight client bc
 
 -- TODO not dry
-callGetBrightness :: Num c => BrightnessConfig a b -> IO (Maybe c)
-callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } = do
-  reply <- callMethod xmonadBus p i memGet
+callGetBrightness :: Num c => BrightnessConfig a b -> Client -> IO (Maybe c)
+callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client = do
+  reply <- callMethod client xmonadBusName p i memGet
   return $ either (const Nothing) bodyGetBrightness reply
 
 signalDep :: BrightnessConfig a b -> Dependency
@@ -131,10 +131,10 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
   where
     sig = signal p i memCur
 
-callBacklight :: BrightnessConfig a b -> String -> MemberName -> FeatureIO
-callBacklight BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
+callBacklight :: Client -> BrightnessConfig a b -> String -> MemberName -> FeatureIO
+callBacklight client BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
   Feature
-  { ftrMaybeAction = void $ callMethod xmonadBus p i m
+  { ftrMaybeAction = void $ callMethod client xmonadBusName p i m
   , ftrName = unwords [n, controlName]
   , ftrWarning = Default
   , ftrChildren = [xDbusDep p i $ Method_ m]

@@ -102,10 +102,10 @@ exportIntelBacklight :: Client -> FeatureIO
 exportIntelBacklight =
   brightnessExporter [curFileDep, maxFileDep] intelBacklightConfig
 
-intelBacklightControls :: BrightnessControls
+intelBacklightControls :: Client -> BrightnessControls
 intelBacklightControls = brightnessControls intelBacklightConfig
 
-callGetBrightnessIB :: IO (Maybe Brightness)
+callGetBrightnessIB :: Client -> IO (Maybe Brightness)
 callGetBrightnessIB = callGetBrightness intelBacklightConfig
 
 matchSignalIB :: (Maybe Brightness -> IO ()) -> IO SignalHandler

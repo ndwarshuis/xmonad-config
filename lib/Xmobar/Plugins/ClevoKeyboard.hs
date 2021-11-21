@@ -14,12 +14,13 @@ module Xmobar.Plugins.ClevoKeyboard
 import           Control.Concurrent
 import           Control.Monad
 
+import           DBus.Client
+
 import           Xmobar
 
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 
-data ClevoKeyboard = ClevoKeyboard String
-  deriving (Read, Show)
+newtype ClevoKeyboard = ClevoKeyboard String deriving (Read, Show)
 
 ckAlias :: String
 ckAlias = "clevokeyboard"
@@ -28,7 +29,9 @@ instance Exec ClevoKeyboard where
   alias (ClevoKeyboard _) = ckAlias
   start (ClevoKeyboard icon) cb = do
     _ <- matchSignalCK $ cb . formatBrightness
-    cb . formatBrightness =<< callGetBrightnessCK
+    -- TODO this could fail, and also should try to reuse client objects when
+    -- possible
+    cb . formatBrightness =<< callGetBrightnessCK =<< connectSession
     forever (threadDelay 5000000)
     where
       formatBrightness = \case

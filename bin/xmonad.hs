@@ -468,8 +468,8 @@ mkNamedSubmap c KeyGroup { kgHeader = h, kgBindings = b } =
   <$> b
 
 data KeyBinding a = KeyBinding
-  { kbSyms   :: String
-  , kbDesc   :: String
+  { kbSyms        :: String
+  , kbDesc        :: String
   , kbMaybeAction :: a
   }
 
@@ -549,14 +549,14 @@ externalBindings ts lock =
     ]
 
   , KeyGroup "System"
-    [ KeyBinding "M-." "backlight up" $ ioFeature $ bctlInc intelBacklightControls
-    , KeyBinding "M-," "backlight down" $ ioFeature $ bctlDec intelBacklightControls
-    , KeyBinding "M-M1-," "backlight min" $ ioFeature $ bctlMin intelBacklightControls
-    , KeyBinding "M-M1-." "backlight max" $ ioFeature $ bctlMax intelBacklightControls
-    , KeyBinding "M-S-." "keyboard up" $ ioFeature $ bctlInc clevoKeyboardControls
-    , KeyBinding "M-S-," "keyboard down" $ ioFeature $ bctlDec clevoKeyboardControls
-    , KeyBinding "M-S-M1-," "keyboard min" $ ioFeature $ bctlMin clevoKeyboardControls
-    , KeyBinding "M-S-M1-." "keyboard max" $ ioFeature $ bctlMax clevoKeyboardControls
+    [ KeyBinding "M-." "backlight up" $ ib bctlInc
+    , KeyBinding "M-," "backlight down" $ ib bctlDec
+    , KeyBinding "M-M1-," "backlight min" $ ib bctlMin
+    , KeyBinding "M-M1-." "backlight max" $ ib bctlMax
+    , KeyBinding "M-S-." "keyboard up" $ ck bctlInc
+    , KeyBinding "M-S-," "keyboard down" $ ck bctlDec
+    , KeyBinding "M-S-M1-," "keyboard min" $ ck bctlMin
+    , KeyBinding "M-S-M1-." "keyboard max" $ ck bctlMax
     , KeyBinding "M-<End>" "power menu" $ ConstFeature $ runPowerPrompt lock
     , KeyBinding "M-<Home>" "quit xmonad" $ ConstFeature runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" runScreenLock
@@ -568,7 +568,12 @@ externalBindings ts lock =
     , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ ioFeature callToggle
+    , KeyBinding "M-<F11>" "toggle screensaver" $ maybe BlankFeature (ioFeature . callToggle) cl
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]
+  where
+    cl = tsClient ts
+    brightessControls ctl getter = maybe BlankFeature (ioFeature . getter . ctl) cl
+    ib = brightessControls intelBacklightControls
+    ck = brightessControls clevoKeyboardControls

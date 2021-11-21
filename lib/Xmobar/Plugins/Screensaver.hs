@@ -14,13 +14,14 @@ module Xmobar.Plugins.Screensaver
 import           Control.Concurrent
 import           Control.Monad
 
+import           DBus.Client
+
 import           Xmobar
 
 import           XMonad.Hooks.DynamicLog          (xmobarColor)
 import           XMonad.Internal.DBus.Screensaver
 
-newtype Screensaver = Screensaver (String, String, String)
-    deriving (Read, Show)
+newtype Screensaver = Screensaver (String, String, String) deriving (Read, Show)
 
 ssAlias :: String
 ssAlias = "screensaver"
@@ -29,7 +30,7 @@ instance Exec Screensaver where
     alias (Screensaver _) = ssAlias
     start (Screensaver (text, colorOn, colorOff)) cb = do
       _ <- matchSignal $ cb . fmtState
-      cb . fmtState =<< callQuery
+      cb . fmtState =<< callQuery =<< connectSession
       forever (threadDelay 5000000)
       where
         fmtState = \case

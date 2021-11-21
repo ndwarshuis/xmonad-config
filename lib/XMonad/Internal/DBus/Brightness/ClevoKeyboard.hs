@@ -120,10 +120,10 @@ exportClevoKeyboard :: Client -> FeatureIO
 exportClevoKeyboard =
   brightnessExporter [stateFileDep, brightnessFileDep] clevoKeyboardConfig
 
-clevoKeyboardControls :: BrightnessControls
+clevoKeyboardControls :: Client -> BrightnessControls
 clevoKeyboardControls = brightnessControls clevoKeyboardConfig
 
-callGetBrightnessCK :: IO (Maybe Brightness)
+callGetBrightnessCK :: Client -> IO (Maybe Brightness)
 callGetBrightnessCK = callGetBrightness clevoKeyboardConfig
 
 matchSignalCK :: (Maybe Brightness -> IO ()) -> IO SignalHandler

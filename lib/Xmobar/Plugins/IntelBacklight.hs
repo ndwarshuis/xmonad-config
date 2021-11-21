@@ -14,6 +14,8 @@ module Xmobar.Plugins.IntelBacklight
 import           Control.Concurrent
 import           Control.Monad
 
+import           DBus.Client
+
 import           Xmobar
 
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
@@ -27,7 +29,7 @@ instance Exec IntelBacklight where
   alias (IntelBacklight _) = blAlias
   start (IntelBacklight icon) cb = do
     _ <- matchSignalIB $ cb . formatBrightness
-    cb . formatBrightness =<< callGetBrightnessIB
+    cb . formatBrightness =<< callGetBrightnessIB =<< connectSession
     forever (threadDelay 5000000)
     where
       formatBrightness = \case

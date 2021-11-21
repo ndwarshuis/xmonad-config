@@ -245,17 +245,18 @@ introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
 -- TODO this belongs somewhere else, IDK where tho for now
-callMethod :: Bus -> ObjectPath -> InterfaceName -> MemberName -> IO (Either String [Variant])
-callMethod (Bus usesys bus) path iface mem = do
-  client <- if usesys then connectSystem else connectSession
+callMethod :: Client -> BusName -> ObjectPath -> InterfaceName -> MemberName
+  -> IO (Either String [Variant])
+callMethod client bus path iface mem = do
   reply <- call client (methodCall path iface mem)
            { methodCallDestination = Just bus }
-  disconnect client
   return $ bimap methodErrorMessage methodReturnBody reply
 
 busSatisfied :: Bus -> IO (Maybe String)
 busSatisfied (Bus usesystem bus) = do
-  ret <- callMethod (Bus usesystem queryBus) queryPath queryIface queryMem
+  client <- if usesystem then connectSystem else connectSession
+  ret <- callMethod client queryBus queryPath queryIface queryMem
+  disconnect client
   return $ case ret of
         Left e    -> Just e
         Right b -> let ns = bodyGetNames b in
@@ -271,8 +272,10 @@ busSatisfied (Bus usesystem bus) = do
     bodyGetNames _   = []
 
 endpointSatisfied :: Bus -> Endpoint -> IO (Maybe String)
-endpointSatisfied b@(Bus _ bus) (Endpoint objpath iface mem) = do
-  ret <- callMethod b objpath introspectInterface introspectMethod
+endpointSatisfied (Bus u bus) (Endpoint objpath iface mem) = do
+  client <- if u then connectSystem else connectSession
+  ret <- callMethod client bus objpath introspectInterface introspectMethod
+  disconnect client
   return $ case ret of
         Left e     -> Just e
         Right body -> procBody body
