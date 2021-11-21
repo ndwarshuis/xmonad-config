@@ -121,19 +121,21 @@ exportScreensaver client = Feature
       }
 
 callToggle :: Client -> FeatureIO
-callToggle client = Feature
-  { ftrMaybeAction = cmd
-  , ftrName = "screensaver toggle"
-  , ftrWarning = Default
-  , ftrChildren = [xDbusDep ssPath interface $ Method_ memToggle]
-  }
-  where
-    cmd = void $ callMethod client xmonadBusName ssPath interface memToggle
+callToggle client =
+  (featureEndpoint xmonadBusName ssPath interface memToggle client)
+  { ftrName = "screensaver toggle" }
+-- callToggle client = Feature
+--   { ftrMaybeAction = cmd
+--   , ftrName = "screensaver toggle"
+--   , ftrWarning = Default
+--   , ftrChildren = [xDbusDep ssPath interface $ Method_ memToggle]
+--   }
+--   where
+--     cmd = void $ callMethod client xmonadBusName ssPath interface memToggle
 
 callQuery :: Client -> IO (Maybe SSState)
 callQuery client = do
   reply <- callMethod client xmonadBusName ssPath interface memQuery
-  -- return $ reply >>= bodyGetCurrentState
   return $ either (const Nothing) bodyGetCurrentState reply
 
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler

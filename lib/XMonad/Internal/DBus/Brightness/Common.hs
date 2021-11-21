@@ -11,7 +11,7 @@ module XMonad.Internal.DBus.Brightness.Common
   , signalDep
   ) where
 
-import           Control.Monad               (void)
+-- import           Control.Monad               (void)
 
 import           Data.Int                    (Int32)
 
@@ -133,12 +133,14 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
 
 callBacklight :: Client -> BrightnessConfig a b -> String -> MemberName -> FeatureIO
 callBacklight client BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
-  Feature
-  { ftrMaybeAction = void $ callMethod client xmonadBusName p i m
-  , ftrName = unwords [n, controlName]
-  , ftrWarning = Default
-  , ftrChildren = [xDbusDep p i $ Method_ m]
-  }
+  (featureEndpoint xmonadBusName p i m client)
+  { ftrName = unwords [n, controlName] }
+  -- Feature
+  -- { ftrMaybeAction = void $ callMethod client xmonadBusName p i m
+  -- , ftrName = unwords [n, controlName]
+  -- , ftrWarning = Default
+  -- , ftrChildren = [xDbusDep p i $ Method_ m]
+  -- }
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)

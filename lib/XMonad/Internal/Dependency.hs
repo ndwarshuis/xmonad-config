@@ -23,6 +23,7 @@ module XMonad.Internal.Dependency
   , featureDefault
   , featureExeArgs
   , featureExe
+  , featureEndpoint
   , warnMissing
   , whenSatisfied
   , ifSatisfied
@@ -33,6 +34,7 @@ module XMonad.Internal.Dependency
   , callMethod
   ) where
 
+import           Control.Monad           (void)
 import           Control.Monad.IO.Class
 
 import           Data.Bifunctor          (bimap)
@@ -101,6 +103,18 @@ featureExe n cmd = featureExeArgs n cmd []
 featureExeArgs :: MonadIO m => String -> String -> [String] -> Feature (m ())
 featureExeArgs n cmd args =
   featureDefault n [Executable cmd] $ spawnCmd cmd args
+
+-- TODO the bus and client might refer to different things
+featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
+  -> Client -> FeatureIO
+featureEndpoint busname path iface mem client = Feature
+  { ftrMaybeAction = cmd
+  , ftrName = "screensaver toggle"
+  , ftrWarning = Default
+  , ftrChildren = [DBusEndpoint (Bus False busname) $ Endpoint path iface $ Method_ mem]
+  }
+  where
+    cmd = void $ callMethod client busname path iface mem
 
 --------------------------------------------------------------------------------
 -- | Feature evaluation
