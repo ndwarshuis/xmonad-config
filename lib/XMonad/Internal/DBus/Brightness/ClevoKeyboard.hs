@@ -78,7 +78,6 @@ incBrightness bounds = stateOn >> incPercent steps brightnessFile bounds
 decBrightness :: RawBounds -> IO Brightness
 decBrightness bounds = do
   b <- decPercent steps brightnessFile bounds
-  print b
   when (b == 0) stateOff
   return b
 
