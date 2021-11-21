@@ -95,7 +95,7 @@ bodyGetCurrentState _   = Nothing
 
 exportScreensaver :: Client -> FeatureIO
 exportScreensaver client = Feature
-  { ftrAction = cmd
+  { ftrMaybeAction = cmd
   , ftrName = "screensaver interface"
   , ftrWarning = Default
   , ftrChildren = [Executable ssExecutable, DBusBus xmonadBus]
@@ -122,7 +122,7 @@ exportScreensaver client = Feature
 
 callToggle :: FeatureIO
 callToggle = Feature
-  { ftrAction = cmd
+  { ftrMaybeAction = cmd
   , ftrName = "screensaver toggle"
   , ftrWarning = Default
   , ftrChildren = [xDbusDep ssPath interface $ Method_ memToggle]

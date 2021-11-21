@@ -91,10 +91,10 @@ ethernetIface = "enp7s0f1"
 -- | Some nice apps
 
 runTerm :: FeatureX
-runTerm = featureSpawn "terminal" myTerm
+runTerm = featureExe "terminal" myTerm
 
 runTMux :: FeatureX
-runTMux = featureRun "terminal multiplexer" deps cmd
+runTMux = featureDefault "terminal multiplexer" deps cmd
   where
     deps = [Executable myTerm, Executable "tmux", Executable "bash"]
     cmd = spawn
@@ -105,25 +105,25 @@ runTMux = featureRun "terminal multiplexer" deps cmd
     msg = "could not connect to tmux session"
 
 runCalc :: FeatureX
-runCalc = featureRun "calculator" [Executable myTerm, Executable "R"]
+runCalc = featureDefault "calculator" [Executable myTerm, Executable "R"]
   $ spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: FeatureX
-runBrowser = featureSpawn "web browser" myBrowser
+runBrowser = featureExe "web browser" myBrowser
 
 runEditor :: FeatureX
-runEditor = featureSpawnCmd "text editor" myEditor
+runEditor = featureExeArgs "text editor" myEditor
   ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
 
 runFileManager :: FeatureX
-runFileManager = featureSpawn "file browser" "pcmanfm"
+runFileManager = featureExe "file browser" "pcmanfm"
 
 --------------------------------------------------------------------------------
 -- | Multimedia Commands
 
 runMultimediaIfInstalled :: String -> String -> FeatureX
 runMultimediaIfInstalled n cmd =
-  featureSpawnCmd (n ++ " multimedia control") myMultimediaCtl [cmd]
+  featureExeArgs (n ++ " multimedia control") myMultimediaCtl [cmd]
 
 runTogglePlay :: FeatureX
 runTogglePlay = runMultimediaIfInstalled "play/pause" "play-pause"
@@ -151,7 +151,7 @@ playSound file = do
 
 featureSound :: String -> FilePath -> X () -> X () -> FeatureX
 featureSound n file pre post =
-  featureRun ("volume " ++ n ++ " control") [Executable "paplay"]
+  featureDefault ("volume " ++ n ++ " control") [Executable "paplay"]
   $ pre >> playSound file >> post
 
 runVolumeDown :: FeatureX
@@ -168,7 +168,7 @@ runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return
 
 runNotificationCmd :: String -> String -> FeatureX
 runNotificationCmd n cmd =
-  featureSpawnCmd (n ++ " control") myNotificationCtrl [cmd]
+  featureExeArgs (n ++ " control") myNotificationCtrl [cmd]
 
 runNotificationClose :: FeatureX
 runNotificationClose = runNotificationCmd "close notification" "close"
@@ -190,7 +190,7 @@ runNotificationContext =
 
 runToggleBluetooth :: FeatureX
 runToggleBluetooth =
-  featureRun "bluetooth toggle" [Executable myBluetooth]
+  featureDefault "bluetooth toggle" [Executable myBluetooth]
   $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
@@ -199,7 +199,7 @@ runToggleBluetooth =
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
 runToggleEthernet :: FeatureX
-runToggleEthernet = featureRun "ethernet toggle" [Executable "nmcli"]
+runToggleEthernet = featureDefault "ethernet toggle" [Executable "nmcli"]
   $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
@@ -208,14 +208,14 @@ runToggleEthernet = featureRun "ethernet toggle" [Executable "nmcli"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
 runStartISyncTimer :: FeatureX
-runStartISyncTimer = featureRun "isync timer" [userUnit "mbsync.timer"]
+runStartISyncTimer = featureDefault "isync timer" [userUnit "mbsync.timer"]
   $ spawn
   $ "systemctl --user start mbsync.timer"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
   #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
 runStartISyncService :: FeatureX
-runStartISyncService = featureRun "isync" [userUnit "mbsync.service"]
+runStartISyncService = featureDefault "isync" [userUnit "mbsync.service"]
   $ spawn
   $ "systemctl --user start mbsync.service"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
@@ -260,7 +260,7 @@ getCaptureDir = do
     fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> String -> FeatureX
-runFlameshot n mode = featureRun n [Executable myCapture] $ do
+runFlameshot n mode = featureDefault n [Executable myCapture] $ do
   ssDir <- io getCaptureDir
   spawnCmd myCapture $ mode : ["-p", ssDir]
 
@@ -279,6 +279,6 @@ runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: FeatureX
 runCaptureBrowser =
-  featureRun "screen capture browser" [Executable myImageBrowser] $ do
+  featureDefault "screen capture browser" [Executable myImageBrowser] $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

@@ -46,7 +46,7 @@ myOptimusManager = "optimus-manager"
 -- | Core commands
 
 runScreenLock :: Feature (X ())
-runScreenLock = featureSpawn "screen locker" myScreenlock
+runScreenLock = featureExe "screen locker" myScreenlock
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -101,24 +101,24 @@ runOptimusPrompt' = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: FeatureX
-runOptimusPrompt = featureRun "graphics switcher" [Executable myOptimusManager]
+runOptimusPrompt = featureDefault "graphics switcher" [Executable myOptimusManager]
   runOptimusPrompt'
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt
 
-data PowerAction = Poweroff
+data PowerMaybeAction = Poweroff
     | Shutdown
     | Hibernate
     | Reboot
     deriving (Eq)
 
-instance Enum PowerAction where
+instance Enum PowerMaybeAction where
   toEnum 0 = Poweroff
   toEnum 1 = Shutdown
   toEnum 2 = Hibernate
   toEnum 3 = Reboot
-  toEnum _ = errorWithoutStackTrace "Main.Enum.PowerAction.toEnum: bad argument"
+  toEnum _ = errorWithoutStackTrace "Main.Enum.PowerMaybeAction.toEnum: bad argument"
 
   fromEnum Poweroff  = 0
   fromEnum Shutdown  = 1
@@ -131,22 +131,22 @@ instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
 
 runPowerPrompt :: X () -> X ()
-runPowerPrompt lock = mkXPrompt PowerPrompt theme comp executeAction
+runPowerPrompt lock = mkXPrompt PowerPrompt theme comp executeMaybeAction
   where
     comp = mkComplFunFromList []
     theme = T.promptTheme { promptKeymap = keymap }
     keymap = M.fromList
       $ ((controlMask, xK_g), quit) :
       map (first $ (,) 0)
-      [ (xK_p, sendAction Poweroff)
-      , (xK_s, sendAction Shutdown)
-      , (xK_h, sendAction Hibernate)
-      , (xK_r, sendAction Reboot)
+      [ (xK_p, sendMaybeAction Poweroff)
+      , (xK_s, sendMaybeAction Shutdown)
+      , (xK_h, sendMaybeAction Hibernate)
+      , (xK_r, sendMaybeAction Reboot)
       , (xK_Return, quit)
       , (xK_Escape, quit)
       ]
-    sendAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
-    executeAction a = case toEnum $ read a of
+    sendMaybeAction a = setInput (show $ fromEnum a) >> setSuccess True >> setDone True
+    executeMaybeAction a = case toEnum $ read a of
       Poweroff  -> runPowerOff
       Shutdown  -> lock >> runSuspend
       Hibernate -> lock >> runHibernate

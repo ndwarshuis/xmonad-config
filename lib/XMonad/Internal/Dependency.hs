@@ -2,17 +2,17 @@
 -- | Functions for handling dependencies
 
 module XMonad.Internal.Dependency
-  ( MaybeExe
-  , UnitType(..)
-  , Dependency(..)
-  , Bus(..)
-  , Endpoint(..)
-  , DBusMember(..)
-  , Warning(..)
+  ( MaybeAction
   , MaybeX
   , FeatureX
   , FeatureIO
   , Feature(..)
+  , Warning(..)
+  , Dependency(..)
+  , UnitType(..)
+  , Bus(..)
+  , Endpoint(..)
+  , DBusMember(..)
   , ioFeature
   , evalFeature
   , systemUnit
@@ -20,14 +20,12 @@ module XMonad.Internal.Dependency
   , pathR
   , pathW
   , pathRW
-  , featureRun
-  , featureSpawnCmd
-  , featureSpawn
+  , featureDefault
+  , featureExeArgs
+  , featureExe
   , warnMissing
-  , whenInstalled
-  , ifInstalled
-  , fmtCmd
-  , spawnCmd
+  , whenSatisfied
+  , ifSatisfied
   , executeFeature
   , executeFeature_
   , applyFeature
@@ -54,51 +52,71 @@ import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 
 --------------------------------------------------------------------------------
--- | Gracefully handling missing binaries
-
-data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
-
-data DBusMember = Method_ MemberName
-  | Signal_ MemberName
-  | Property_ String
-  deriving (Eq, Show)
-
-data Bus = Bus Bool BusName deriving (Eq, Show)
-
-data Endpoint = Endpoint ObjectPath InterfaceName DBusMember deriving (Eq, Show)
-
-data Dependency = Executable String
-  | AccessiblePath FilePath Bool Bool
-  | IOTest (IO (Maybe String))
-  | DBusEndpoint Bus Endpoint
-  | DBusBus Bus
-  | Systemd UnitType String
-
-data Warning = Silent | Default
+-- | Features
+--
+-- A 'feature' is an 'action' (usually an IO ()) that requires one or more
+-- 'dependencies'. Features also have a useful name and an error logging
+-- protocol.
+--
+-- NOTE: there is no way to make a feature depend on another feature. This is
+-- very complicated to implement and would only be applicable to a few instances
+-- (notable the dbus interfaces). In order to implement a dependency tree, use
+-- dependencies that target the output/state of another feature; this is more
+-- robust anyways, at the cost of being a bit slower.
 
 data Feature a = Feature
-  { ftrAction   :: a
-  , ftrName     :: String
-  , ftrWarning  :: Warning
-  , ftrChildren :: [Dependency]
+  { ftrMaybeAction :: a
+  , ftrName        :: String
+  , ftrWarning     :: Warning
+  , ftrChildren    :: [Dependency]
   }
   | ConstFeature a
   | BlankFeature
+
+-- TODO this is silly as is, and could be made more useful by representing
+-- loglevels
+data Warning = Silent | Default
 
 type FeatureX = Feature (X ())
 
 type FeatureIO = Feature (IO ())
 
 ioFeature :: (MonadIO m) => Feature (IO a) -> Feature (m a)
-ioFeature f@Feature { ftrAction = a } = f { ftrAction = liftIO a }
-ioFeature (ConstFeature f)            = ConstFeature $ liftIO f
-ioFeature BlankFeature                = BlankFeature
+ioFeature f@Feature { ftrMaybeAction = a } = f { ftrMaybeAction = liftIO a }
+ioFeature (ConstFeature f)                 = ConstFeature $ liftIO f
+ioFeature BlankFeature                     = BlankFeature
 
-evalFeature :: Feature a -> IO (MaybeExe a)
+featureDefault :: String -> [Dependency] -> a -> Feature a
+featureDefault n ds x = Feature
+  { ftrMaybeAction = x
+  , ftrName = n
+  , ftrWarning = Default
+  , ftrChildren = ds
+  }
+
+featureExe :: MonadIO m => String -> String -> Feature (m ())
+featureExe n cmd = featureExeArgs n cmd []
+
+featureExeArgs :: MonadIO m => String -> String -> [String] -> Feature (m ())
+featureExeArgs n cmd args =
+  featureDefault n [Executable cmd] $ spawnCmd cmd args
+
+--------------------------------------------------------------------------------
+-- | Feature evaluation
+--
+-- Evaluate a feature by testing if its dependencies are satisfied, and return
+-- either the action of the feature or 0 or more error messages that signify
+-- what dependencies are missing and why.
+
+type MaybeAction a = Either [String] a
+
+type MaybeX = MaybeAction (X ())
+
+evalFeature :: Feature a -> IO (MaybeAction a)
 evalFeature (ConstFeature x) = return $ Right x
 evalFeature BlankFeature = return $ Left []
 evalFeature Feature
-  { ftrAction = a
+  { ftrMaybeAction = a
   , ftrName = n
   , ftrWarning = w
   , ftrChildren = c
@@ -112,6 +130,48 @@ evalFeature Feature
     fmtWarnings procName es = case w of
       Silent  -> []
       Default -> fmap (fmtMsg procName "WARNING" . ((n ++ " disabled; ") ++)) es
+
+applyFeature :: MonadIO m => (m a -> m a) -> a -> Feature (IO a) -> m a
+applyFeature iof def ftr = do
+  a <- io $ evalFeature ftr
+  either (\es -> io $ warnMissing' es >> return def) (iof . io) a
+
+applyFeature_ :: MonadIO m => (m () -> m ()) -> Feature (IO ()) -> m ()
+applyFeature_ iof = applyFeature iof ()
+
+executeFeature :: MonadIO m => a -> Feature (IO a) -> m a
+executeFeature = applyFeature id
+
+executeFeature_ :: Feature (IO ()) -> IO ()
+executeFeature_ = executeFeature ()
+
+whenSatisfied :: Monad m => MaybeAction (m ()) -> m ()
+whenSatisfied = flip ifSatisfied skip
+
+ifSatisfied ::  MaybeAction a -> a -> a
+ifSatisfied (Right x) _ = x
+ifSatisfied _ alt       = alt
+
+--------------------------------------------------------------------------------
+-- | Dependencies
+
+data Dependency = Executable String
+  | AccessiblePath FilePath Bool Bool
+  | IOTest (IO (Maybe String))
+  | DBusEndpoint Bus Endpoint
+  | DBusBus Bus
+  | Systemd UnitType String
+
+data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
+
+data DBusMember = Method_ MemberName
+  | Signal_ MemberName
+  | Property_ String
+  deriving (Eq, Show)
+
+data Bus = Bus Bool BusName deriving (Eq, Show)
+
+data Endpoint = Endpoint ObjectPath InterfaceName DBusMember deriving (Eq, Show)
 
 pathR :: String -> Dependency
 pathR n = AccessiblePath n True False
@@ -128,35 +188,29 @@ systemUnit = Systemd SystemUnit
 userUnit :: String -> Dependency
 userUnit = Systemd UserUnit
 
--- TODO this is poorly named. This actually represents an action that has
--- one or more dependencies (where "action" is not necessarily executing an exe)
-type MaybeExe a = Either [String] a
+--------------------------------------------------------------------------------
+-- | Dependency evaluation
+--
+-- Test the existence of dependencies and return either Nothing (which actually
+-- means success) or Just <error message>.
 
-type MaybeX = MaybeExe (X ())
+evalDependency :: Dependency -> IO (Maybe String)
+evalDependency (Executable n)         = exeSatisfied n
+evalDependency (IOTest t)             = t
+evalDependency (Systemd t n)          = unitSatisfied t n
+evalDependency (AccessiblePath p r w) = pathSatisfied p r w
+evalDependency (DBusEndpoint b e)     = endpointSatisfied b e
+evalDependency (DBusBus b)            = busSatisfied b
 
-featureRun :: String -> [Dependency] -> a -> Feature a
-featureRun n ds x = Feature
-  { ftrAction = x
-  , ftrName = n
-  , ftrWarning = Default
-  , ftrChildren = ds
-  }
-
-featureSpawnCmd :: MonadIO m => String -> String -> [String] -> Feature (m ())
-featureSpawnCmd n cmd args = featureRun n [Executable cmd] $ spawnCmd cmd args
-
-featureSpawn :: MonadIO m => String -> String -> Feature (m ())
-featureSpawn n cmd = featureSpawnCmd n cmd []
-
-exeInstalled :: String -> IO (Maybe String)
-exeInstalled x = do
+exeSatisfied :: String -> IO (Maybe String)
+exeSatisfied x = do
   r <- findExecutable x
   return $ case r of
     (Just _) -> Nothing
     _        -> Just $ "executable '" ++ x ++ "' not found"
 
-unitInstalled :: UnitType -> String -> IO (Maybe String)
-unitInstalled u x = do
+unitSatisfied :: UnitType -> String -> IO (Maybe String)
+unitSatisfied u x = do
   (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
   return $ case rc of
     ExitSuccess -> Nothing
@@ -166,8 +220,8 @@ unitInstalled u x = do
     unitType SystemUnit = "system"
     unitType UserUnit   = "user"
 
-pathAccessible :: FilePath -> Bool -> Bool -> IO (Maybe String)
-pathAccessible p testread testwrite = do
+pathSatisfied :: FilePath -> Bool -> Bool -> IO (Maybe String)
+pathSatisfied p testread testwrite = do
   res <- getPermissionsSafe p
   let msg = permMsg res
   return msg
@@ -197,8 +251,8 @@ callMethod (Bus usesys bus) path iface mem = do
   disconnect client
   return $ bimap methodErrorMessage methodReturnBody reply
 
-dbusBusExists :: Bus -> IO (Maybe String)
-dbusBusExists (Bus usesystem bus) = do
+busSatisfied :: Bus -> IO (Maybe String)
+busSatisfied (Bus usesystem bus) = do
   ret <- callMethod (Bus usesystem queryBus) queryPath queryIface queryMem
   return $ case ret of
         Left e    -> Just e
@@ -214,8 +268,8 @@ dbusBusExists (Bus usesystem bus) = do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-dbusEndpointExists :: Bus -> Endpoint -> IO (Maybe String)
-dbusEndpointExists b@(Bus _ bus) (Endpoint objpath iface mem) = do
+endpointSatisfied :: Bus -> Endpoint -> IO (Maybe String)
+endpointSatisfied b@(Bus _ bus) (Endpoint objpath iface mem) = do
   ret <- callMethod b objpath introspectInterface introspectMethod
   return $ case ret of
         Left e     -> Just e
@@ -245,43 +299,16 @@ dbusEndpointExists b@(Bus _ bus) (Endpoint objpath iface mem) = do
       , formatBusName bus
       ]
 
-evalDependency :: Dependency -> IO (Maybe String)
-evalDependency (Executable n)         = exeInstalled n
-evalDependency (IOTest t)             = t
-evalDependency (Systemd t n)          = unitInstalled t n
-evalDependency (AccessiblePath p r w) = pathAccessible p r w
-evalDependency (DBusEndpoint b e)     = dbusEndpointExists b e
-evalDependency (DBusBus b)            = dbusBusExists b
+--------------------------------------------------------------------------------
+-- | Logging functions
 
-whenInstalled :: Monad m => MaybeExe (m ()) -> m ()
-whenInstalled = flip ifInstalled skip
-
-ifInstalled ::  MaybeExe a -> a -> a
-ifInstalled (Right x) _ = x
-ifInstalled _ alt       = alt
-
-warnMissing :: [MaybeExe a] -> IO ()
+warnMissing :: [MaybeAction a] -> IO ()
 warnMissing xs = warnMissing' $ concat $ [ m | (Left m) <- xs ]
 
 warnMissing' :: [String] -> IO ()
 warnMissing' = mapM_ putStrLn
 
-applyFeature :: MonadIO m => (m a -> m a) -> a -> Feature (IO a) -> m a
-applyFeature iof def ftr = do
-  a <- io $ evalFeature ftr
-  either (\es -> io $ warnMissing' es >> return def) (iof . io) a
-
-applyFeature_ :: MonadIO m => (m () -> m ()) -> Feature (IO ()) -> m ()
-applyFeature_ iof = applyFeature iof ()
-
-executeFeature :: MonadIO m => a -> Feature (IO a) -> m a
-executeFeature = applyFeature id
-
-executeFeature_ :: Feature (IO ()) -> IO ()
-executeFeature_ = executeFeature ()
-
 fmtMsg :: String -> String -> String -> String
 fmtMsg procName level msg = unwords [bracket procName, bracket level, msg]
   where
     bracket s = "[" ++ s ++ "]"
-

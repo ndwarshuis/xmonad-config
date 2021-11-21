@@ -40,6 +40,7 @@ import           XMonad.Hooks.DynamicLog
     )
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
+import           XMonad.Internal.Shell
 -- import           XMonad.Internal.DBus.Common                    (xmonadBus)
 -- import           XMonad.Internal.DBus.Control                   (pathExists)
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
@@ -263,7 +264,7 @@ vpnPresent = do
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
-rightPlugins :: [IO (MaybeExe CmdSpec)]
+rightPlugins :: [IO (MaybeAction CmdSpec)]
 rightPlugins =
   [ getWireless
   , getEthernet
@@ -280,21 +281,21 @@ rightPlugins =
   where
     nocheck = return . Right
 
-getWireless :: IO (MaybeExe CmdSpec)
+getWireless :: IO (MaybeAction CmdSpec)
 getWireless = do
   i <- readInterface isWireless
   return $ maybe (Left []) (Right . wirelessCmd) i
 
-getEthernet :: IO (MaybeExe CmdSpec)
+getEthernet :: IO (MaybeAction CmdSpec)
 getEthernet = do
   i <- readInterface isEthernet
-  evalFeature $ maybe BlankFeature (featureRun "ethernet status indicator" [dep] . ethernetCmd) i
+  evalFeature $ maybe BlankFeature (featureDefault "ethernet status indicator" [dep] . ethernetCmd) i
   where
     dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
 
 getBattery :: BarFeature
 getBattery = Feature
-  { ftrAction = batteryCmd
+  { ftrMaybeAction = batteryCmd
   , ftrName = "battery level indicator"
   , ftrWarning = Default
   , ftrChildren = [IOTest hasBattery]
@@ -304,7 +305,7 @@ type BarFeature = Feature CmdSpec
 
 getVPN :: BarFeature
 getVPN = Feature
-  { ftrAction = vpnCmd
+  { ftrMaybeAction = vpnCmd
   , ftrName = "VPN status indicator"
   , ftrWarning = Default
   , ftrChildren = [d, v]
@@ -315,7 +316,7 @@ getVPN = Feature
 
 getBt :: BarFeature
 getBt = Feature
-  { ftrAction = btCmd
+  { ftrMaybeAction = btCmd
   , ftrName = "bluetooth status indicator"
   , ftrWarning = Default
   , ftrChildren = [dep]
@@ -325,7 +326,7 @@ getBt = Feature
 
 getAlsa :: BarFeature
 getAlsa = Feature
-  { ftrAction = alsaCmd
+  { ftrMaybeAction = alsaCmd
   , ftrName = "volume level indicator"
   , ftrWarning = Default
   , ftrChildren = [Executable "alsactl"]
@@ -333,7 +334,7 @@ getAlsa = Feature
 
 getBl :: BarFeature
 getBl = Feature
-  { ftrAction = blCmd
+  { ftrMaybeAction = blCmd
   , ftrName = "Intel backlight indicator"
   , ftrWarning = Default
   , ftrChildren = [intelBacklightSignalDep]
@@ -341,13 +342,13 @@ getBl = Feature
 
 getSs :: BarFeature
 getSs = Feature
-  { ftrAction = ssCmd
+  { ftrMaybeAction = ssCmd
   , ftrName = "screensaver indicator"
   , ftrWarning = Default
   , ftrChildren = [ssSignalDep]
   }
 
-getAllCommands :: [MaybeExe CmdSpec] -> IO BarRegions
+getAllCommands :: [MaybeAction CmdSpec] -> IO BarRegions
 getAllCommands right = do
   let left =
         [ CmdSpec

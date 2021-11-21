@@ -86,4 +86,4 @@ listenDevices = do
 
 runRemovableMon :: FeatureIO
 runRemovableMon =
-  featureRun "removeable device monitor" [addedDep, removedDep] listenDevices
+  featureDefault "removeable device monitor" [addedDep, removedDep] listenDevices

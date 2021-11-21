@@ -89,7 +89,7 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
 brightnessExporter :: RealFrac b => [Dependency] -> BrightnessConfig a b
   -> Client -> FeatureIO
 brightnessExporter deps bc@BrightnessConfig { bcName = n } client = Feature
-  { ftrAction = exportBrightnessControls' bc client
+  { ftrMaybeAction = exportBrightnessControls' bc client
   , ftrName = n ++ " exporter"
   , ftrWarning = Default
   , ftrChildren = DBusBus xmonadBus:deps
@@ -133,7 +133,7 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
 callBacklight :: BrightnessConfig a b -> String -> MemberName -> FeatureIO
 callBacklight BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
   Feature
-  { ftrAction = void $ callMethod $ methodCall p i m
+  { ftrMaybeAction = void $ callMethod $ methodCall p i m
   , ftrName = unwords [n, controlName]
   , ftrWarning = Default
   , ftrChildren = [xDbusDep p i $ Method_ m]

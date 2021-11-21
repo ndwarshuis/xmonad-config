@@ -24,6 +24,7 @@ import           XMonad.Core                hiding (spawn)
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
+import           XMonad.Internal.Shell
 import           XMonad.Util.NamedActions
 
 --------------------------------------------------------------------------------
@@ -48,7 +49,7 @@ myDmenuNetworks = "networkmanager_dmenu"
 -- | Other internal functions
 
 spawnDmenuCmd :: String -> [String] -> FeatureX
-spawnDmenuCmd n = featureSpawnCmd n myDmenuCmd
+spawnDmenuCmd n = featureExeArgs n myDmenuCmd
 
 themeArgs :: String -> [String]
 themeArgs hexColor =
@@ -63,7 +64,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: FeatureX
-runDevMenu = featureRun "device manager" [Executable myDmenuDevices] $ do
+runDevMenu = featureDefault "device manager" [Executable myDmenuDevices] $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
@@ -71,20 +72,20 @@ runDevMenu = featureRun "device manager" [Executable myDmenuDevices] $ do
     ++ myDmenuMatchingArgs
 
 runBwMenu :: FeatureX
-runBwMenu = featureRun "password manager" [Executable myDmenuPasswords] $
+runBwMenu = featureDefault "password manager" [Executable myDmenuPasswords] $
   spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 -- TODO this is weirdly inverted
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys x = addName "Show Keybindings" $ do
   s <- io $ evalFeature $ runDMenuShowKeys x
-  ifInstalled s
+  ifSatisfied s
     $ spawnNotify
     $ defNoteError { body = Just $ Text "could not display keymap" }
 
 runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> FeatureX
 runDMenuShowKeys kbs =
-  featureRun "keyboard shortcut menu" [Executable myDmenuCmd] $ io $ do
+  featureDefault "keyboard shortcut menu" [Executable myDmenuCmd] $ io $ do
   (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
   forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
   where
@@ -99,7 +100,7 @@ runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 
 runClipMenu :: FeatureX
 runClipMenu =
-  featureRun "clipboard manager" [Executable myDmenuCmd, Executable "greenclip"]
+  featureDefault "clipboard manager" [Executable myDmenuCmd, Executable "greenclip"]
   $ spawnCmd myDmenuCmd args
   where
     args = [ "-modi", "\"clipboard:greenclip print\""
@@ -112,8 +113,8 @@ runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
 runNetMenu :: FeatureX
 runNetMenu =
-  featureSpawnCmd "network control menu" myDmenuNetworks $ themeArgs "#ff3333"
+  featureExeArgs "network control menu" myDmenuNetworks $ themeArgs "#ff3333"
 
 runAutorandrMenu :: FeatureX
 runAutorandrMenu =
-  featureSpawnCmd "autorandr menu" myDmenuMonitors $ themeArgs "#ff0066"
+  featureExeArgs "autorandr menu" myDmenuMonitors $ themeArgs "#ff0066"

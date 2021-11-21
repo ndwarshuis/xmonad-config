@@ -86,7 +86,7 @@ main = do
         , tsChildHandles = [h]
         }
   lockRes <- evalFeature runScreenLock
-  let lock = whenInstalled lockRes
+  let lock = whenSatisfied lockRes
   ext <- evalExternal $ externalBindings ts lock
   warnMissing $ externalToMissing ext
   -- IDK why this is necessary; nothing prior to this line will print if missing
@@ -464,13 +464,13 @@ internalBindings c =
 mkNamedSubmap :: XConfig Layout ->  KeyGroup (X ()) -> [((KeyMask, KeySym), NamedAction)]
 mkNamedSubmap c KeyGroup { kgHeader = h, kgBindings = b } =
   (subtitle h:) $ mkNamedKeymap c
-  $ (\KeyBinding{kbSyms = s, kbDesc = d, kbAction = a} -> (s, addName d a))
+  $ (\KeyBinding{kbSyms = s, kbDesc = d, kbMaybeAction = a} -> (s, addName d a))
   <$> b
 
 data KeyBinding a = KeyBinding
   { kbSyms   :: String
   , kbDesc   :: String
-  , kbAction :: a
+  , kbMaybeAction :: a
   }
 
 data KeyGroup a = KeyGroup
@@ -485,23 +485,23 @@ evalExternal = mapM go
       (\bs' -> k { kgBindings = bs' }) <$> mapM evalKeyBinding bs
 
 evalKeyBinding :: KeyBinding FeatureX -> IO (KeyBinding MaybeX)
-evalKeyBinding k@KeyBinding { kbAction = a } =
-  (\f -> k { kbAction = f }) <$> evalFeature a
+evalKeyBinding k@KeyBinding { kbMaybeAction = a } =
+  (\f -> k { kbMaybeAction = f }) <$> evalFeature a
 
 filterExternal :: [KeyGroup MaybeX] -> [KeyGroup (X ())]
 filterExternal = fmap go
   where
     go k@KeyGroup { kgBindings = bs } = k { kgBindings = mapMaybe flagKeyBinding bs }
 
-externalToMissing :: [KeyGroup (MaybeExe a)] -> [MaybeExe a]
+externalToMissing :: [KeyGroup (MaybeAction a)] -> [MaybeAction a]
 externalToMissing = concatMap go
   where
-    go KeyGroup { kgBindings = bs } = fmap kbAction bs
+    go KeyGroup { kgBindings = bs } = fmap kbMaybeAction bs
 
 flagKeyBinding :: KeyBinding MaybeX -> Maybe (KeyBinding (X ()))
-flagKeyBinding k@KeyBinding{ kbDesc = d, kbAction = a } = case a of
-  (Right x) -> Just $ k{ kbAction = x }
-  (Left _)  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbAction = skip }
+flagKeyBinding k@KeyBinding{ kbDesc = d, kbMaybeAction = a } = case a of
+  (Right x) -> Just $ k{ kbMaybeAction = x }
+  (Left _)  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbMaybeAction = skip }
 
 externalBindings :: ThreadState -> X () -> [KeyGroup FeatureX]
 externalBindings ts lock =
