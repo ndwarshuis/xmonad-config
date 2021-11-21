@@ -6,10 +6,7 @@ module XMonad.Internal.DBus.Screensaver
   , callToggle
   , callQuery
   , matchSignal
-  , ssPath
-  , ssDep
   , ssSignalDep
-  , SSControls(..)
   ) where
 
 import           Control.Monad               (void)
@@ -32,13 +29,6 @@ type SSState = Bool -- true is enabled
 
 ssExecutable :: String
 ssExecutable = "xset"
-
-ssDep :: Dependency
-ssDep = Executable ssExecutable
-
-ssSignalDep :: Dependency
-ssSignalDep = DBusEndpoint xmonadBus $ Endpoint ssPath interface
-  $ Signal_ memState
 
 toggle :: IO SSState
 toggle = do
@@ -103,14 +93,12 @@ bodyGetCurrentState _   = Nothing
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-newtype SSControls = SSControls { ssToggle :: FeatureIO }
-
 exportScreensaver :: Client -> FeatureIO
 exportScreensaver client = Feature
   { ftrAction = cmd
   , ftrName = "screensaver interface"
   , ftrWarning = Default
-  , ftrChildren = [ssDep, DBusBus xmonadBus]
+  , ftrChildren = [Executable ssExecutable, DBusBus xmonadBus]
   }
   where
     cmd = export client ssPath defaultInterface
@@ -149,3 +137,7 @@ callQuery = do
 
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler
 matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
+
+ssSignalDep :: Dependency
+ssSignalDep = DBusEndpoint xmonadBus $ Endpoint ssPath interface
+  $ Signal_ memState
