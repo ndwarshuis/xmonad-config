@@ -6,8 +6,7 @@ module XMonad.Internal.DBus.Brightness.IntelBacklight
   , matchSignalIB
   , exportIntelBacklight
   , intelBacklightControls
-  , curFileDep
-  , maxFileDep
+  , intelBacklightSignalDep
   , blPath
   ) where
 
@@ -78,6 +77,7 @@ intelBacklightConfig = BrightnessConfig
   , bcGetMax = getMaxRawBrightness
   , bcPath = blPath
   , bcInterface = interface
+  , bcName = "Intel backlight"
   }
 
 --------------------------------------------------------------------------------
@@ -88,6 +88,9 @@ curFileDep = pathRW curFile
 
 maxFileDep :: Dependency
 maxFileDep = pathR maxFile
+
+intelBacklightSignalDep :: Dependency
+intelBacklightSignalDep = signalDep intelBacklightConfig
 
 exportIntelBacklight :: Client -> FeatureIO
 exportIntelBacklight =

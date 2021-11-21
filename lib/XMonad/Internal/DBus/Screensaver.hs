@@ -8,6 +8,7 @@ module XMonad.Internal.DBus.Screensaver
   , matchSignal
   , ssPath
   , ssDep
+  , ssSignalDep
   , SSControls(..)
   ) where
 
@@ -15,6 +16,7 @@ import           Control.Monad               (void)
 
 import           DBus
 import           DBus.Client
+import qualified DBus.Introspection          as I
 
 import           Graphics.X11.XScreenSaver
 import           Graphics.X11.Xlib.Display
@@ -33,6 +35,10 @@ ssExecutable = "xset"
 
 ssDep :: Dependency
 ssDep = Executable ssExecutable
+
+ssSignalDep :: Dependency
+ssSignalDep = DBusEndpoint xmonadBus $ Endpoint ssPath interface
+  $ Signal_ memState
 
 toggle :: IO SSState
 toggle = do
@@ -99,16 +105,12 @@ bodyGetCurrentState _   = Nothing
 
 newtype SSControls = SSControls { ssToggle :: FeatureIO }
 
--- exportScreensaver :: Client -> IO SSControls
--- exportScreensaver client = initControls client exportScreensaver' controls
---   where
---     controls _ = SSControls { ssToggle = callToggle }
-
 exportScreensaver :: Client -> FeatureIO
 exportScreensaver client = Feature
   { ftrAction = cmd
-  , ftrSilent = False
-  , ftrChildren = [ssDep]
+  , ftrName = "screensaver interface"
+  , ftrWarning = Default
+  , ftrChildren = [ssDep, DBusBus xmonadBus]
   }
   where
     cmd = export client ssPath defaultInterface
@@ -117,12 +119,24 @@ exportScreensaver client = Feature
         [ autoMethod memToggle $ emitState client =<< toggle
         , autoMethod memQuery query
         ]
+      , interfaceSignals = [sig]
+      }
+    sig = I.Signal
+      { I.signalName = memState
+      , I.signalArgs =
+        [
+          I.SignalArg
+          { I.signalArgName = "enabled"
+          , I.signalArgType = TypeBoolean
+          }
+        ]
       }
 
 callToggle :: FeatureIO
 callToggle = Feature
   { ftrAction = cmd
-  , ftrSilent = False
+  , ftrName = "screensaver toggle"
+  , ftrWarning = Default
   , ftrChildren = [xDbusDep ssPath interface $ Method_ memToggle]
   }
   where

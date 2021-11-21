@@ -95,7 +95,7 @@ acpiPath = "/var/run/acpid.socket"
 -- | Spawn a new thread that will listen for ACPI events on the acpid socket
 -- and send ClientMessage events when it receives them
 runPowermon :: FeatureIO
-runPowermon = featureRun [pathR acpiPath] listenACPI
+runPowermon = featureRun "ACPI event monitor" [pathR acpiPath] listenACPI
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)

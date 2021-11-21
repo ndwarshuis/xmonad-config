@@ -91,11 +91,12 @@ ethernetIface = "enp7s0f1"
 -- | Some nice apps
 
 runTerm :: FeatureX
-runTerm = featureSpawn myTerm
+runTerm = featureSpawn "terminal" myTerm
 
 runTMux :: FeatureX
-runTMux = featureRun [exe myTerm, exe "tmux", exe "bash"] cmd
+runTMux = featureRun "terminal multiplexer" deps cmd
   where
+    deps = [Executable myTerm, Executable "tmux", Executable "bash"]
     cmd = spawn
       $ "tmux has-session"
       #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
@@ -104,35 +105,37 @@ runTMux = featureRun [exe myTerm, exe "tmux", exe "bash"] cmd
     msg = "could not connect to tmux session"
 
 runCalc :: FeatureX
-runCalc = featureRun [exe myTerm, exe "R"] $ spawnCmd myTerm ["-e", "R"]
+runCalc = featureRun "calculator" [Executable myTerm, Executable "R"]
+  $ spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: FeatureX
-runBrowser = featureSpawn myBrowser
+runBrowser = featureSpawn "web browser" myBrowser
 
 runEditor :: FeatureX
-runEditor = featureSpawnCmd myEditor
+runEditor = featureSpawnCmd "text editor" myEditor
   ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
 
 runFileManager :: FeatureX
-runFileManager = featureSpawn "pcmanfm"
+runFileManager = featureSpawn "file browser" "pcmanfm"
 
 --------------------------------------------------------------------------------
 -- | Multimedia Commands
 
-runMultimediaIfInstalled :: String -> FeatureX
-runMultimediaIfInstalled cmd = featureSpawnCmd myMultimediaCtl [cmd]
+runMultimediaIfInstalled :: String -> String -> FeatureX
+runMultimediaIfInstalled n cmd =
+  featureSpawnCmd (n ++ " multimedia control") myMultimediaCtl [cmd]
 
 runTogglePlay :: FeatureX
-runTogglePlay = runMultimediaIfInstalled "play-pause"
+runTogglePlay = runMultimediaIfInstalled "play/pause" "play-pause"
 
 runPrevTrack :: FeatureX
-runPrevTrack = runMultimediaIfInstalled "previous"
+runPrevTrack = runMultimediaIfInstalled "previous track" "previous"
 
 runNextTrack :: FeatureX
-runNextTrack = runMultimediaIfInstalled "next"
+runNextTrack = runMultimediaIfInstalled "next track" "next"
 
 runStopPlay :: FeatureX
-runStopPlay = runMultimediaIfInstalled "stop"
+runStopPlay = runMultimediaIfInstalled "stop playback" "stop"
 
 --------------------------------------------------------------------------------
 -- | Volume Commands
@@ -146,42 +149,49 @@ playSound file = do
   -- paplay seems to have less latency than aplay
   spawnCmd "paplay" [p]
 
-featureSound :: FilePath -> X () -> X () -> FeatureX
-featureSound file pre post = featureRun [exe "paplay"]
+featureSound :: String -> FilePath -> X () -> X () -> FeatureX
+featureSound n file pre post =
+  featureRun ("volume " ++ n ++ " control") [Executable "paplay"]
   $ pre >> playSound file >> post
 
 runVolumeDown :: FeatureX
-runVolumeDown = featureSound volumeChangeSound (return ()) $ void (lowerVolume 2)
+runVolumeDown = featureSound "up" volumeChangeSound (return ()) $ void (lowerVolume 2)
 
 runVolumeUp :: FeatureX
-runVolumeUp = featureSound volumeChangeSound (return ()) $ void (raiseVolume 2)
+runVolumeUp = featureSound "down" volumeChangeSound (return ()) $ void (raiseVolume 2)
 
 runVolumeMute :: FeatureX
-runVolumeMute = featureSound volumeChangeSound (void toggleMute) $ return ()
+runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return ()
 
 --------------------------------------------------------------------------------
 -- | Notification control
 
-runNotificationCmd :: String -> FeatureX
-runNotificationCmd cmd = featureSpawnCmd myNotificationCtrl [cmd]
+runNotificationCmd :: String -> String -> FeatureX
+runNotificationCmd n cmd =
+  featureSpawnCmd (n ++ " control") myNotificationCtrl [cmd]
 
 runNotificationClose :: FeatureX
-runNotificationClose = runNotificationCmd "close"
+runNotificationClose = runNotificationCmd "close notification" "close"
 
 runNotificationCloseAll :: FeatureX
-runNotificationCloseAll = runNotificationCmd "close-all"
+runNotificationCloseAll =
+  runNotificationCmd "close all notifications" "close-all"
 
 runNotificationHistory :: FeatureX
-runNotificationHistory = runNotificationCmd "history-pop"
+runNotificationHistory =
+  runNotificationCmd "see notification history" "history-pop"
 
 runNotificationContext :: FeatureX
-runNotificationContext = runNotificationCmd "context"
+runNotificationContext =
+  runNotificationCmd "open notification context" "context"
 
 --------------------------------------------------------------------------------
 -- | System commands
 
 runToggleBluetooth :: FeatureX
-runToggleBluetooth = featureRun [exe myBluetooth] $ spawn
+runToggleBluetooth =
+  featureRun "bluetooth toggle" [Executable myBluetooth]
+  $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
   #!|| "a=off"
@@ -189,7 +199,8 @@ runToggleBluetooth = featureRun [exe myBluetooth] $ spawn
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
 runToggleEthernet :: FeatureX
-runToggleEthernet = featureRun [exe "nmcli"] $ spawn
+runToggleEthernet = featureRun "ethernet toggle" [Executable "nmcli"]
+  $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
   #!|| "a=disconnect"
@@ -197,14 +208,14 @@ runToggleEthernet = featureRun [exe "nmcli"] $ spawn
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
 runStartISyncTimer :: FeatureX
-runStartISyncTimer = featureRun [userUnit "mbsync.timer"]
+runStartISyncTimer = featureRun "isync timer" [userUnit "mbsync.timer"]
   $ spawn
   $ "systemctl --user start mbsync.timer"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
   #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
 runStartISyncService :: FeatureX
-runStartISyncService = featureRun [userUnit "mbsync.service"]
+runStartISyncService = featureRun "isync" [userUnit "mbsync.service"]
   $ spawn
   $ "systemctl --user start mbsync.service"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
@@ -248,25 +259,26 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
-runFlameshot :: String -> FeatureX
-runFlameshot mode = featureRun [exe myCapture] $ do
+runFlameshot :: String -> String -> FeatureX
+runFlameshot n mode = featureRun n [Executable myCapture] $ do
   ssDir <- io getCaptureDir
   spawnCmd myCapture $ mode : ["-p", ssDir]
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
 runAreaCapture :: FeatureX
-runAreaCapture = runFlameshot "gui"
+runAreaCapture = runFlameshot "screen area capture" "gui"
 
 -- myWindowCap = "screencap -w" --external script
 
 runDesktopCapture :: FeatureX
-runDesktopCapture = runFlameshot "full"
+runDesktopCapture = runFlameshot "fullscreen capture" "full"
 
 runScreenCapture :: FeatureX
-runScreenCapture = runFlameshot "screen"
+runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: FeatureX
-runCaptureBrowser = featureRun [exe myImageBrowser] $ do
+runCaptureBrowser =
+  featureRun "screen capture browser" [Executable myImageBrowser] $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

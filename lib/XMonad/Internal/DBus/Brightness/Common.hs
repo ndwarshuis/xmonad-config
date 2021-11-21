@@ -8,6 +8,7 @@ module XMonad.Internal.DBus.Brightness.Common
   , brightnessExporter
   , callGetBrightness
   , matchSignal
+  , signalDep
   ) where
 
 import           Control.Monad               (void)
@@ -16,6 +17,7 @@ import           Data.Int                    (Int32)
 
 import           DBus
 import           DBus.Client
+import qualified DBus.Introspection          as I
 
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
@@ -37,6 +39,7 @@ data BrightnessConfig a b = BrightnessConfig
   , bcGetMax    :: IO a
   , bcPath      :: ObjectPath
   , bcInterface :: InterfaceName
+  , bcName      :: String
   }
 
 data BrightnessControls = BrightnessControls
@@ -47,25 +50,30 @@ data BrightnessControls = BrightnessControls
   }
 
 brightnessControls :: BrightnessConfig a b -> BrightnessControls
-brightnessControls BrightnessConfig { bcPath = p, bcInterface = i } =
+brightnessControls bc =
   BrightnessControls
-  { bctlMax = cb memMax
-  , bctlMin = cb memMin
-  , bctlInc = cb memInc
-  , bctlDec = cb memDec
+  { bctlMax = cb "max brightness" memMax
+  , bctlMin = cb "min brightness" memMin
+  , bctlInc = cb "increase brightness" memInc
+  , bctlDec = cb "decrease brightness" memDec
   }
   where
-    cb = callBacklight p i
+    cb = callBacklight bc
 
 callGetBrightness :: Num c => BrightnessConfig a b -> IO (Maybe c)
 callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } = do
   reply <- callMethod $ methodCall p i memGet
   return $ reply >>= bodyGetBrightness
 
+signalDep :: BrightnessConfig a b -> Dependency
+signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
+  DBusEndpoint xmonadBus $ Endpoint p i $ Signal_ memCur
+
 matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> IO SignalHandler
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
   client <- connectSession
   addMatch client brMatcher $ cb . bodyGetBrightness . signalBody
+  -- TODO disconnect here?
   where
     brMatcher = matchAny
       { matchPath = Just p
@@ -78,10 +86,11 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
 
 brightnessExporter :: RealFrac b => [Dependency] -> BrightnessConfig a b
   -> Client -> FeatureIO
-brightnessExporter deps bc client = Feature
+brightnessExporter deps bc@BrightnessConfig { bcName = n } client = Feature
   { ftrAction = exportBrightnessControls' bc client
-  , ftrSilent = False
-  , ftrChildren = deps
+  , ftrName = n ++ " exporter"
+  , ftrWarning = Default
+  , ftrChildren = DBusBus xmonadBus:deps
   }
 
 exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
@@ -98,7 +107,19 @@ exportBrightnessControls' bc client = do
       , autoMethod' memDec bcDec
       , autoMethod memGet (round <$> funget maxval :: IO Int32)
       ]
+    , interfaceSignals = [sig]
     }
+  where
+    sig = I.Signal
+      { I.signalName = memCur
+      , I.signalArgs =
+        [
+          I.SignalArg
+          { I.signalArgName = "brightness"
+          , I.signalArgType = TypeInt32
+          }
+        ]
+      }
 
 emitBrightness :: RealFrac b => BrightnessConfig a b -> Client -> b -> IO ()
 emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
@@ -106,11 +127,12 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
   where
     sig = signal p i memCur
 
-callBacklight :: ObjectPath -> InterfaceName -> MemberName -> FeatureIO
-callBacklight p  i m =
+callBacklight :: BrightnessConfig a b -> String -> MemberName -> FeatureIO
+callBacklight BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
   Feature
   { ftrAction = void $ callMethod $ methodCall p i m
-  , ftrSilent = False
+  , ftrName = unwords [n, controlName]
+  , ftrWarning = Default
   , ftrChildren = [xDbusDep p i $ Method_ m]
   }
 

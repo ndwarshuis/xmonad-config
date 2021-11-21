@@ -6,8 +6,9 @@ module XMonad.Internal.DBus.Common
   , callMethod'
   , addMatchCallback
   , xmonadBus
+  , xmonadBusName
   , xDbusDep
-  , initControls
+  -- , initControls
   ) where
 
 import           DBus
@@ -15,23 +16,22 @@ import           DBus.Client
 
 import           XMonad.Internal.Dependency
 
-xmonadBus :: BusName
-xmonadBus = busName_ "org.xmonad"
+xmonadBusName :: BusName
+xmonadBusName = busName_ "org.xmonad"
+
+xmonadBus :: Bus
+xmonadBus = Bus False xmonadBusName
 
 xDbusDep :: ObjectPath -> InterfaceName -> DBusMember -> Dependency
-xDbusDep o i m = DBusEndpoint
-  { ddDbusBus = xmonadBus
-  , ddDbusSystem = False
-  , ddDbusObject = o
-  , ddDbusInterface = i
-  , ddDbusMember = m
-  }
+xDbusDep o i m = DBusEndpoint xmonadBus $ Endpoint o i m
+
+-- connectBus :: Bus -> IO (Maybe Client)
 
 -- | Call a method and return its result if successful
 callMethod :: MethodCall -> IO (Maybe [Variant])
 callMethod mc = do
   client <- connectSession
-  r <- callMethod' client (Just xmonadBus) mc
+  r <- callMethod' client (Just xmonadBusName) mc
   disconnect client
   return r
 
@@ -50,11 +50,11 @@ addMatchCallback rule cb = do
   client <- connectSession
   addMatch client rule $ cb . signalBody
 
-initControls :: Client -> (Client -> FeatureIO) -> (FeatureIO -> a) -> IO a
-initControls client exporter controls = do
-  let x = exporter client
-  e <- evalFeature x
-  case e of
-    (Right c) -> c
-    _         -> return ()
-  return $ controls x
+-- initControls :: Client -> (Client -> FeatureIO) -> (FeatureIO -> a) -> IO a
+-- initControls client exporter controls = do
+--   let x = exporter client
+--   e <- evalFeature x
+--   case e of
+--     (Right c) -> c
+--     _         -> return ()
+--   return $ controls x

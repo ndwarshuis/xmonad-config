@@ -5,14 +5,16 @@ module XMonad.Internal.Dependency
   ( MaybeExe
   , UnitType(..)
   , Dependency(..)
+  , Bus(..)
+  , Endpoint(..)
   , DBusMember(..)
+  , Warning(..)
   , MaybeX
   , FeatureX
   , FeatureIO
   , Feature(..)
   , ioFeature
   , evalFeature
-  , exe
   , systemUnit
   , userUnit
   , pathR
@@ -34,14 +36,16 @@ module XMonad.Internal.Dependency
 
 import           Control.Monad.IO.Class
 
+import           Data.Bifunctor          (bimap)
 import           Data.List               (find)
-import           Data.Maybe              (listToMaybe, maybeToList)
+import           Data.Maybe              (catMaybes, fromMaybe, listToMaybe)
 
 import           DBus
 import           DBus.Client
 import qualified DBus.Introspection      as I
 
 import           System.Directory        (findExecutable, readable, writable)
+import           System.Environment
 import           System.Exit
 
 import           XMonad.Core             (X, io)
@@ -59,21 +63,23 @@ data DBusMember = Method_ MemberName
   | Property_ String
   deriving (Eq, Show)
 
+data Bus = Bus Bool BusName deriving (Eq, Show)
+
+data Endpoint = Endpoint ObjectPath InterfaceName DBusMember deriving (Eq, Show)
+
 data Dependency = Executable String
   | AccessiblePath FilePath Bool Bool
   | IOTest (IO (Maybe String))
-  | DBusEndpoint
-    { ddDbusBus       :: BusName
-    , ddDbusSystem    :: Bool
-    , ddDbusObject    :: ObjectPath
-    , ddDbusInterface :: InterfaceName
-    , ddDbusMember    :: DBusMember
-    }
+  | DBusEndpoint Bus Endpoint
+  | DBusBus Bus
   | Systemd UnitType String
+
+data Warning = Silent | Default
 
 data Feature a = Feature
   { ftrAction   :: a
-  , ftrSilent   :: Bool
+  , ftrName     :: String
+  , ftrWarning  :: Warning
   , ftrChildren :: [Dependency]
   }
   | ConstFeature a
@@ -91,16 +97,21 @@ ioFeature BlankFeature                = BlankFeature
 evalFeature :: Feature a -> IO (MaybeExe a)
 evalFeature (ConstFeature x) = return $ Right x
 evalFeature BlankFeature = return $ Left []
-evalFeature Feature { ftrAction = a, ftrSilent = s, ftrChildren = c } = do
-  es <- mapM go c
-  return $ case concat es of
+evalFeature Feature
+  { ftrAction = a
+  , ftrName = n
+  , ftrWarning = w
+  , ftrChildren = c
+  } = do
+  procName <- getProgName
+  es <- catMaybes <$> mapM evalDependency c
+  return $ case es of
     []  -> Right a
-    es' -> Left (if s then [] else es')
+    es' -> Left $ fmtWarnings procName es'
   where
-    go = fmap maybeToList . depInstalled
-
-exe :: String -> Dependency
-exe = Executable
+    fmtWarnings procName es = case w of
+      Silent  -> []
+      Default -> fmap (fmtMsg procName "WARNING" . ((n ++ " disabled; ") ++)) es
 
 pathR :: String -> Dependency
 pathR n = AccessiblePath n True False
@@ -123,18 +134,19 @@ type MaybeExe a = Either [String] a
 
 type MaybeX = MaybeExe (X ())
 
-featureRun :: [Dependency] -> a -> Feature a
-featureRun ds x = Feature
+featureRun :: String -> [Dependency] -> a -> Feature a
+featureRun n ds x = Feature
   { ftrAction = x
-  , ftrSilent = False
+  , ftrName = n
+  , ftrWarning = Default
   , ftrChildren = ds
   }
 
-featureSpawnCmd :: MonadIO m => String -> [String] -> Feature (m ())
-featureSpawnCmd cmd args = featureRun [exe cmd] $ spawnCmd cmd args
+featureSpawnCmd :: MonadIO m => String -> String -> [String] -> Feature (m ())
+featureSpawnCmd n cmd args = featureRun n [Executable cmd] $ spawnCmd cmd args
 
-featureSpawn :: MonadIO m => String -> Feature (m ())
-featureSpawn cmd = featureSpawnCmd cmd []
+featureSpawn :: MonadIO m => String -> String -> Feature (m ())
+featureSpawn n cmd = featureSpawnCmd n cmd []
 
 exeInstalled :: String -> IO (Maybe String)
 exeInstalled x = do
@@ -177,37 +189,69 @@ introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
 introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
-dbusInstalled :: BusName -> Bool -> ObjectPath -> InterfaceName -> DBusMember
-  -> IO (Maybe String)
-dbusInstalled bus usesystem objpath iface mem = do
-  client <- if usesystem then connectSystem else connectSession
-  reply <- call_ client (methodCall objpath introspectInterface introspectMethod)
+callMethod :: Bus -> ObjectPath -> InterfaceName -> MemberName -> IO (Either String [Variant])
+callMethod (Bus usesys bus) path iface mem = do
+  client <- if usesys then connectSystem else connectSession
+  reply <- call client (methodCall path iface mem)
            { methodCallDestination = Just bus }
-  let res = findMem =<< I.parseXML objpath =<< fromVariant
-        =<< listToMaybe (methodReturnBody reply)
   disconnect client
-  return $ case res of
-    Just _ -> Nothing
-    _      -> Just "some random dbus interface not found"
-  where
-    findMem obj = fmap (matchMem mem)
-      $ find (\i -> I.interfaceName i == iface)
-      $ I.objectInterfaces obj
-    matchMem (Method_ n) = elem n . fmap I.methodName . I.interfaceMethods
-    matchMem (Signal_ n) = elem n . fmap I.signalName . I.interfaceSignals
-    matchMem (Property_ n) = elem n . fmap I.propertyName . I.interfaceProperties
+  return $ bimap methodErrorMessage methodReturnBody reply
 
-depInstalled :: Dependency -> IO (Maybe String)
-depInstalled (Executable n)         = exeInstalled n
-depInstalled (IOTest t)             = t
-depInstalled (Systemd t n)          = unitInstalled t n
-depInstalled (AccessiblePath p r w) = pathAccessible p r w
-depInstalled DBusEndpoint { ddDbusBus = b
-                          , ddDbusSystem = s
-                          , ddDbusObject = o
-                          , ddDbusInterface = i
-                          , ddDbusMember = m
-                          } = dbusInstalled b s o i m
+dbusBusExists :: Bus -> IO (Maybe String)
+dbusBusExists (Bus usesystem bus) = do
+  ret <- callMethod (Bus usesystem queryBus) queryPath queryIface queryMem
+  return $ case ret of
+        Left e    -> Just e
+        Right b -> let ns = bodyGetNames b in
+          if bus' `elem` ns then Nothing
+          else Just $ unwords ["name", singleQuote bus', "not found on dbus"]
+  where
+    bus' = formatBusName bus
+    queryBus = busName_ "org.freedesktop.DBus"
+    queryIface = interfaceName_ "org.freedesktop.DBus"
+    queryPath = objectPath_ "/"
+    queryMem = memberName_ "ListNames"
+    bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
+    bodyGetNames _   = []
+
+dbusEndpointExists :: Bus -> Endpoint -> IO (Maybe String)
+dbusEndpointExists b@(Bus _ bus) (Endpoint objpath iface mem) = do
+  ret <- callMethod b objpath introspectInterface introspectMethod
+  return $ case ret of
+        Left e     -> Just e
+        Right body -> procBody body
+  where
+    procBody body = let res = findMem =<< I.parseXML objpath =<< fromVariant
+                          =<< listToMaybe body in
+      case res of
+        Just True -> Nothing
+        _         -> Just $ fmtMsg' mem
+    findMem = fmap (matchMem mem)
+      . find (\i -> I.interfaceName i == iface)
+      . I.objectInterfaces
+    matchMem (Method_ n)   = elemMember n I.methodName I.interfaceMethods
+    matchMem (Signal_ n)   = elemMember n I.signalName I.interfaceSignals
+    matchMem (Property_ n) = elemMember n I.propertyName I.interfaceProperties
+    elemMember n fname fmember = elem n . fmap fname . fmember
+    fmtMem (Method_ n)   = "method " ++ singleQuote (formatMemberName n)
+    fmtMem (Signal_ n)   = "signal " ++ singleQuote (formatMemberName n)
+    fmtMem (Property_ n) = "property " ++ singleQuote n
+    fmtMsg' m = unwords
+      [ "could not find"
+      , fmtMem m
+      , "on interface"
+      , singleQuote $ formatInterfaceName iface
+      , "on bus"
+      , formatBusName bus
+      ]
+
+evalDependency :: Dependency -> IO (Maybe String)
+evalDependency (Executable n)         = exeInstalled n
+evalDependency (IOTest t)             = t
+evalDependency (Systemd t n)          = unitInstalled t n
+evalDependency (AccessiblePath p r w) = pathAccessible p r w
+evalDependency (DBusEndpoint b e)     = dbusEndpointExists b e
+evalDependency (DBusBus b)            = dbusBusExists b
 
 whenInstalled :: Monad m => MaybeExe (m ()) -> m ()
 whenInstalled = flip ifInstalled skip
@@ -217,7 +261,7 @@ ifInstalled (Right x) _ = x
 ifInstalled _ alt       = alt
 
 warnMissing :: [MaybeExe a] -> IO ()
-warnMissing xs = warnMissing' $ fmap ("[WARNING] "++) $ concat $ [ m | (Left m) <- xs ]
+warnMissing xs = warnMissing' $ concat $ [ m | (Left m) <- xs ]
 
 warnMissing' :: [String] -> IO ()
 warnMissing' = mapM_ putStrLn
@@ -235,3 +279,9 @@ executeFeature = applyFeature id
 
 executeFeature_ :: Feature (IO ()) -> IO ()
 executeFeature_ = executeFeature ()
+
+fmtMsg :: String -> String -> String -> String
+fmtMsg procName level msg = unwords [bracket procName, bracket level, msg]
+  where
+    bracket s = "[" ++ s ++ "]"
+

@@ -46,11 +46,7 @@ myOptimusManager = "optimus-manager"
 -- | Core commands
 
 runScreenLock :: Feature (X ())
-runScreenLock = Feature
-  { ftrAction = spawn myScreenlock
-  , ftrSilent = False
-  , ftrChildren = [exe myScreenlock]
-  }
+runScreenLock = featureSpawn "screen locker" myScreenlock
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -105,7 +101,8 @@ runOptimusPrompt' = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: FeatureX
-runOptimusPrompt = featureRun [exe myOptimusManager] runOptimusPrompt'
+runOptimusPrompt = featureRun "graphics switcher" [Executable myOptimusManager]
+  runOptimusPrompt'
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt

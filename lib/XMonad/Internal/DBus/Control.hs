@@ -19,7 +19,6 @@ import           Data.Either
 import           DBus
 import           DBus.Client
 
--- import           XMonad.Internal.DBus.Brightness.Common
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
@@ -42,7 +41,7 @@ startXMonadService = do
 
 stopXMonadService :: Client -> IO ()
 stopXMonadService client = do
-  void $ releaseName client xmonadBus
+  void $ releaseName client xmonadBusName
   disconnect client
 
 getDBusClient :: IO (Maybe Client)
@@ -54,7 +53,7 @@ getDBusClient = do
 
 requestXMonadName :: Client -> IO ()
 requestXMonadName client = do
-  res <- requestName client xmonadBus []
+  res <- requestName client xmonadBusName []
   -- TODO if the client is not released on shutdown the owner will be
   -- different
   let msg | res == NamePrimaryOwner = Nothing
@@ -64,7 +63,7 @@ requestXMonadName client = do
           | otherwise = Just $ "unknown error when requesting " ++ xn
   forM_ msg putStrLn
   where
-    xn = "'" ++ formatBusName xmonadBus ++ "'"
+    xn = "'" ++ formatBusName xmonadBusName ++ "'"
 
 pathExists :: Bool -> BusName -> ObjectPath -> IO Bool
 pathExists sysbus n p = do

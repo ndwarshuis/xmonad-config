@@ -40,12 +40,9 @@ import           XMonad.Hooks.DynamicLog
     )
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
-    ( curFileDep
-    , maxFileDep
-    )
 -- import           XMonad.Internal.DBus.Common                    (xmonadBus)
 -- import           XMonad.Internal.DBus.Control                   (pathExists)
-import           XMonad.Internal.DBus.Screensaver               (ssDep)
+import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
 import           XMonad.Internal.Dependency
 -- import           XMonad.Internal.Shell                          (fmtCmd)
 import qualified XMonad.Internal.Theme                          as T
@@ -226,20 +223,8 @@ dateCmd = CmdSpec
 -- some commands depend on the presence of interfaces that can only be
 -- determined at runtime; define these checks here
 
--- noSetup :: Monad m => a -> m (Maybe a)
--- noSetup = return . Just
-
--- toJust :: a -> Bool -> Maybe a
--- toJust x b = if b then Just x else Nothing
-
 dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
-dbusDep usesys bus obj iface mem = DBusEndpoint
-  { ddDbusBus = bus
-  , ddDbusSystem = usesys
-  , ddDbusObject = obj
-  , ddDbusInterface = iface
-  , ddDbusMember = mem
-  }
+dbusDep usesys bus obj iface mem = DBusEndpoint (Bus usesys bus) (Endpoint obj iface mem)
 
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
@@ -303,14 +288,15 @@ getWireless = do
 getEthernet :: IO (MaybeExe CmdSpec)
 getEthernet = do
   i <- readInterface isEthernet
-  evalFeature $ maybe BlankFeature (featureRun [dep] . ethernetCmd) i
+  evalFeature $ maybe BlankFeature (featureRun "ethernet status indicator" [dep] . ethernetCmd) i
   where
     dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
 
 getBattery :: BarFeature
 getBattery = Feature
   { ftrAction = batteryCmd
-  , ftrSilent = False
+  , ftrName = "battery level indicator"
+  , ftrWarning = Default
   , ftrChildren = [IOTest hasBattery]
   }
 
@@ -319,7 +305,8 @@ type BarFeature = Feature CmdSpec
 getVPN :: BarFeature
 getVPN = Feature
   { ftrAction = vpnCmd
-  , ftrSilent = False
+  , ftrName = "VPN status indicator"
+  , ftrWarning = Default
   , ftrChildren = [d, v]
   }
   where
@@ -329,7 +316,8 @@ getVPN = Feature
 getBt :: BarFeature
 getBt = Feature
   { ftrAction = btCmd
-  , ftrSilent = False
+  , ftrName = "bluetooth status indicator"
+  , ftrWarning = Default
   , ftrChildren = [dep]
   }
   where
@@ -338,22 +326,25 @@ getBt = Feature
 getAlsa :: BarFeature
 getAlsa = Feature
   { ftrAction = alsaCmd
-  , ftrSilent = False
-  , ftrChildren = [exe "alsactl"]
+  , ftrName = "volume level indicator"
+  , ftrWarning = Default
+  , ftrChildren = [Executable "alsactl"]
   }
 
 getBl :: BarFeature
 getBl = Feature
   { ftrAction = blCmd
-  , ftrSilent = False
-  , ftrChildren = [curFileDep, maxFileDep]
+  , ftrName = "Intel backlight indicator"
+  , ftrWarning = Default
+  , ftrChildren = [intelBacklightSignalDep]
   }
 
 getSs :: BarFeature
 getSs = Feature
   { ftrAction = ssCmd
-  , ftrSilent = False
-  , ftrChildren = [ssDep]
+  , ftrName = "screensaver indicator"
+  , ftrWarning = Default
+  , ftrChildren = [ssSignalDep]
   }
 
 getAllCommands :: [MaybeExe CmdSpec] -> IO BarRegions

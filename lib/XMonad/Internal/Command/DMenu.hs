@@ -47,8 +47,8 @@ myDmenuNetworks = "networkmanager_dmenu"
 --------------------------------------------------------------------------------
 -- | Other internal functions
 
-spawnDmenuCmd :: [String] -> FeatureX
-spawnDmenuCmd = featureSpawnCmd myDmenuCmd
+spawnDmenuCmd :: String -> [String] -> FeatureX
+spawnDmenuCmd n = featureSpawnCmd n myDmenuCmd
 
 themeArgs :: String -> [String]
 themeArgs hexColor =
@@ -63,7 +63,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: FeatureX
-runDevMenu = featureRun [exe myDmenuDevices] $ do
+runDevMenu = featureRun "device manager" [Executable myDmenuDevices] $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
@@ -71,7 +71,7 @@ runDevMenu = featureRun [exe myDmenuDevices] $ do
     ++ myDmenuMatchingArgs
 
 runBwMenu :: FeatureX
-runBwMenu = featureRun [exe myDmenuPasswords] $
+runBwMenu = featureRun "password manager" [Executable myDmenuPasswords] $
   spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 -- TODO this is weirdly inverted
@@ -83,7 +83,8 @@ runShowKeys x = addName "Show Keybindings" $ do
     $ defNoteError { body = Just $ Text "could not display keymap" }
 
 runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> FeatureX
-runDMenuShowKeys kbs = featureRun [exe myDmenuCmd] $ io $ do
+runDMenuShowKeys kbs =
+  featureRun "keyboard shortcut menu" [Executable myDmenuCmd] $ io $ do
   (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
   forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
   where
@@ -91,13 +92,14 @@ runDMenuShowKeys kbs = featureRun [exe myDmenuCmd] $ io $ do
       ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
 
 runCmdMenu :: FeatureX
-runCmdMenu = spawnDmenuCmd ["-show", "run"]
+runCmdMenu = spawnDmenuCmd "command menu" ["-show", "run"]
 
 runAppMenu :: FeatureX
-runAppMenu = spawnDmenuCmd ["-show", "drun"]
+runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 
 runClipMenu :: FeatureX
-runClipMenu = featureRun [exe myDmenuCmd, exe "greenclip"]
+runClipMenu =
+  featureRun "clipboard manager" [Executable myDmenuCmd, Executable "greenclip"]
   $ spawnCmd myDmenuCmd args
   where
     args = [ "-modi", "\"clipboard:greenclip print\""
@@ -106,10 +108,12 @@ runClipMenu = featureRun [exe myDmenuCmd, exe "greenclip"]
            ] ++ themeArgs "#00c44e"
 
 runWinMenu :: FeatureX
-runWinMenu = spawnDmenuCmd ["-show", "window"]
+runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
 runNetMenu :: FeatureX
-runNetMenu = featureSpawnCmd myDmenuNetworks $ themeArgs "#ff3333"
+runNetMenu =
+  featureSpawnCmd "network control menu" myDmenuNetworks $ themeArgs "#ff3333"
 
 runAutorandrMenu :: FeatureX
-runAutorandrMenu = featureSpawnCmd myDmenuMonitors $ themeArgs "#ff0066"
+runAutorandrMenu =
+  featureSpawnCmd "autorandr menu" myDmenuMonitors $ themeArgs "#ff0066"

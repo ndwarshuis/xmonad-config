@@ -34,13 +34,7 @@ memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
 dbusDep :: MemberName -> Dependency
-dbusDep m = DBusEndpoint
-  { ddDbusBus = bus
-  , ddDbusSystem = True
-  , ddDbusObject = path
-  , ddDbusInterface = interface
-  , ddDbusMember = Signal_ m
-  }
+dbusDep m = DBusEndpoint (Bus True bus) (Endpoint path interface $ Signal_ m)
 
 addedDep :: Dependency
 addedDep = dbusDep memAdded
@@ -91,4 +85,5 @@ listenDevices = do
       $ playSoundMaybe p . f . signalBody
 
 runRemovableMon :: FeatureIO
-runRemovableMon = featureRun [addedDep, removedDep] listenDevices
+runRemovableMon =
+  featureRun "removeable device monitor" [addedDep, removedDep] listenDevices
