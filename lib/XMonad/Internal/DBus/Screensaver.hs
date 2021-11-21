@@ -128,12 +128,13 @@ callToggle = Feature
   , ftrChildren = [xDbusDep ssPath interface $ Method_ memToggle]
   }
   where
-    cmd = void $ callMethod $ methodCall ssPath interface memToggle
+    cmd = void $ callMethod xmonadBus ssPath interface memToggle
 
 callQuery :: IO (Maybe SSState)
 callQuery = do
-  reply <- callMethod $ methodCall ssPath interface memQuery
-  return $ reply >>= bodyGetCurrentState
+  reply <- callMethod xmonadBus ssPath interface memQuery
+  -- return $ reply >>= bodyGetCurrentState
+  return $ either (const Nothing) bodyGetCurrentState reply
 
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler
 matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState

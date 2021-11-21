@@ -30,6 +30,7 @@ module XMonad.Internal.Dependency
   , executeFeature_
   , applyFeature
   , applyFeature_
+  , callMethod
   ) where
 
 import           Control.Monad.IO.Class
@@ -243,6 +244,7 @@ introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
 introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
+-- TODO this belongs somewhere else, IDK where tho for now
 callMethod :: Bus -> ObjectPath -> InterfaceName -> MemberName -> IO (Either String [Variant])
 callMethod (Bus usesys bus) path iface mem = do
   client <- if usesys then connectSystem else connectSession

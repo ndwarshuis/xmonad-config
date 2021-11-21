@@ -61,10 +61,11 @@ brightnessControls bc =
   where
     cb = callBacklight bc
 
+-- TODO not dry
 callGetBrightness :: Num c => BrightnessConfig a b -> IO (Maybe c)
 callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } = do
-  reply <- callMethod $ methodCall p i memGet
-  return $ reply >>= bodyGetBrightness
+  reply <- callMethod xmonadBus p i memGet
+  return $ either (const Nothing) bodyGetBrightness reply
 
 signalDep :: BrightnessConfig a b -> Dependency
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
@@ -133,7 +134,7 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
 callBacklight :: BrightnessConfig a b -> String -> MemberName -> FeatureIO
 callBacklight BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
   Feature
-  { ftrMaybeAction = void $ callMethod $ methodCall p i m
+  { ftrMaybeAction = void $ callMethod xmonadBus p i m
   , ftrName = unwords [n, controlName]
   , ftrWarning = Default
   , ftrChildren = [xDbusDep p i $ Method_ m]
