@@ -19,6 +19,7 @@ library
                    , XMonad.Internal.Command.Power
                    , XMonad.Internal.DBus.Common
                    , XMonad.Internal.DBus.Brightness.IntelBacklight
+                   , XMonad.Internal.DBus.Brightness.ClevoKeyboard
                    , XMonad.Internal.DBus.Brightness.Common
                    , XMonad.Internal.DBus.Control
                    , XMonad.Internal.DBus.Screensaver

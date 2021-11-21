@@ -19,6 +19,7 @@ import           Data.Either
 import           DBus
 import           DBus.Client
 
+import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
@@ -36,7 +37,7 @@ startXMonadService = do
   forM_ client $ \c -> do
     requestXMonadName c
     mapM_ (\f -> executeFeature_ $ f c)
-      [exportScreensaver, exportIntelBacklight]
+      [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
   return client
 
 stopXMonadService :: Client -> IO ()
@@ -54,8 +55,7 @@ getDBusClient = do
 requestXMonadName :: Client -> IO ()
 requestXMonadName client = do
   res <- requestName client xmonadBusName []
-  -- TODO if the client is not released on shutdown the owner will be
-  -- different
+  -- TODO if the client is not released on shutdown the owner will be different
   let msg | res == NamePrimaryOwner = Nothing
           | res == NameAlreadyOwner = Just $ "this process already owns " ++ xn
           | res == NameInQueue

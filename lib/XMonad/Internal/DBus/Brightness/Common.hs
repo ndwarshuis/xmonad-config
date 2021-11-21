@@ -31,11 +31,12 @@ import           XMonad.Internal.Dependency
 -- is one method to get the current brightness.
 
 data BrightnessConfig a b = BrightnessConfig
-  { bcMin       :: a -> IO b
-  , bcMax       :: a -> IO b
-  , bcDec       :: a -> IO b
-  , bcInc       :: a -> IO b
-  , bcGet       :: a -> IO b
+  { bcMin       :: (a, a) -> IO b
+  , bcMax       :: (a, a) -> IO b
+  , bcDec       :: (a, a) -> IO b
+  , bcInc       :: (a, a) -> IO b
+  , bcGet       :: (a, a) -> IO b
+  , bcMinRaw    :: a
   , bcGetMax    :: IO a
   , bcPath      :: ObjectPath
   , bcInterface :: InterfaceName
@@ -72,8 +73,9 @@ signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
 matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> IO SignalHandler
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
   client <- connectSession
+  -- this connections must remain active
+  -- TODO does this need to be cleaned up during shutdown??
   addMatch client brMatcher $ cb . bodyGetBrightness . signalBody
-  -- TODO disconnect here?
   where
     brMatcher = matchAny
       { matchPath = Just p
@@ -96,7 +98,8 @@ brightnessExporter deps bc@BrightnessConfig { bcName = n } client = Feature
 exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
 exportBrightnessControls' bc client = do
   maxval <- bcGetMax bc -- assume the max value will never change
-  let autoMethod' m f = autoMethod m $ emitBrightness bc client =<< f bc maxval
+  let bounds = (bcMinRaw bc, maxval)
+  let autoMethod' m f = autoMethod m $ emitBrightness bc client =<< f bc bounds
   let funget = bcGet bc
   export client (bcPath bc) defaultInterface
     { interfaceName = bcInterface bc
@@ -105,7 +108,7 @@ exportBrightnessControls' bc client = do
       , autoMethod' memMin bcMin
       , autoMethod' memInc bcInc
       , autoMethod' memDec bcDec
-      , autoMethod memGet (round <$> funget maxval :: IO Int32)
+      , autoMethod memGet (round <$> funget bounds :: IO Int32)
       ]
     , interfaceSignals = [sig]
     }

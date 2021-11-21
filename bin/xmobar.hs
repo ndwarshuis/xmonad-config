@@ -179,14 +179,14 @@ alsaCmd = CmdSpec
 
 blCmd :: CmdSpec
 blCmd = CmdSpec
-  { csAlias = "intelbacklight"
+  { csAlias = blAlias
   , csRunnable = Run $ IntelBacklight "<fn=1>\xf185</fn>"
   }
 
 ckCmd :: CmdSpec
 ckCmd = CmdSpec
   { csAlias = ckAlias
-  , csRunnable = Run $ ClevoKeyboard ("<fn=1>\xf40b</fn>", T.fgColor, T.backdropFgColor)  5
+  , csRunnable = Run $ ClevoKeyboard "<fn=1>\xf40b</fn>"
   }
 
 ssCmd :: CmdSpec

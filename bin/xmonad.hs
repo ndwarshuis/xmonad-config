@@ -51,6 +51,7 @@ import           XMonad.Internal.Concurrent.ACPIEvent
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Concurrent.DynamicWorkspaces
 import           XMonad.Internal.Concurrent.Removable
+import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.Common
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
@@ -552,6 +553,10 @@ externalBindings ts lock =
     , KeyBinding "M-," "backlight down" $ ioFeature $ bctlDec intelBacklightControls
     , KeyBinding "M-M1-," "backlight min" $ ioFeature $ bctlMin intelBacklightControls
     , KeyBinding "M-M1-." "backlight max" $ ioFeature $ bctlMax intelBacklightControls
+    , KeyBinding "M-S-." "keyboard up" $ ioFeature $ bctlInc clevoKeyboardControls
+    , KeyBinding "M-S-," "keyboard down" $ ioFeature $ bctlDec clevoKeyboardControls
+    , KeyBinding "M-S-M1-," "keyboard min" $ ioFeature $ bctlMin clevoKeyboardControls
+    , KeyBinding "M-S-M1-." "keyboard max" $ ioFeature $ bctlMax clevoKeyboardControls
     , KeyBinding "M-<End>" "power menu" $ ConstFeature $ runPowerPrompt lock
     , KeyBinding "M-<Home>" "quit xmonad" $ ConstFeature runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" runScreenLock

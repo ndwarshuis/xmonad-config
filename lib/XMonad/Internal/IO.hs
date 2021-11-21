@@ -56,42 +56,45 @@ writeBool f b = writeInt f ((if b then 1 else 0) :: Int)
 -- given by a runtime argument, which is scaled linearly to the range 0-100
 -- (percent).
 
-rawToPercent :: (Integral a, Integral b, Read b, RealFrac c) => a -> b -> c
-rawToPercent upper raw = 100 * (fromIntegral raw - 1) / (fromIntegral upper - 1)
+rawToPercent :: (Integral a, Integral b, Read b, RealFrac c) => (a, a) -> b -> c
+rawToPercent (lower, upper) raw =
+  100 * (fromIntegral raw - fromIntegral lower) / fromIntegral (upper - lower)
+-- rawToPercent upper raw = 100 * fromIntegral raw / fromIntegral upper
 
-readPercent :: (Integral a, RealFrac b) => a -> FilePath -> IO b
-readPercent upper path = do
+readPercent :: (Integral a, RealFrac b) => (a, a) -> FilePath -> IO b
+readPercent bounds path = do
   i <- readInt path
-  return $ rawToPercent upper (i :: Integer)
+  return $ rawToPercent bounds (i :: Integer)
 
-percentToRaw :: (Integral a, RealFrac b, Integral c) => a -> b -> c
-percentToRaw upper perc = round $ 1 + perc / 100.0 * (fromIntegral upper - 1)
+percentToRaw :: (Integral a, RealFrac b, Integral c) => (a, a) -> b -> c
+percentToRaw (lower, upper) perc = round $
+  fromIntegral lower + perc / 100.0 * (fromIntegral upper - fromIntegral lower)
 
-writePercent :: (Integral a, RealFrac b) => a -> FilePath -> b -> IO b
-writePercent upper path perc = do
+writePercent :: (Integral a, RealFrac b) => (a, a) -> FilePath -> b -> IO b
+writePercent bounds path perc = do
   let t | perc > 100 = 100
         | perc < 0 = 0
         | otherwise = perc
-  writeInt path (percentToRaw upper t :: Int)
+  writeInt path (percentToRaw bounds t :: Int)
   return t
 
-writePercentMin :: (Integral a, RealFrac b) => a -> FilePath -> IO b
-writePercentMin upper path = writePercent upper path 0
+writePercentMin :: (Integral a, RealFrac b) => (a, a) -> FilePath -> IO b
+writePercentMin bounds path = writePercent bounds path 0
 
-writePercentMax :: (Integral a, RealFrac b) => a -> FilePath -> IO b
-writePercentMax upper path = writePercent upper path 100
+writePercentMax :: (Integral a, RealFrac b) => (a, a) -> FilePath -> IO b
+writePercentMax bounds path = writePercent bounds path 100
 
 shiftPercent :: (Integral a, RealFrac b) => (b -> b -> b) -> Int -> FilePath
-  -> a -> IO b
-shiftPercent f steps path upper = writePercent upper path . f stepsize
-    =<< readPercent upper path
+  -> (a, a) -> IO b
+shiftPercent f steps path bounds = writePercent bounds path . f stepsize
+    =<< readPercent bounds path
   where
     stepsize = 100 / fromIntegral steps
 
-incPercent :: (Integral a, RealFrac b) => Int -> FilePath -> a -> IO b
+incPercent :: (Integral a, RealFrac b) => Int -> FilePath -> (a, a) -> IO b
 incPercent = shiftPercent (+)
 
-decPercent :: (Integral a, RealFrac b) => Int -> FilePath -> a -> IO b
+decPercent :: (Integral a, RealFrac b) => Int -> FilePath -> (a, a) -> IO b
 decPercent = shiftPercent subtract -- silly (-) operator thingy error
 
 --------------------------------------------------------------------------------

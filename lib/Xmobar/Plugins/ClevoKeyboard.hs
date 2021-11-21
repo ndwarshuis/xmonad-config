@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 --------------------------------------------------------------------------------
 -- | Clevo Keyboard plugin
 --
@@ -9,43 +11,26 @@ module Xmobar.Plugins.ClevoKeyboard
   , ckAlias
   ) where
 
-import           Data.Char
-import           Data.Text               (unpack)
-import           Data.Text.IO            as T (readFile)
+import           Control.Concurrent
+import           Control.Monad
 
 import           Xmobar
 
-import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 
--- import           XMonad.Internal.DBus.IntelBacklight
-
-data ClevoKeyboard = ClevoKeyboard (String, String, String) Int
+data ClevoKeyboard = ClevoKeyboard String
   deriving (Read, Show)
 
 ckAlias :: String
 ckAlias = "clevokeyboard"
 
-brightnessFile :: FilePath
-brightnessFile = "/sys/devices/platform/tuxedo_keyboard/brightness"
-
-stateFile :: FilePath
-stateFile = "/sys/devices/platform/tuxedo_keyboard/state"
-
-readBrightness :: FilePath -> IO Integer
-readBrightness file = read . takeWhile isDigit . unpack <$> T.readFile file
-
-readState :: FilePath -> IO Bool
-readState file = (==1) <$> readBrightness file
-
 instance Exec ClevoKeyboard where
-  alias (ClevoKeyboard _ _) = ckAlias
-  rate (ClevoKeyboard _ r) = r
-  run (ClevoKeyboard (icon, colorOn, colorOff) _) = do
-    b <- readBrightness brightnessFile
-    s <- readState stateFile
-    return $ formatBrightness s (fromIntegral b :: Double)
+  alias (ClevoKeyboard _) = ckAlias
+  start (ClevoKeyboard icon) cb = do
+    _ <- matchSignalCK $ cb . formatBrightness
+    cb . formatBrightness =<< callGetBrightnessCK
+    forever (threadDelay 5000000)
     where
-      formatBrightness s b =
-        let iconColor = if s then colorOn else colorOff
-            n = show (round $ b / 255 * 100 :: Integer) ++ "%"
-        in xmobarColor iconColor "" icon ++ n
+      formatBrightness = \case
+        Just b  -> icon ++ show (round b :: Integer) ++ "%"
+        Nothing -> "N/A"

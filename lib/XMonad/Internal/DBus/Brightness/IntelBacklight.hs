@@ -28,8 +28,13 @@ type Brightness = Float
 
 type RawBrightness = Int32
 
+type RawBounds = (RawBrightness, RawBrightness)
+
 steps :: Int
 steps = 16
+
+minRawBrightness :: RawBrightness
+minRawBrightness = 1
 
 backlightDir :: FilePath
 backlightDir = "/sys/class/backlight/intel_backlight/"
@@ -43,19 +48,19 @@ curFile = backlightDir </> "brightness"
 getMaxRawBrightness :: IO RawBrightness
 getMaxRawBrightness = readInt maxFile
 
-getBrightness :: RawBrightness -> IO Brightness
-getBrightness upper = readPercent upper curFile
+getBrightness :: RawBounds -> IO Brightness
+getBrightness bounds = readPercent bounds curFile
 
-minBrightness :: RawBrightness -> IO Brightness
-minBrightness upper = writePercentMin upper curFile
+minBrightness :: RawBounds -> IO Brightness
+minBrightness bounds = writePercentMin bounds curFile
 
-maxBrightness :: RawBrightness -> IO Brightness
-maxBrightness upper = writePercentMax upper curFile
+maxBrightness :: RawBounds -> IO Brightness
+maxBrightness bounds = writePercentMax bounds curFile
 
-incBrightness :: RawBrightness -> IO Brightness
+incBrightness :: RawBounds -> IO Brightness
 incBrightness = incPercent steps curFile
 
-decBrightness :: RawBrightness -> IO Brightness
+decBrightness :: RawBounds -> IO Brightness
 decBrightness = decPercent steps curFile
 
 --------------------------------------------------------------------------------
@@ -75,6 +80,7 @@ intelBacklightConfig = BrightnessConfig
   , bcDec = decBrightness
   , bcGet = getBrightness
   , bcGetMax = getMaxRawBrightness
+  , bcMinRaw = minRawBrightness
   , bcPath = blPath
   , bcInterface = interface
   , bcName = "Intel backlight"
