@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFunctor   #-}
 {-# LANGUAGE GADTs           #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -8,10 +7,7 @@
 module XMonad.Internal.Dependency
   ( MaybeAction
   , MaybeX
-  , Parent(..)
-  , Chain(..)
-  , DBusEndpoint_(..)
-  , DBusBus_(..)
+  , Action(..)
   , FeatureX
   , FeatureIO
   , Feature(..)
@@ -75,30 +71,23 @@ import           XMonad.Internal.Shell
 -- dependencies that target the output/state of another feature; this is more
 -- robust anyways, at the cost of being a bit slower.
 
-data Feature a = forall e. Evaluable e => Feature
-  { ftrMaybeAction :: e a
+data Feature a = Feature
+  { ftrMaybeAction :: Action a
   , ftrName        :: String
   , ftrWarning     :: Warning
   }
   | ConstFeature a
-  -- | BlankFeature
 
-data Parent a = Parent a [Dependency] deriving (Functor)
+data Action a = Parent a [Dependency]
+  | forall b. Chain (b -> a) (IO (Either [String] b))
+  | DBusEndpoint_ (Client -> a) BusName (Maybe Client) [Endpoint] [Dependency]
+  | DBusBus_ (Client -> a) BusName (Maybe Client) [Dependency]
 
-data Chain a = forall b. Chain (b -> a) (IO (Either [String] b))
-
-instance Functor Chain where
-  fmap f (Chain a b) = Chain (f . a) b
-
-data DBusEndpoint_ a = DBusEndpoint_ (Client -> a) BusName (Maybe Client) [Endpoint] [Dependency]
-
-instance Functor DBusEndpoint_ where
+instance Functor Action where
+  fmap f (Parent a ds)               = Parent (f a) ds
+  fmap f (Chain a b)                 = Chain (f . a) b
   fmap f (DBusEndpoint_ a b c es ds) = DBusEndpoint_ (f . a) b c es ds
-
-data DBusBus_ a = DBusBus_ (Client -> a) BusName (Maybe Client) [Dependency]
-
-instance Functor DBusBus_ where
-  fmap f (DBusBus_ a b c eps) = DBusBus_ (f . a) b c eps
+  fmap f (DBusBus_ a b c eps)        = DBusBus_ (f . a) b c eps
 
 -- TODO this is silly as is, and could be made more useful by representing
 -- loglevels
@@ -148,60 +137,74 @@ featureEndpoint busname path iface mem client = Feature
 -- either the action of the feature or 0 or more error messages that signify
 -- what dependencies are missing and why.
 
-class Functor e => Evaluable e where
-  eval :: e a -> IO (MaybeAction a)
-
 type MaybeAction a = Either [String] a
 
 type MaybeX = MaybeAction (X ())
 
-instance Evaluable Parent where
-  eval (Parent a ds) = do
-    es <- catMaybes <$> mapM evalDependency ds
-    return $ case es of
-      []  -> Right a
-      es' -> Left es'
+evalAction :: Action a -> IO (MaybeAction a)
 
-instance Evaluable Chain where
-  eval (Chain a b) = second a <$> b
+evalAction (Parent a ds) = do
+  es <- catMaybes <$> mapM evalDependency ds
+  return $ case es of
+    []  -> Right a
+    es' -> Left es'
 
-instance Evaluable DBusEndpoint_ where
-  eval (DBusEndpoint_ _ _ Nothing _ _) = return $ Left ["client not available"]
-  eval (DBusEndpoint_ action busname (Just client) es ds) = do
-    eperrors <- mapM (endpointSatisfied client busname) es
-    dperrors <- mapM evalDependency ds
-    return $ case catMaybes (eperrors ++ dperrors) of
-      []  -> Right $ action client
-      es' -> Left es'
+evalAction (Chain a b) = second a <$> b
 
-instance Evaluable DBusBus_ where
-  eval (DBusBus_ _ _ Nothing _) = return $ Left ["client not available"]
-  eval (DBusBus_ action busname (Just client) deps) = do
-    res <- busSatisfied client busname
-    es <- catMaybes . (res:) <$> mapM evalDependency deps
-    return $ case es of
-      []  -> Right $ action client
-      es' -> Left es'
+evalAction (DBusEndpoint_ _ _ Nothing _ _) = return $ Left ["client not available"]
+evalAction (DBusEndpoint_ action busname (Just client) es ds) = do
+  eperrors <- mapM (endpointSatisfied client busname) es
+  dperrors <- mapM evalDependency ds
+  return $ case catMaybes (eperrors ++ dperrors) of
+    []  -> Right $ action client
+    es' -> Left es'
 
--- instance Evaluable BlankFeature where
---   eval (BlankFeature a) = Left ["hopefully a useful error message"]
+evalAction (DBusBus_ _ _ Nothing _) = return $ Left ["client not available"]
+evalAction (DBusBus_ action busname (Just client) deps) = do
+  res <- busSatisfied client busname
+  es <- catMaybes . (res:) <$> mapM evalDependency deps
+  return $ case es of
+    []  -> Right $ action client
+    es' -> Left es'
+
+-- instance Evaluable Parent where
+--   eval (Parent a ds) = do
+--     es <- catMaybes <$> mapM evalDependency ds
+--     return $ case es of
+--       []  -> Right a
+--       es' -> Left es'
+
+-- instance Evaluable Chain where
+--   eval (Chain a b) = second a <$> b
+
+-- instance Evaluable DBusEndpoint_ where
+--   eval (DBusEndpoint_ _ _ Nothing _ _) = return $ Left ["client not available"]
+--   eval (DBusEndpoint_ action busname (Just client) es ds) = do
+--     eperrors <- mapM (endpointSatisfied client busname) es
+--     dperrors <- mapM evalDependency ds
+--     return $ case catMaybes (eperrors ++ dperrors) of
+--       []  -> Right $ action client
+--       es' -> Left es'
+
+-- instance Evaluable DBusBus_ where
+--   eval (DBusBus_ _ _ Nothing _) = return $ Left ["client not available"]
+--   eval (DBusBus_ action busname (Just client) deps) = do
+--     res <- busSatisfied client busname
+--     es <- catMaybes . (res:) <$> mapM evalDependency deps
+--     return $ case es of
+--       []  -> Right $ action client
+--       es' -> Left es'
 
 evalFeature :: Feature a -> IO (MaybeAction a)
 evalFeature (ConstFeature x) = return $ Right x
--- evalFeature BlankFeature = return $ Left []
 evalFeature Feature
   { ftrMaybeAction = a
   , ftrName = n
   , ftrWarning = w
-  -- , ftrChildren = c
   } = do
   procName <- getProgName
-  res <- eval a
+  res <- evalAction a
   return $ first (fmtWarnings procName) res
-  -- es <- catMaybes <$> mapM evalDependency c
-  -- return $ case res of
-  --   []  -> Right a
-  --   es' -> Left $ fmtWarnings procName es'
   where
     fmtWarnings procName es = case w of
       Silent  -> []
@@ -234,10 +237,7 @@ ifSatisfied _ alt       = alt
 data Dependency = Executable String
   | AccessiblePath FilePath Bool Bool
   | IOTest (IO (Maybe String))
-  -- | DBusEndpoint Bus Endpoint
-  -- | DBusBus Bus
   | Systemd UnitType String
-
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
 
@@ -276,8 +276,6 @@ evalDependency (Executable n)         = exeSatisfied n
 evalDependency (IOTest t)             = t
 evalDependency (Systemd t n)          = unitSatisfied t n
 evalDependency (AccessiblePath p r w) = pathSatisfied p r w
--- evalDependency (DBusEndpoint b e)     = endpointSatisfied b e
--- evalDependency (DBusBus b)            = busSatisfied b
 
 exeSatisfied :: String -> IO (Maybe String)
 exeSatisfied x = do
