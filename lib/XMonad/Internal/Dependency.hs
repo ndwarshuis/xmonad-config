@@ -71,7 +71,7 @@ import           XMonad.Internal.Shell
 -- robust anyways, at the cost of being a bit slower.
 
 data Feature a = Feature
-  { ftrMaybeAction :: Action a
+  { ftrAction :: Action a
   , ftrName        :: String
   , ftrWarning     :: Warning
   }
@@ -102,11 +102,11 @@ ioFeature Feature {..} =
   -- HACK just doing a normal record update here will make GHC complain about
   -- an 'insufficiently polymorphic record update' ...I guess because my
   -- GADT isn't polymorphic enough (which is obviously BS)
-  Feature {ftrMaybeAction = liftIO <$> ftrMaybeAction, ..}
+  Feature {ftrAction = liftIO <$> ftrAction, ..}
 
 featureDefault :: String -> [Dependency] -> a -> Feature a
 featureDefault n ds x = Feature
-  { ftrMaybeAction = Parent x ds
+  { ftrAction = Parent x ds
   , ftrName = n
   , ftrWarning = Default
   }
@@ -121,7 +121,7 @@ featureExeArgs n cmd args =
 featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
   -> Maybe Client -> FeatureIO
 featureEndpoint busname path iface mem client = Feature
-  { ftrMaybeAction = DBusEndpoint_ cmd client deps []
+  { ftrAction = DBusEndpoint_ cmd client deps []
   , ftrName = "screensaver toggle"
   , ftrWarning = Default
   }
@@ -169,7 +169,7 @@ evalAction (DBusBus_ action busname (Just client) deps) = do
 evalFeature :: Feature a -> IO (MaybeAction a)
 evalFeature (ConstFeature x) = return $ Right x
 evalFeature Feature
-  { ftrMaybeAction = a
+  { ftrAction = a
   , ftrName = n
   , ftrWarning = w
   } = do
