@@ -67,7 +67,6 @@ callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client = do
   reply <- callMethod client xmonadBusName p i memGet
   return $ either (const Nothing) bodyGetBrightness reply
 
--- signalDep :: BrightnessConfig a b -> Dependency
 signalDep :: BrightnessConfig a b -> Endpoint
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
   Endpoint xmonadBusName p i $ Signal_ memCur

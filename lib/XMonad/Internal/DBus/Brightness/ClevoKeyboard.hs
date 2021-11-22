@@ -113,7 +113,6 @@ stateFileDep = pathRW stateFile
 brightnessFileDep :: Dependency
 brightnessFileDep = pathR brightnessFile
 
--- clevoKeyboardSignalDep :: Dependency
 clevoKeyboardSignalDep :: Endpoint
 clevoKeyboardSignalDep = signalDep clevoKeyboardConfig
 

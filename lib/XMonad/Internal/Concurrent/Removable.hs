@@ -33,16 +33,12 @@ memAdded = memberName_ "InterfacesAdded"
 memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
--- dbusDep :: MemberName -> Dependency
--- dbusDep m = DBusEndpoint (Bus True bus) (Endpoint path interface $ Signal_ m)
 dbusDep :: MemberName -> Endpoint
 dbusDep m = Endpoint bus path interface $ Signal_ m
 
--- addedDep :: Dependency
 addedDep :: Endpoint
 addedDep = dbusDep memAdded
 
--- removedDep :: Dependency
 removedDep :: Endpoint
 removedDep = dbusDep memRemoved
 

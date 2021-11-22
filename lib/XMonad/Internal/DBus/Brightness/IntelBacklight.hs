@@ -95,7 +95,6 @@ curFileDep = pathRW curFile
 maxFileDep :: Dependency
 maxFileDep = pathR maxFile
 
--- intelBacklightSignalDep :: Dependency
 intelBacklightSignalDep :: Endpoint
 intelBacklightSignalDep = signalDep intelBacklightConfig
 

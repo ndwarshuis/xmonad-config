@@ -71,9 +71,9 @@ import           XMonad.Internal.Shell
 -- robust anyways, at the cost of being a bit slower.
 
 data Feature a = Feature
-  { ftrAction :: Action a
-  , ftrName        :: String
-  , ftrWarning     :: Warning
+  { ftrAction  :: Action a
+  , ftrName    :: String
+  , ftrWarning :: Warning
   }
   | ConstFeature a
 
@@ -83,8 +83,8 @@ data Action a = Parent a [Dependency]
   | DBusBus (Client -> a) BusName (Maybe Client) [Dependency]
 
 instance Functor Action where
-  fmap f (Parent a ds)             = Parent (f a) ds
-  fmap f (Chain a b)               = Chain (f . a) b
+  fmap f (Parent a ds)            = Parent (f a) ds
+  fmap f (Chain a b)              = Chain (f . a) b
   fmap f (DBusEndpoint a c es ds) = DBusEndpoint (f . a) c es ds
   fmap f (DBusBus a b c eps)      = DBusBus (f . a) b c eps
 
