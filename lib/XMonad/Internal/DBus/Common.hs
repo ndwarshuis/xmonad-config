@@ -7,7 +7,7 @@ module XMonad.Internal.DBus.Common
   ( addMatchCallback
   , xmonadBus
   , xmonadBusName
-  , xDbusDep
+  -- , xDbusDep
   -- , initControls
   ) where
 
@@ -22,8 +22,8 @@ xmonadBusName = busName_ "org.xmonad"
 xmonadBus :: Bus
 xmonadBus = Bus False xmonadBusName
 
-xDbusDep :: ObjectPath -> InterfaceName -> DBusMember -> Dependency
-xDbusDep o i m = DBusEndpoint xmonadBus $ Endpoint o i m
+-- xDbusDep :: ObjectPath -> InterfaceName -> DBusMember -> Dependency
+-- xDbusDep o i m = DBusEndpoint xmonadBus $ Endpoint o i m
 
 -- -- | Call a method and return its result if successful
 -- callMethod :: MethodCall -> IO (Maybe [Variant])

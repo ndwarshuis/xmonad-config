@@ -93,18 +93,17 @@ bodyGetCurrentState _   = Nothing
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-exportScreensaver :: Client -> FeatureIO
+exportScreensaver :: Maybe Client -> FeatureIO
 exportScreensaver client = Feature
-  { ftrMaybeAction = cmd
+  { ftrMaybeAction = DBusBus_ cmd xmonadBusName client [Executable ssExecutable]
   , ftrName = "screensaver interface"
   , ftrWarning = Default
-  , ftrChildren = [Executable ssExecutable, DBusBus xmonadBus]
   }
   where
-    cmd = export client ssPath defaultInterface
+    cmd cl = export cl ssPath defaultInterface
       { interfaceName = interface
       , interfaceMethods =
-        [ autoMethod memToggle $ emitState client =<< toggle
+        [ autoMethod memToggle $ emitState cl =<< toggle
         , autoMethod memQuery query
         ]
       , interfaceSignals = [sig]
@@ -120,7 +119,7 @@ exportScreensaver client = Feature
         ]
       }
 
-callToggle :: Client -> FeatureIO
+callToggle :: Maybe Client -> FeatureIO
 callToggle client =
   (featureEndpoint xmonadBusName ssPath interface memToggle client)
   { ftrName = "screensaver toggle" }
@@ -141,6 +140,8 @@ callQuery client = do
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler
 matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
 
-ssSignalDep :: Dependency
-ssSignalDep = DBusEndpoint xmonadBus $ Endpoint ssPath interface
-  $ Signal_ memState
+-- ssSignalDep :: Dependency
+ssSignalDep :: Endpoint
+-- ssSignalDep = DBusEndpoint xmonadBus $ Endpoint ssPath interface
+--   $ Signal_ memState
+ssSignalDep = Endpoint ssPath interface $ Signal_ memState

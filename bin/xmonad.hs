@@ -76,12 +76,14 @@ import           XMonad.Util.WorkspaceCompare
 
 main :: IO ()
 main = do
-  cl <- startXMonadService
+  sesClient <- startXMonadService
+  sysClient <- getDBusClient True
   (h, p) <- spawnPipe "xmobar"
-  mapM_ (applyFeature_ forkIO_) [runPowermon, runRemovableMon]
+  mapM_ (applyFeature_ forkIO_) [runPowermon, runRemovableMon sysClient]
   forkIO_ $ runWorkspaceMon allDWs
   let ts = ThreadState
-        { tsClient = cl
+        { tsSessionClient = sesClient
+        , tsSystemClient = sysClient
         , tsChildPIDs = [p]
         , tsChildHandles = [h]
         }
@@ -114,16 +116,18 @@ main = do
 -- | Concurrency configuration
 
 data ThreadState = ThreadState
-    { tsClient       :: Maybe Client
-    , tsChildPIDs    :: [ProcessHandle]
-    , tsChildHandles :: [Handle]
+    { tsSessionClient :: Maybe Client
+    , tsSystemClient  :: Maybe Client
+    , tsChildPIDs     :: [ProcessHandle]
+    , tsChildHandles  :: [Handle]
     }
 
 -- TODO shouldn't this be run by a signal handler?
 runCleanup :: ThreadState -> X ()
 runCleanup ts = io $ do
   mapM_ killHandle $ tsChildPIDs ts
-  forM_ (tsClient ts) stopXMonadService
+  forM_ (tsSessionClient ts) stopXMonadService
+  forM_ (tsSystemClient ts) disconnect
 
 --------------------------------------------------------------------------------
 -- | Startuphook configuration
@@ -568,12 +572,12 @@ externalBindings ts lock =
     , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ maybe BlankFeature (ioFeature . callToggle) cl
+    , KeyBinding "M-<F11>" "toggle screensaver" $ ioFeature $ callToggle cl
     , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
     ]
   ]
   where
-    cl = tsClient ts
-    brightessControls ctl getter = maybe BlankFeature (ioFeature . getter . ctl) cl
+    cl = tsSessionClient ts
+    brightessControls ctl getter = (ioFeature . getter . ctl) cl
     ib = brightessControls intelBacklightControls
     ck = brightessControls clevoKeyboardControls

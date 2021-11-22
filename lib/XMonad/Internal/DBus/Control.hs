@@ -6,9 +6,11 @@
 module XMonad.Internal.DBus.Control
   ( Client
   , startXMonadService
+  , getDBusClient
   , stopXMonadService
   , pathExists
   , xmonadBus
+  , disconnect
   ) where
 
 import           Control.Exception
@@ -33,21 +35,21 @@ introspectMethod = memberName_ "Introspect"
 
 startXMonadService :: IO (Maybe Client)
 startXMonadService = do
-  client <- getDBusClient
-  forM_ client $ \c -> do
-    requestXMonadName c
-    mapM_ (\f -> executeFeature_ $ f c)
-      [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
+  client <- getDBusClient False
+  forM_ client requestXMonadName
+  mapM_ (\f -> executeFeature_ $ f client) exporters
   return client
+  where
+    exporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
 
 stopXMonadService :: Client -> IO ()
 stopXMonadService client = do
   void $ releaseName client xmonadBusName
   disconnect client
 
-getDBusClient :: IO (Maybe Client)
-getDBusClient = do
-  res <- try connectSession
+getDBusClient :: Bool -> IO (Maybe Client)
+getDBusClient sys = do
+  res <- try $ if sys then connectSystem else connectSession
   case res of
     Left e  -> putStrLn (clientErrorMessage e) >> return Nothing
     Right c -> return $ Just c

@@ -16,7 +16,7 @@ import           Data.Either
 import           Data.List
 import           Data.Maybe
 
-import           DBus
+import           DBus.Client
 
 import           System.Directory
 import           System.Exit
@@ -41,6 +41,8 @@ import           XMonad.Hooks.DynamicLog
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
+import           XMonad.Internal.DBus.Common
+import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.Shell
 -- import           XMonad.Internal.DBus.Common                    (xmonadBus)
 -- import           XMonad.Internal.DBus.Control                   (pathExists)
@@ -52,12 +54,15 @@ import           Xmobar
 
 main :: IO ()
 main = do
-  rs <- sequence rightPlugins
+  sysClient <- getDBusClient True
+  sesClient <- getDBusClient False
+  rs <- rightPlugins sysClient sesClient
   warnMissing rs
   cs <- getAllCommands rs
   d <- getXMonadDir
   -- this is needed to see any printed messages
   hFlush stdout
+  mapM_ (maybe skip disconnect) [sysClient, sesClient]
   xmobar $ config cs d
 
 config :: BarRegions -> String -> Config
@@ -225,8 +230,8 @@ dateCmd = CmdSpec
 -- some commands depend on the presence of interfaces that can only be
 -- determined at runtime; define these checks here
 
-dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
-dbusDep usesys bus obj iface mem = DBusEndpoint (Bus usesys bus) (Endpoint obj iface mem)
+-- dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
+-- dbusDep usesys bus obj iface mem = DBusEndpoint (Bus usesys bus) (Endpoint obj iface mem)
 
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
@@ -245,15 +250,15 @@ listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
 sysfsNet :: FilePath
 sysfsNet = "/sys/class/net"
 
-readInterface :: (String -> Bool) -> IO (Maybe String)
+readInterface :: (String -> Bool) -> IO (Either [String] String)
 readInterface f = do
   ns <- filter f <$> listInterfaces
   case ns of
+    [] -> return $ Left ["no interfaces found"]
     (x:xs) -> do
       unless (null xs) $
         putStrLn $ "WARNING: extra interfaces found, using " ++ x
-      return $ Just x
-    _     -> return Nothing
+      return $ Right x
 
 vpnPresent :: IO (Maybe String)
 vpnPresent = do
@@ -265,96 +270,96 @@ vpnPresent = do
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
-rightPlugins :: [IO (MaybeAction CmdSpec)]
-rightPlugins =
+rightPlugins :: Maybe Client -> Maybe Client -> IO [MaybeAction CmdSpec]
+rightPlugins sysClient sesClient = mapM evalFeature
   [ getWireless
   , getEthernet
-  , evalFeature getVPN
-  , evalFeature getBt
-  , evalFeature getAlsa
-  , evalFeature getBattery
-  , evalFeature getBl
-  , evalFeature getCk
-  , evalFeature getSs
-  , nocheck lockCmd
-  , nocheck dateCmd
+  , getVPN
+  , getBt sysClient
+  , getAlsa
+  , getBattery
+  , getBl sesClient
+  , getCk sesClient
+  , getSs sesClient
+  , ConstFeature lockCmd
+  , ConstFeature dateCmd
   ]
-  where
-    nocheck = return . Right
 
-getWireless :: IO (MaybeAction CmdSpec)
-getWireless = do
-  i <- readInterface isWireless
-  return $ maybe (Left []) (Right . wirelessCmd) i
+getWireless :: BarFeature
+getWireless = Feature
+  { ftrMaybeAction = Chain wirelessCmd $ readInterface isWireless
+  , ftrName = "wireless status indicator"
+  , ftrWarning = Default
+  }
+  -- i <- readInterface isWireless
+  -- return $ maybe (Left []) (Right . wirelessCmd) i
 
-getEthernet :: IO (MaybeAction CmdSpec)
-getEthernet = do
-  i <- readInterface isEthernet
-  evalFeature $ maybe BlankFeature (featureDefault "ethernet status indicator" [dep] . ethernetCmd) i
-  where
-    dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
+-- TODO this needs a dbus interface
+getEthernet :: BarFeature
+getEthernet = Feature
+  { ftrMaybeAction = Chain ethernetCmd (readInterface isEthernet)
+  , ftrName = "ethernet status indicator"
+  , ftrWarning = Default
+  }
+
+  -- i <- readInterface isEthernet
+  -- evalFeature $ maybe BlankFeature (featureDefault "ethernet status indicator" [dep] . ethernetCmd) i
+  -- where
+  --   dep = dbusDep True devBus devPath devInterface $ Method_ devGetByIP
 
 getBattery :: BarFeature
 getBattery = Feature
-  { ftrMaybeAction = batteryCmd
+  { ftrMaybeAction = Parent batteryCmd [IOTest hasBattery]
   , ftrName = "battery level indicator"
   , ftrWarning = Default
-  , ftrChildren = [IOTest hasBattery]
   }
 
 type BarFeature = Feature CmdSpec
 
 getVPN :: BarFeature
 getVPN = Feature
-  { ftrMaybeAction = vpnCmd
+  { ftrMaybeAction = Parent vpnCmd [v]
   , ftrName = "VPN status indicator"
   , ftrWarning = Default
-  , ftrChildren = [d, v]
   }
   where
-    d = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
+    -- d = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
     v = IOTest vpnPresent
 
-getBt :: BarFeature
-getBt = Feature
-  { ftrMaybeAction = btCmd
+getBt :: Maybe Client -> BarFeature
+getBt client = Feature
+  { ftrMaybeAction = DBusEndpoint_ (const btCmd) btBus client
+                     [Endpoint btPath btInterface $ Property_ btPowered]
   , ftrName = "bluetooth status indicator"
   , ftrWarning = Default
-  , ftrChildren = [dep]
   }
-  where
-    dep = dbusDep True btBus btPath btInterface $ Property_ btPowered
 
 getAlsa :: BarFeature
 getAlsa = Feature
-  { ftrMaybeAction = alsaCmd
+  { ftrMaybeAction = Parent alsaCmd [Executable "alsactl"]
   , ftrName = "volume level indicator"
   , ftrWarning = Default
-  , ftrChildren = [Executable "alsactl"]
   }
 
-getBl :: BarFeature
-getBl = Feature
-  { ftrMaybeAction = blCmd
+getBl :: Maybe Client -> BarFeature
+getBl client = Feature
+  { ftrMaybeAction = DBusEndpoint_ (const blCmd) xmonadBusName client [intelBacklightSignalDep]
   , ftrName = "Intel backlight indicator"
   , ftrWarning = Default
-  , ftrChildren = [intelBacklightSignalDep]
   }
 
-getCk :: BarFeature
-getCk = Feature
-  { ftrMaybeAction = ckCmd
+getCk :: Maybe Client -> BarFeature
+getCk client = Feature
+  { ftrMaybeAction = DBusEndpoint_ (const ckCmd) xmonadBusName client [clevoKeyboardSignalDep]
   , ftrName = "Clevo keyboard indicator"
   , ftrWarning = Default
-  , ftrChildren = [clevoKeyboardSignalDep]
   }
 
-getSs :: BarFeature
-getSs = Feature
-  { ftrMaybeAction = ssCmd
+getSs :: Maybe Client -> BarFeature
+getSs client = Feature
+  { ftrMaybeAction = DBusEndpoint_ (const ssCmd) xmonadBusName client [ssSignalDep]
   , ftrName = "screensaver indicator"
   , ftrWarning = Default
-  , ftrChildren = [ssSignalDep]
   }
 
 getAllCommands :: [MaybeAction CmdSpec] -> IO BarRegions

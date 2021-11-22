@@ -113,14 +113,15 @@ stateFileDep = pathRW stateFile
 brightnessFileDep :: Dependency
 brightnessFileDep = pathR brightnessFile
 
-clevoKeyboardSignalDep :: Dependency
+-- clevoKeyboardSignalDep :: Dependency
+clevoKeyboardSignalDep :: Endpoint
 clevoKeyboardSignalDep = signalDep clevoKeyboardConfig
 
-exportClevoKeyboard :: Client -> FeatureIO
+exportClevoKeyboard :: Maybe Client -> FeatureIO
 exportClevoKeyboard =
   brightnessExporter [stateFileDep, brightnessFileDep] clevoKeyboardConfig
 
-clevoKeyboardControls :: Client -> BrightnessControls
+clevoKeyboardControls :: Maybe Client -> BrightnessControls
 clevoKeyboardControls = brightnessControls clevoKeyboardConfig
 
 callGetBrightnessCK :: Client -> IO (Maybe Brightness)

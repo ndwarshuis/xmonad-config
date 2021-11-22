@@ -95,14 +95,15 @@ curFileDep = pathRW curFile
 maxFileDep :: Dependency
 maxFileDep = pathR maxFile
 
-intelBacklightSignalDep :: Dependency
+-- intelBacklightSignalDep :: Dependency
+intelBacklightSignalDep :: Endpoint
 intelBacklightSignalDep = signalDep intelBacklightConfig
 
-exportIntelBacklight :: Client -> FeatureIO
+exportIntelBacklight :: Maybe Client -> FeatureIO
 exportIntelBacklight =
   brightnessExporter [curFileDep, maxFileDep] intelBacklightConfig
 
-intelBacklightControls :: Client -> BrightnessControls
+intelBacklightControls :: Maybe Client -> BrightnessControls
 intelBacklightControls = brightnessControls intelBacklightConfig
 
 callGetBrightnessIB :: Client -> IO (Maybe Brightness)

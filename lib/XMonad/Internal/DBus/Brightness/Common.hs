@@ -50,7 +50,7 @@ data BrightnessControls = BrightnessControls
   , bctlDec :: FeatureIO
   }
 
-brightnessControls :: BrightnessConfig a b -> Client -> BrightnessControls
+brightnessControls :: BrightnessConfig a b -> Maybe Client -> BrightnessControls
 brightnessControls bc client =
   BrightnessControls
   { bctlMax = cb "max brightness" memMax
@@ -67,9 +67,10 @@ callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client = do
   reply <- callMethod client xmonadBusName p i memGet
   return $ either (const Nothing) bodyGetBrightness reply
 
-signalDep :: BrightnessConfig a b -> Dependency
+-- signalDep :: BrightnessConfig a b -> Dependency
+signalDep :: BrightnessConfig a b -> Endpoint
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
-  DBusEndpoint xmonadBus $ Endpoint p i $ Signal_ memCur
+  Endpoint p i $ Signal_ memCur
 
 matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> IO SignalHandler
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
@@ -88,12 +89,11 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
 -- | Internal DBus Crap
 
 brightnessExporter :: RealFrac b => [Dependency] -> BrightnessConfig a b
-  -> Client -> FeatureIO
+  -> Maybe Client -> FeatureIO
 brightnessExporter deps bc@BrightnessConfig { bcName = n } client = Feature
-  { ftrMaybeAction = exportBrightnessControls' bc client
+  { ftrMaybeAction = DBusBus_ (exportBrightnessControls' bc) xmonadBusName client deps
   , ftrName = n ++ " exporter"
   , ftrWarning = Default
-  , ftrChildren = DBusBus xmonadBus:deps
   }
 
 exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
@@ -131,7 +131,7 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
   where
     sig = signal p i memCur
 
-callBacklight :: Client -> BrightnessConfig a b -> String -> MemberName -> FeatureIO
+callBacklight :: Maybe Client -> BrightnessConfig a b -> String -> MemberName -> FeatureIO
 callBacklight client BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
   (featureEndpoint xmonadBusName p i m client)
   { ftrName = unwords [n, controlName] }

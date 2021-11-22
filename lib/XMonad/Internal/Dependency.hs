@@ -1,9 +1,18 @@
+{-# LANGUAGE DeriveFunctor   #-}
+{-# LANGUAGE GADTs           #-}
+{-# LANGUAGE RecordWildCards #-}
+
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
 
 module XMonad.Internal.Dependency
   ( MaybeAction
   , MaybeX
+  , Parent(..)
+  -- , ConstFeature(..)
+  , Chain(..)
+  , DBusEndpoint_(..)
+  , DBusBus_(..)
   , FeatureX
   , FeatureIO
   , Feature(..)
@@ -37,7 +46,7 @@ module XMonad.Internal.Dependency
 import           Control.Monad           (void)
 import           Control.Monad.IO.Class
 
-import           Data.Bifunctor          (bimap)
+import           Data.Bifunctor          (bimap, first, second)
 import           Data.List               (find)
 import           Data.Maybe              (catMaybes, fromMaybe, listToMaybe)
 
@@ -67,14 +76,34 @@ import           XMonad.Internal.Shell
 -- dependencies that target the output/state of another feature; this is more
 -- robust anyways, at the cost of being a bit slower.
 
-data Feature a = Feature
-  { ftrMaybeAction :: a
+data Feature a = forall e. Evaluable e => Feature
+  { ftrMaybeAction :: e a
   , ftrName        :: String
   , ftrWarning     :: Warning
-  , ftrChildren    :: [Dependency]
+  -- , ftrChildren    :: [Dependency]
   }
   | ConstFeature a
-  | BlankFeature
+  -- | BlankFeature
+
+-- TODO this name sucks
+data Parent a = Parent a [Dependency] deriving (Functor)
+
+-- newtype ConstFeature a = ConstFeature a deriving (Functor)
+
+data Chain a = forall b. Chain (b -> a) (IO (Either [String] b))
+
+instance Functor Chain where
+  fmap f (Chain a b) = Chain (f . a) b
+
+data DBusEndpoint_ a = DBusEndpoint_ (Client -> a) BusName (Maybe Client) [Endpoint]
+
+instance Functor DBusEndpoint_ where
+  fmap f (DBusEndpoint_ a b c eps) = DBusEndpoint_ (f . a) b c eps
+
+data DBusBus_ a = DBusBus_ (Client -> a) BusName (Maybe Client) [Dependency]
+
+instance Functor DBusBus_ where
+  fmap f (DBusBus_ a b c eps) = DBusBus_ (f . a) b c eps
 
 -- TODO this is silly as is, and could be made more useful by representing
 -- loglevels
@@ -84,17 +113,21 @@ type FeatureX = Feature (X ())
 
 type FeatureIO = Feature (IO ())
 
-ioFeature :: (MonadIO m) => Feature (IO a) -> Feature (m a)
-ioFeature f@Feature { ftrMaybeAction = a } = f { ftrMaybeAction = liftIO a }
-ioFeature (ConstFeature f)                 = ConstFeature $ liftIO f
-ioFeature BlankFeature                     = BlankFeature
+ioFeature :: MonadIO m => Feature (IO b) -> Feature (m b)
+ioFeature (ConstFeature a) = ConstFeature $ liftIO a
+ioFeature Feature {..} =
+  -- HACK just doing a normal record update here will make GHC complain about
+  -- an 'insufficiently polymorphic record update' ...I guess because my
+  -- GADT isn't polymorphic enough (which is obviously BS)
+  Feature {ftrMaybeAction = liftIO <$> ftrMaybeAction, ..}
 
 featureDefault :: String -> [Dependency] -> a -> Feature a
 featureDefault n ds x = Feature
-  { ftrMaybeAction = x
+  -- { ftrMaybeAction = x
+  { ftrMaybeAction = Parent x ds
   , ftrName = n
   , ftrWarning = Default
-  , ftrChildren = ds
+  -- , ftrChildren = ds
   }
 
 featureExe :: MonadIO m => String -> String -> Feature (m ())
@@ -104,17 +137,18 @@ featureExeArgs :: MonadIO m => String -> String -> [String] -> Feature (m ())
 featureExeArgs n cmd args =
   featureDefault n [Executable cmd] $ spawnCmd cmd args
 
--- TODO the bus and client might refer to different things
 featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
-  -> Client -> FeatureIO
+  -> Maybe Client -> FeatureIO
 featureEndpoint busname path iface mem client = Feature
-  { ftrMaybeAction = cmd
+  -- { ftrMaybeAction = cmd
+  { ftrMaybeAction = DBusEndpoint_ cmd busname client deps
   , ftrName = "screensaver toggle"
   , ftrWarning = Default
-  , ftrChildren = [DBusEndpoint (Bus False busname) $ Endpoint path iface $ Method_ mem]
+  -- , ftrChildren = [DBusEndpoint (Bus False busname) $ Endpoint path iface $ Method_ mem]
   }
   where
-    cmd = void $ callMethod client busname path iface mem
+    cmd = \c -> void $ callMethod c busname path iface mem
+    deps = [Endpoint path iface $ Method_ mem]
 
 --------------------------------------------------------------------------------
 -- | Feature evaluation
@@ -123,24 +157,62 @@ featureEndpoint busname path iface mem client = Feature
 -- either the action of the feature or 0 or more error messages that signify
 -- what dependencies are missing and why.
 
+class Functor e => Evaluable e where
+  eval :: e a -> IO (MaybeAction a)
+
 type MaybeAction a = Either [String] a
 
 type MaybeX = MaybeAction (X ())
 
+instance Evaluable Parent where
+  eval (Parent a ds) = do
+    es <- catMaybes <$> mapM evalDependency ds
+    return $ case es of
+      []  -> Right a
+      es' -> Left es'
+
+-- instance Evaluable ConstFeature where
+--   eval (ConstFeature a) = return $ Right a
+
+instance Evaluable Chain where
+  eval (Chain a b) = second a <$> b
+
+instance Evaluable DBusEndpoint_ where
+  eval (DBusEndpoint_ _ _ Nothing _) = return $ Left ["client not available"]
+  eval (DBusEndpoint_ action busname (Just client) deps) = do
+    es <- catMaybes <$> mapM (endpointSatisfied client busname) deps
+    return $ case es of
+      []  -> Right $ action client
+      es' -> Left es'
+
+instance Evaluable DBusBus_ where
+  eval (DBusBus_ _ _ Nothing _) = return $ Left ["client not available"]
+  eval (DBusBus_ action busname (Just client) deps) = do
+    res <- busSatisfied client busname
+    es <- catMaybes . (res:) <$> mapM evalDependency deps
+    return $ case es of
+      []  -> Right $ action client
+      es' -> Left es'
+
+-- instance Evaluable BlankFeature where
+--   eval (BlankFeature a) = Left ["hopefully a useful error message"]
+
 evalFeature :: Feature a -> IO (MaybeAction a)
 evalFeature (ConstFeature x) = return $ Right x
-evalFeature BlankFeature = return $ Left []
+-- evalFeature BlankFeature = return $ Left []
 evalFeature Feature
   { ftrMaybeAction = a
   , ftrName = n
   , ftrWarning = w
-  , ftrChildren = c
+  -- , ftrChildren = c
   } = do
   procName <- getProgName
-  es <- catMaybes <$> mapM evalDependency c
-  return $ case es of
-    []  -> Right a
-    es' -> Left $ fmtWarnings procName es'
+  res <- eval a
+  return $ first (fmtWarnings procName) res
+  -- es <- catMaybes <$> mapM evalDependency c
+  -- return $ case res of
+  --   []  -> Right a
+  --   es' -> Left $ fmtWarnings procName es'
   where
     fmtWarnings procName es = case w of
       Silent  -> []
@@ -173,9 +245,10 @@ ifSatisfied _ alt       = alt
 data Dependency = Executable String
   | AccessiblePath FilePath Bool Bool
   | IOTest (IO (Maybe String))
-  | DBusEndpoint Bus Endpoint
-  | DBusBus Bus
+  -- | DBusEndpoint Bus Endpoint
+  -- | DBusBus Bus
   | Systemd UnitType String
+
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
 
@@ -214,8 +287,8 @@ evalDependency (Executable n)         = exeSatisfied n
 evalDependency (IOTest t)             = t
 evalDependency (Systemd t n)          = unitSatisfied t n
 evalDependency (AccessiblePath p r w) = pathSatisfied p r w
-evalDependency (DBusEndpoint b e)     = endpointSatisfied b e
-evalDependency (DBusBus b)            = busSatisfied b
+-- evalDependency (DBusEndpoint b e)     = endpointSatisfied b e
+-- evalDependency (DBusBus b)            = busSatisfied b
 
 exeSatisfied :: String -> IO (Maybe String)
 exeSatisfied x = do
@@ -266,11 +339,11 @@ callMethod client bus path iface mem = do
            { methodCallDestination = Just bus }
   return $ bimap methodErrorMessage methodReturnBody reply
 
-busSatisfied :: Bus -> IO (Maybe String)
-busSatisfied (Bus usesystem bus) = do
-  client <- if usesystem then connectSystem else connectSession
+busSatisfied :: Client -> BusName -> IO (Maybe String)
+busSatisfied client bus = do
+  -- client <- if usesystem then connectSystem else connectSession
   ret <- callMethod client queryBus queryPath queryIface queryMem
-  disconnect client
+  -- disconnect client
   return $ case ret of
         Left e    -> Just e
         Right b -> let ns = bodyGetNames b in
@@ -285,11 +358,11 @@ busSatisfied (Bus usesystem bus) = do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-endpointSatisfied :: Bus -> Endpoint -> IO (Maybe String)
-endpointSatisfied (Bus u bus) (Endpoint objpath iface mem) = do
-  client <- if u then connectSystem else connectSession
-  ret <- callMethod client bus objpath introspectInterface introspectMethod
-  disconnect client
+endpointSatisfied :: Client -> BusName -> Endpoint -> IO (Maybe String)
+endpointSatisfied client busname (Endpoint objpath iface mem) = do
+  -- client <- if u then connectSystem else connectSession
+  ret <- callMethod client busname objpath introspectInterface introspectMethod
+  -- disconnect client
   return $ case ret of
         Left e     -> Just e
         Right body -> procBody body
@@ -315,7 +388,7 @@ endpointSatisfied (Bus u bus) (Endpoint objpath iface mem) = do
       , "on interface"
       , singleQuote $ formatInterfaceName iface
       , "on bus"
-      , formatBusName bus
+      , formatBusName busname
       ]
 
 --------------------------------------------------------------------------------
