@@ -90,7 +90,7 @@ listenDevices = do
 
 runRemovableMon :: Maybe Client -> FeatureIO
 runRemovableMon client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const listenDevices) bus client [addedDep, removedDep]
+  { ftrMaybeAction = DBusEndpoint_ (const listenDevices) bus client [addedDep, removedDep] []
   , ftrName = "removeable device monitor"
   , ftrWarning = Default
   }

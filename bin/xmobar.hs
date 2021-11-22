@@ -274,7 +274,7 @@ rightPlugins :: Maybe Client -> Maybe Client -> IO [MaybeAction CmdSpec]
 rightPlugins sysClient sesClient = mapM evalFeature
   [ getWireless
   , getEthernet
-  , getVPN
+  , getVPN sysClient
   , getBt sysClient
   , getAlsa
   , getBattery
@@ -291,8 +291,6 @@ getWireless = Feature
   , ftrName = "wireless status indicator"
   , ftrWarning = Default
   }
-  -- i <- readInterface isWireless
-  -- return $ maybe (Left []) (Right . wirelessCmd) i
 
 -- TODO this needs a dbus interface
 getEthernet :: BarFeature
@@ -316,20 +314,19 @@ getBattery = Feature
 
 type BarFeature = Feature CmdSpec
 
-getVPN :: BarFeature
-getVPN = Feature
-  { ftrMaybeAction = Parent vpnCmd [v]
+getVPN :: Maybe Client -> BarFeature
+getVPN client = Feature
+  { ftrMaybeAction = DBusEndpoint_ (const vpnCmd) vpnBus client
+                     [Endpoint vpnPath vpnInterface $ Property_ vpnConnType]
+                     [IOTest vpnPresent]
   , ftrName = "VPN status indicator"
   , ftrWarning = Default
   }
-  where
-    -- d = dbusDep True vpnBus vpnPath vpnInterface $ Property_ vpnConnType
-    v = IOTest vpnPresent
 
 getBt :: Maybe Client -> BarFeature
 getBt client = Feature
   { ftrMaybeAction = DBusEndpoint_ (const btCmd) btBus client
-                     [Endpoint btPath btInterface $ Property_ btPowered]
+                     [Endpoint btPath btInterface $ Property_ btPowered] []
   , ftrName = "bluetooth status indicator"
   , ftrWarning = Default
   }
@@ -343,21 +340,21 @@ getAlsa = Feature
 
 getBl :: Maybe Client -> BarFeature
 getBl client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const blCmd) xmonadBusName client [intelBacklightSignalDep]
+  { ftrMaybeAction = DBusEndpoint_ (const blCmd) xmonadBusName client [intelBacklightSignalDep] []
   , ftrName = "Intel backlight indicator"
   , ftrWarning = Default
   }
 
 getCk :: Maybe Client -> BarFeature
 getCk client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const ckCmd) xmonadBusName client [clevoKeyboardSignalDep]
+  { ftrMaybeAction = DBusEndpoint_ (const ckCmd) xmonadBusName client [clevoKeyboardSignalDep] []
   , ftrName = "Clevo keyboard indicator"
   , ftrWarning = Default
   }
 
 getSs :: Maybe Client -> BarFeature
 getSs client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const ssCmd) xmonadBusName client [ssSignalDep]
+  { ftrMaybeAction = DBusEndpoint_ (const ssCmd) xmonadBusName client [ssSignalDep] []
   , ftrName = "screensaver indicator"
   , ftrWarning = Default
   }

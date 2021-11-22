@@ -9,7 +9,6 @@ module XMonad.Internal.Dependency
   ( MaybeAction
   , MaybeX
   , Parent(..)
-  -- , ConstFeature(..)
   , Chain(..)
   , DBusEndpoint_(..)
   , DBusBus_(..)
@@ -80,25 +79,21 @@ data Feature a = forall e. Evaluable e => Feature
   { ftrMaybeAction :: e a
   , ftrName        :: String
   , ftrWarning     :: Warning
-  -- , ftrChildren    :: [Dependency]
   }
   | ConstFeature a
   -- | BlankFeature
 
--- TODO this name sucks
 data Parent a = Parent a [Dependency] deriving (Functor)
-
--- newtype ConstFeature a = ConstFeature a deriving (Functor)
 
 data Chain a = forall b. Chain (b -> a) (IO (Either [String] b))
 
 instance Functor Chain where
   fmap f (Chain a b) = Chain (f . a) b
 
-data DBusEndpoint_ a = DBusEndpoint_ (Client -> a) BusName (Maybe Client) [Endpoint]
+data DBusEndpoint_ a = DBusEndpoint_ (Client -> a) BusName (Maybe Client) [Endpoint] [Dependency]
 
 instance Functor DBusEndpoint_ where
-  fmap f (DBusEndpoint_ a b c eps) = DBusEndpoint_ (f . a) b c eps
+  fmap f (DBusEndpoint_ a b c es ds) = DBusEndpoint_ (f . a) b c es ds
 
 data DBusBus_ a = DBusBus_ (Client -> a) BusName (Maybe Client) [Dependency]
 
@@ -123,11 +118,9 @@ ioFeature Feature {..} =
 
 featureDefault :: String -> [Dependency] -> a -> Feature a
 featureDefault n ds x = Feature
-  -- { ftrMaybeAction = x
   { ftrMaybeAction = Parent x ds
   , ftrName = n
   , ftrWarning = Default
-  -- , ftrChildren = ds
   }
 
 featureExe :: MonadIO m => String -> String -> Feature (m ())
@@ -140,11 +133,9 @@ featureExeArgs n cmd args =
 featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
   -> Maybe Client -> FeatureIO
 featureEndpoint busname path iface mem client = Feature
-  -- { ftrMaybeAction = cmd
-  { ftrMaybeAction = DBusEndpoint_ cmd busname client deps
+  { ftrMaybeAction = DBusEndpoint_ cmd busname client deps []
   , ftrName = "screensaver toggle"
   , ftrWarning = Default
-  -- , ftrChildren = [DBusEndpoint (Bus False busname) $ Endpoint path iface $ Method_ mem]
   }
   where
     cmd = \c -> void $ callMethod c busname path iface mem
@@ -171,17 +162,15 @@ instance Evaluable Parent where
       []  -> Right a
       es' -> Left es'
 
--- instance Evaluable ConstFeature where
---   eval (ConstFeature a) = return $ Right a
-
 instance Evaluable Chain where
   eval (Chain a b) = second a <$> b
 
 instance Evaluable DBusEndpoint_ where
-  eval (DBusEndpoint_ _ _ Nothing _) = return $ Left ["client not available"]
-  eval (DBusEndpoint_ action busname (Just client) deps) = do
-    es <- catMaybes <$> mapM (endpointSatisfied client busname) deps
-    return $ case es of
+  eval (DBusEndpoint_ _ _ Nothing _ _) = return $ Left ["client not available"]
+  eval (DBusEndpoint_ action busname (Just client) es ds) = do
+    eperrors <- mapM (endpointSatisfied client busname) es
+    dperrors <- mapM evalDependency ds
+    return $ case catMaybes (eperrors ++ dperrors) of
       []  -> Right $ action client
       es' -> Left es'
 
