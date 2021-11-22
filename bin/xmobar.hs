@@ -312,7 +312,7 @@ type BarFeature = Feature CmdSpec
 
 getVPN :: Maybe Client -> BarFeature
 getVPN client = Feature
-  { ftrAction = DBusEndpoint_ (const vpnCmd) client [ep] [dp]
+  { ftrAction = DBusEndpoint (const vpnCmd) client [ep] [dp]
   , ftrName = "VPN status indicator"
   , ftrWarning = Default
   }
@@ -322,7 +322,7 @@ getVPN client = Feature
 
 getBt :: Maybe Client -> BarFeature
 getBt client = Feature
-  { ftrAction = DBusEndpoint_ (const btCmd) client [ep] []
+  { ftrAction = DBusEndpoint (const btCmd) client [ep] []
   , ftrName = "bluetooth status indicator"
   , ftrWarning = Default
   }
@@ -338,21 +338,21 @@ getAlsa = Feature
 
 getBl :: Maybe Client -> BarFeature
 getBl client = Feature
-  { ftrAction = DBusEndpoint_ (const blCmd) client [intelBacklightSignalDep] []
+  { ftrAction = DBusEndpoint (const blCmd) client [intelBacklightSignalDep] []
   , ftrName = "Intel backlight indicator"
   , ftrWarning = Default
   }
 
 getCk :: Maybe Client -> BarFeature
 getCk client = Feature
-  { ftrAction = DBusEndpoint_ (const ckCmd) client [clevoKeyboardSignalDep] []
+  { ftrAction = DBusEndpoint (const ckCmd) client [clevoKeyboardSignalDep] []
   , ftrName = "Clevo keyboard indicator"
   , ftrWarning = Default
   }
 
 getSs :: Maybe Client -> BarFeature
 getSs client = Feature
-  { ftrAction = DBusEndpoint_ (const ssCmd) client [ssSignalDep] []
+  { ftrAction = DBusEndpoint (const ssCmd) client [ssSignalDep] []
   , ftrName = "screensaver indicator"
   , ftrWarning = Default
   }

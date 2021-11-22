@@ -79,14 +79,14 @@ data Feature a = Feature
 
 data Action a = Parent a [Dependency]
   | forall b. Chain (b -> a) (IO (Either [String] b))
-  | DBusEndpoint_ (Client -> a) (Maybe Client) [Endpoint] [Dependency]
-  | DBusBus_ (Client -> a) BusName (Maybe Client) [Dependency]
+  | DBusEndpoint (Client -> a) (Maybe Client) [Endpoint] [Dependency]
+  | DBusBus (Client -> a) BusName (Maybe Client) [Dependency]
 
 instance Functor Action where
   fmap f (Parent a ds)             = Parent (f a) ds
   fmap f (Chain a b)               = Chain (f . a) b
-  fmap f (DBusEndpoint_ a c es ds) = DBusEndpoint_ (f . a) c es ds
-  fmap f (DBusBus_ a b c eps)      = DBusBus_ (f . a) b c eps
+  fmap f (DBusEndpoint a c es ds) = DBusEndpoint (f . a) c es ds
+  fmap f (DBusBus a b c eps)      = DBusBus (f . a) b c eps
 
 -- TODO this is silly as is, and could be made more useful by representing
 -- loglevels
@@ -121,7 +121,7 @@ featureExeArgs n cmd args =
 featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
   -> Maybe Client -> FeatureIO
 featureEndpoint busname path iface mem client = Feature
-  { ftrAction = DBusEndpoint_ cmd client deps []
+  { ftrAction = DBusEndpoint cmd client deps []
   , ftrName = "screensaver toggle"
   , ftrWarning = Default
   }
@@ -150,16 +150,16 @@ evalAction (Parent a ds) = do
 
 evalAction (Chain a b) = second a <$> b
 
-evalAction (DBusEndpoint_ _ Nothing _ _) = return $ Left ["client not available"]
-evalAction (DBusEndpoint_ action (Just client) es ds) = do
+evalAction (DBusEndpoint _ Nothing _ _) = return $ Left ["client not available"]
+evalAction (DBusEndpoint action (Just client) es ds) = do
   eperrors <- mapM (endpointSatisfied client) es
   dperrors <- mapM evalDependency ds
   return $ case catMaybes (eperrors ++ dperrors) of
     []  -> Right $ action client
     es' -> Left es'
 
-evalAction (DBusBus_ _ _ Nothing _) = return $ Left ["client not available"]
-evalAction (DBusBus_ action busname (Just client) deps) = do
+evalAction (DBusBus _ _ Nothing _) = return $ Left ["client not available"]
+evalAction (DBusBus action busname (Just client) deps) = do
   res <- busSatisfied client busname
   es <- catMaybes . (res:) <$> mapM evalDependency deps
   return $ case es of

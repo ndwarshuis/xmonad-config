@@ -91,7 +91,7 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
 brightnessExporter :: RealFrac b => [Dependency] -> BrightnessConfig a b
   -> Maybe Client -> FeatureIO
 brightnessExporter deps bc@BrightnessConfig { bcName = n } client = Feature
-  { ftrAction = DBusBus_ (exportBrightnessControls' bc) xmonadBusName client deps
+  { ftrAction = DBusBus (exportBrightnessControls' bc) xmonadBusName client deps
   , ftrName = n ++ " exporter"
   , ftrWarning = Default
   }
