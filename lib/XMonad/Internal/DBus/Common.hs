@@ -5,7 +5,7 @@ module XMonad.Internal.DBus.Common
   -- ( callMethod
   -- , callMethod'
   ( addMatchCallback
-  , xmonadBus
+  -- , xmonadBus
   , xmonadBusName
   -- , xDbusDep
   -- , initControls
@@ -14,13 +14,13 @@ module XMonad.Internal.DBus.Common
 import           DBus
 import           DBus.Client
 
-import           XMonad.Internal.Dependency
+-- import           XMonad.Internal.Dependency
 
 xmonadBusName :: BusName
 xmonadBusName = busName_ "org.xmonad"
 
-xmonadBus :: Bus
-xmonadBus = Bus False xmonadBusName
+-- xmonadBus :: Bus
+-- xmonadBus = Bus False xmonadBusName
 
 -- xDbusDep :: ObjectPath -> InterfaceName -> DBusMember -> Dependency
 -- xDbusDep o i m = DBusEndpoint xmonadBus $ Endpoint o i m

@@ -14,7 +14,6 @@ module XMonad.Internal.Dependency
   , Warning(..)
   , Dependency(..)
   , UnitType(..)
-  , Bus(..)
   , Endpoint(..)
   , DBusMember(..)
   , ioFeature
@@ -80,14 +79,14 @@ data Feature a = Feature
 
 data Action a = Parent a [Dependency]
   | forall b. Chain (b -> a) (IO (Either [String] b))
-  | DBusEndpoint_ (Client -> a) BusName (Maybe Client) [Endpoint] [Dependency]
+  | DBusEndpoint_ (Client -> a) (Maybe Client) [Endpoint] [Dependency]
   | DBusBus_ (Client -> a) BusName (Maybe Client) [Dependency]
 
 instance Functor Action where
-  fmap f (Parent a ds)               = Parent (f a) ds
-  fmap f (Chain a b)                 = Chain (f . a) b
-  fmap f (DBusEndpoint_ a b c es ds) = DBusEndpoint_ (f . a) b c es ds
-  fmap f (DBusBus_ a b c eps)        = DBusBus_ (f . a) b c eps
+  fmap f (Parent a ds)             = Parent (f a) ds
+  fmap f (Chain a b)               = Chain (f . a) b
+  fmap f (DBusEndpoint_ a c es ds) = DBusEndpoint_ (f . a) c es ds
+  fmap f (DBusBus_ a b c eps)      = DBusBus_ (f . a) b c eps
 
 -- TODO this is silly as is, and could be made more useful by representing
 -- loglevels
@@ -122,13 +121,13 @@ featureExeArgs n cmd args =
 featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
   -> Maybe Client -> FeatureIO
 featureEndpoint busname path iface mem client = Feature
-  { ftrMaybeAction = DBusEndpoint_ cmd busname client deps []
+  { ftrMaybeAction = DBusEndpoint_ cmd client deps []
   , ftrName = "screensaver toggle"
   , ftrWarning = Default
   }
   where
     cmd = \c -> void $ callMethod c busname path iface mem
-    deps = [Endpoint path iface $ Method_ mem]
+    deps = [Endpoint busname path iface $ Method_ mem]
 
 --------------------------------------------------------------------------------
 -- | Feature evaluation
@@ -151,9 +150,9 @@ evalAction (Parent a ds) = do
 
 evalAction (Chain a b) = second a <$> b
 
-evalAction (DBusEndpoint_ _ _ Nothing _ _) = return $ Left ["client not available"]
-evalAction (DBusEndpoint_ action busname (Just client) es ds) = do
-  eperrors <- mapM (endpointSatisfied client busname) es
+evalAction (DBusEndpoint_ _ Nothing _ _) = return $ Left ["client not available"]
+evalAction (DBusEndpoint_ action (Just client) es ds) = do
+  eperrors <- mapM (endpointSatisfied client) es
   dperrors <- mapM evalDependency ds
   return $ case catMaybes (eperrors ++ dperrors) of
     []  -> Right $ action client
@@ -166,34 +165,6 @@ evalAction (DBusBus_ action busname (Just client) deps) = do
   return $ case es of
     []  -> Right $ action client
     es' -> Left es'
-
--- instance Evaluable Parent where
---   eval (Parent a ds) = do
---     es <- catMaybes <$> mapM evalDependency ds
---     return $ case es of
---       []  -> Right a
---       es' -> Left es'
-
--- instance Evaluable Chain where
---   eval (Chain a b) = second a <$> b
-
--- instance Evaluable DBusEndpoint_ where
---   eval (DBusEndpoint_ _ _ Nothing _ _) = return $ Left ["client not available"]
---   eval (DBusEndpoint_ action busname (Just client) es ds) = do
---     eperrors <- mapM (endpointSatisfied client busname) es
---     dperrors <- mapM evalDependency ds
---     return $ case catMaybes (eperrors ++ dperrors) of
---       []  -> Right $ action client
---       es' -> Left es'
-
--- instance Evaluable DBusBus_ where
---   eval (DBusBus_ _ _ Nothing _) = return $ Left ["client not available"]
---   eval (DBusBus_ action busname (Just client) deps) = do
---     res <- busSatisfied client busname
---     es <- catMaybes . (res:) <$> mapM evalDependency deps
---     return $ case es of
---       []  -> Right $ action client
---       es' -> Left es'
 
 evalFeature :: Feature a -> IO (MaybeAction a)
 evalFeature (ConstFeature x) = return $ Right x
@@ -246,9 +217,7 @@ data DBusMember = Method_ MemberName
   | Property_ String
   deriving (Eq, Show)
 
-data Bus = Bus Bool BusName deriving (Eq, Show)
-
-data Endpoint = Endpoint ObjectPath InterfaceName DBusMember deriving (Eq, Show)
+data Endpoint = Endpoint BusName ObjectPath InterfaceName DBusMember deriving (Eq, Show)
 
 pathR :: String -> Dependency
 pathR n = AccessiblePath n True False
@@ -345,8 +314,8 @@ busSatisfied client bus = do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-endpointSatisfied :: Client -> BusName -> Endpoint -> IO (Maybe String)
-endpointSatisfied client busname (Endpoint objpath iface mem) = do
+endpointSatisfied :: Client -> Endpoint -> IO (Maybe String)
+endpointSatisfied client (Endpoint busname objpath iface mem) = do
   -- client <- if u then connectSystem else connectSession
   ret <- callMethod client busname objpath introspectInterface introspectMethod
   -- disconnect client

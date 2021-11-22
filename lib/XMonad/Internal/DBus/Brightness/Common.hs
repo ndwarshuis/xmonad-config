@@ -70,7 +70,7 @@ callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client = do
 -- signalDep :: BrightnessConfig a b -> Dependency
 signalDep :: BrightnessConfig a b -> Endpoint
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
-  Endpoint p i $ Signal_ memCur
+  Endpoint xmonadBusName p i $ Signal_ memCur
 
 matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> IO SignalHandler
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
@@ -135,12 +135,6 @@ callBacklight :: Maybe Client -> BrightnessConfig a b -> String -> MemberName ->
 callBacklight client BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
   (featureEndpoint xmonadBusName p i m client)
   { ftrName = unwords [n, controlName] }
-  -- Feature
-  -- { ftrMaybeAction = void $ callMethod client xmonadBusName p i m
-  -- , ftrName = unwords [n, controlName]
-  -- , ftrWarning = Default
-  -- , ftrChildren = [xDbusDep p i $ Method_ m]
-  -- }
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)

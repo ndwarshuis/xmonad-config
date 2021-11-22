@@ -36,7 +36,7 @@ memRemoved = memberName_ "InterfacesRemoved"
 -- dbusDep :: MemberName -> Dependency
 -- dbusDep m = DBusEndpoint (Bus True bus) (Endpoint path interface $ Signal_ m)
 dbusDep :: MemberName -> Endpoint
-dbusDep m = Endpoint path interface $ Signal_ m
+dbusDep m = Endpoint bus path interface $ Signal_ m
 
 -- addedDep :: Dependency
 addedDep :: Endpoint
@@ -90,7 +90,7 @@ listenDevices = do
 
 runRemovableMon :: Maybe Client -> FeatureIO
 runRemovableMon client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const listenDevices) bus client [addedDep, removedDep] []
+  { ftrMaybeAction = DBusEndpoint_ (const listenDevices) client [addedDep, removedDep] []
   , ftrName = "removeable device monitor"
   , ftrWarning = Default
   }

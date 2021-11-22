@@ -41,7 +41,6 @@ import           XMonad.Hooks.DynamicLog
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
-import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.Shell
 -- import           XMonad.Internal.DBus.Common                    (xmonadBus)
@@ -230,9 +229,6 @@ dateCmd = CmdSpec
 -- some commands depend on the presence of interfaces that can only be
 -- determined at runtime; define these checks here
 
--- dbusDep :: Bool -> BusName -> ObjectPath -> InterfaceName -> DBusMember -> Dependency
--- dbusDep usesys bus obj iface mem = DBusEndpoint (Bus usesys bus) (Endpoint obj iface mem)
-
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
 -- interfaces always start with "wl"
@@ -316,20 +312,22 @@ type BarFeature = Feature CmdSpec
 
 getVPN :: Maybe Client -> BarFeature
 getVPN client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const vpnCmd) vpnBus client
-                     [Endpoint vpnPath vpnInterface $ Property_ vpnConnType]
-                     [IOTest vpnPresent]
+  { ftrMaybeAction = DBusEndpoint_ (const vpnCmd) client [ep] [dp]
   , ftrName = "VPN status indicator"
   , ftrWarning = Default
   }
+  where
+    ep = Endpoint vpnBus vpnPath vpnInterface $ Property_ vpnConnType
+    dp = IOTest vpnPresent
 
 getBt :: Maybe Client -> BarFeature
 getBt client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const btCmd) btBus client
-                     [Endpoint btPath btInterface $ Property_ btPowered] []
+  { ftrMaybeAction = DBusEndpoint_ (const btCmd) client [ep] []
   , ftrName = "bluetooth status indicator"
   , ftrWarning = Default
   }
+  where
+    ep = Endpoint btBus btPath btInterface $ Property_ btPowered
 
 getAlsa :: BarFeature
 getAlsa = Feature
@@ -340,21 +338,21 @@ getAlsa = Feature
 
 getBl :: Maybe Client -> BarFeature
 getBl client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const blCmd) xmonadBusName client [intelBacklightSignalDep] []
+  { ftrMaybeAction = DBusEndpoint_ (const blCmd) client [intelBacklightSignalDep] []
   , ftrName = "Intel backlight indicator"
   , ftrWarning = Default
   }
 
 getCk :: Maybe Client -> BarFeature
 getCk client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const ckCmd) xmonadBusName client [clevoKeyboardSignalDep] []
+  { ftrMaybeAction = DBusEndpoint_ (const ckCmd) client [clevoKeyboardSignalDep] []
   , ftrName = "Clevo keyboard indicator"
   , ftrWarning = Default
   }
 
 getSs :: Maybe Client -> BarFeature
 getSs client = Feature
-  { ftrMaybeAction = DBusEndpoint_ (const ssCmd) xmonadBusName client [ssSignalDep] []
+  { ftrMaybeAction = DBusEndpoint_ (const ssCmd) client [ssSignalDep] []
   , ftrName = "screensaver indicator"
   , ftrWarning = Default
   }

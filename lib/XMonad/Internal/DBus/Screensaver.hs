@@ -123,14 +123,6 @@ callToggle :: Maybe Client -> FeatureIO
 callToggle client =
   (featureEndpoint xmonadBusName ssPath interface memToggle client)
   { ftrName = "screensaver toggle" }
--- callToggle client = Feature
---   { ftrMaybeAction = cmd
---   , ftrName = "screensaver toggle"
---   , ftrWarning = Default
---   , ftrChildren = [xDbusDep ssPath interface $ Method_ memToggle]
---   }
---   where
---     cmd = void $ callMethod client xmonadBusName ssPath interface memToggle
 
 callQuery :: Client -> IO (Maybe SSState)
 callQuery client = do
@@ -140,8 +132,5 @@ callQuery client = do
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler
 matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
 
--- ssSignalDep :: Dependency
 ssSignalDep :: Endpoint
--- ssSignalDep = DBusEndpoint xmonadBus $ Endpoint ssPath interface
---   $ Signal_ memState
-ssSignalDep = Endpoint ssPath interface $ Signal_ memState
+ssSignalDep = Endpoint xmonadBusName ssPath interface $ Signal_ memState

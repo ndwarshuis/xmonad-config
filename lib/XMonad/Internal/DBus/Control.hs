@@ -9,7 +9,7 @@ module XMonad.Internal.DBus.Control
   , getDBusClient
   , stopXMonadService
   , pathExists
-  , xmonadBus
+  -- , xmonadBus
   , disconnect
   ) where
 
