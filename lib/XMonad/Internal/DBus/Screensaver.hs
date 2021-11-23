@@ -95,7 +95,7 @@ bodyGetCurrentState _   = Nothing
 
 exportScreensaver :: Maybe Client -> FeatureIO
 exportScreensaver client = Feature
-  { ftrAction = DBusBus cmd xmonadBusName client [Executable ssExecutable]
+  { ftrAction = DBusTree (Single cmd) client [Bus xmonadBusName] [Executable ssExecutable]
   , ftrName = "screensaver interface"
   , ftrWarning = Default
   }
@@ -132,5 +132,5 @@ callQuery client = do
 matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler
 matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
 
-ssSignalDep :: Endpoint
+ssSignalDep :: DBusDep
 ssSignalDep = Endpoint xmonadBusName ssPath interface $ Signal_ memState

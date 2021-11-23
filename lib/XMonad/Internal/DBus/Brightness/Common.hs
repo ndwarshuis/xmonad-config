@@ -67,7 +67,7 @@ callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client = do
   reply <- callMethod client xmonadBusName p i memGet
   return $ either (const Nothing) bodyGetBrightness reply
 
-signalDep :: BrightnessConfig a b -> Endpoint
+signalDep :: BrightnessConfig a b -> DBusDep
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
   Endpoint xmonadBusName p i $ Signal_ memCur
 
@@ -90,7 +90,7 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
 brightnessExporter :: RealFrac b => [Dependency] -> BrightnessConfig a b
   -> Maybe Client -> FeatureIO
 brightnessExporter deps bc@BrightnessConfig { bcName = n } client = Feature
-  { ftrAction = DBusBus (exportBrightnessControls' bc) xmonadBusName client deps
+  { ftrAction = DBusTree (Single (exportBrightnessControls' bc)) client [Bus xmonadBusName] deps
   , ftrName = n ++ " exporter"
   , ftrWarning = Default
   }

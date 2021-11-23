@@ -33,13 +33,13 @@ memAdded = memberName_ "InterfacesAdded"
 memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
-dbusDep :: MemberName -> Endpoint
+dbusDep :: MemberName -> DBusDep
 dbusDep m = Endpoint bus path interface $ Signal_ m
 
-addedDep :: Endpoint
+addedDep :: DBusDep
 addedDep = dbusDep memAdded
 
-removedDep :: Endpoint
+removedDep :: DBusDep
 removedDep = dbusDep memRemoved
 
 driveInsertedSound :: FilePath
@@ -86,7 +86,7 @@ listenDevices = do
 
 runRemovableMon :: Maybe Client -> FeatureIO
 runRemovableMon client = Feature
-  { ftrAction = DBusEndpoint (const listenDevices) client [addedDep, removedDep] []
+  { ftrAction = DBusTree (Single (const listenDevices)) client [addedDep, removedDep] []
   , ftrName = "removeable device monitor"
   , ftrWarning = Default
   }

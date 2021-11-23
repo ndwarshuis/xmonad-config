@@ -95,7 +95,7 @@ curFileDep = pathRW curFile
 maxFileDep :: Dependency
 maxFileDep = pathR maxFile
 
-intelBacklightSignalDep :: Endpoint
+intelBacklightSignalDep :: DBusDep
 intelBacklightSignalDep = signalDep intelBacklightConfig
 
 exportIntelBacklight :: Maybe Client -> FeatureIO

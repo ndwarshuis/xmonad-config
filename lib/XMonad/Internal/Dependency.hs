@@ -7,14 +7,15 @@
 module XMonad.Internal.Dependency
   ( MaybeAction
   , MaybeX
+  , DepTree(..)
   , Action(..)
+  , DBusDep(..)
   , FeatureX
   , FeatureIO
   , Feature(..)
   , Warning(..)
   , Dependency(..)
   , UnitType(..)
-  , Endpoint(..)
   , DBusMember(..)
   , ioFeature
   , evalFeature
@@ -37,10 +38,10 @@ module XMonad.Internal.Dependency
   , callMethod
   ) where
 
-import           Control.Monad           (void)
 import           Control.Monad.IO.Class
+import           Control.Monad.Identity
 
-import           Data.Bifunctor          (bimap, first, second)
+import           Data.Bifunctor          (bimap, first)
 import           Data.List               (find)
 import           Data.Maybe              (catMaybes, fromMaybe, listToMaybe)
 
@@ -71,22 +72,24 @@ import           XMonad.Internal.Shell
 -- robust anyways, at the cost of being a bit slower.
 
 data Feature a = Feature
-  { ftrAction  :: Action a
+  { ftrAction  :: DepTree a
   , ftrName    :: String
   , ftrWarning :: Warning
   }
   | ConstFeature a
 
-data Action a = Parent a [Dependency]
-  | forall b. Chain (b -> a) (IO (Either [String] b))
-  | DBusEndpoint (Client -> a) (Maybe Client) [Endpoint] [Dependency]
-  | DBusBus (Client -> a) BusName (Maybe Client) [Dependency]
+data DepTree a = GenTree (Action a) [Dependency]
+  | DBusTree (Action (Client -> a)) (Maybe Client) [DBusDep] [Dependency]
+
+data Action a = Single a | forall b. Double (b -> a) (IO (Either [String] b))
 
 instance Functor Action where
-  fmap f (Parent a ds)            = Parent (f a) ds
-  fmap f (Chain a b)              = Chain (f . a) b
-  fmap f (DBusEndpoint a c es ds) = DBusEndpoint (f . a) c es ds
-  fmap f (DBusBus a b c eps)      = DBusBus (f . a) b c eps
+  fmap f (Single a)   = Single (f a)
+  fmap f (Double a b) = Double (f . a) b
+
+instance Functor DepTree where
+  fmap f (GenTree a ds)       = GenTree (f <$> a) ds
+  fmap f (DBusTree a c es ds) = DBusTree (fmap (fmap f) a) c es ds
 
 -- TODO this is silly as is, and could be made more useful by representing
 -- loglevels
@@ -106,7 +109,7 @@ ioFeature Feature {..} =
 
 featureDefault :: String -> [Dependency] -> a -> Feature a
 featureDefault n ds x = Feature
-  { ftrAction = Parent x ds
+  { ftrAction = GenTree (Single x) ds
   , ftrName = n
   , ftrWarning = Default
   }
@@ -121,7 +124,7 @@ featureExeArgs n cmd args =
 featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
   -> Maybe Client -> FeatureIO
 featureEndpoint busname path iface mem client = Feature
-  { ftrAction = DBusEndpoint cmd client deps []
+  { ftrAction = DBusTree (Single cmd) client deps []
   , ftrName = "screensaver toggle"
   , ftrWarning = Default
   }
@@ -140,31 +143,33 @@ type MaybeAction a = Either [String] a
 
 type MaybeX = MaybeAction (X ())
 
-evalAction :: Action a -> IO (MaybeAction a)
+evalTree :: DepTree a -> IO (MaybeAction a)
 
-evalAction (Parent a ds) = do
+evalTree (GenTree action ds) = do
   es <- catMaybes <$> mapM evalDependency ds
-  return $ case es of
-    []  -> Right a
-    es' -> Left es'
+  case es of
+    []  -> do
+      action' <- evalAction action
+      return $ case action' of
+        Right f  -> Right f
+        Left es' -> Left es'
+    es' -> return $ Left es'
 
-evalAction (Chain a b) = second a <$> b
-
-evalAction (DBusEndpoint _ Nothing _ _) = return $ Left ["client not available"]
-evalAction (DBusEndpoint action (Just client) es ds) = do
-  eperrors <- mapM (endpointSatisfied client) es
+evalTree (DBusTree _ Nothing _ _) = return $ Left ["client not available"]
+evalTree (DBusTree action (Just client) es ds) = do
+  eperrors <- mapM (dbusDepSatisfied client) es
   dperrors <- mapM evalDependency ds
-  return $ case catMaybes (eperrors ++ dperrors) of
-    []  -> Right $ action client
-    es' -> Left es'
+  case catMaybes (eperrors ++ dperrors) of
+    []  -> do
+      action' <- evalAction action
+      return $ case action' of
+        Right f  -> Right $ f client
+        Left es' -> Left es'
+    es' -> return $ Left es'
 
-evalAction (DBusBus _ _ Nothing _) = return $ Left ["client not available"]
-evalAction (DBusBus action busname (Just client) deps) = do
-  res <- busSatisfied client busname
-  es <- catMaybes . (res:) <$> mapM evalDependency deps
-  return $ case es of
-    []  -> Right $ action client
-    es' -> Left es'
+evalAction :: Action a -> IO (Either [String] a)
+evalAction (Single a)   = return $ Right a
+evalAction (Double a b) = fmap a <$> b
 
 evalFeature :: Feature a -> IO (MaybeAction a)
 evalFeature (ConstFeature x) = return $ Right x
@@ -174,7 +179,7 @@ evalFeature Feature
   , ftrWarning = w
   } = do
   procName <- getProgName
-  res <- evalAction a
+  res <- evalTree a
   return $ first (fmtWarnings procName) res
   where
     fmtWarnings procName es = case w of
@@ -217,7 +222,10 @@ data DBusMember = Method_ MemberName
   | Property_ String
   deriving (Eq, Show)
 
-data Endpoint = Endpoint BusName ObjectPath InterfaceName DBusMember deriving (Eq, Show)
+data DBusDep =
+  Bus BusName
+  | Endpoint BusName ObjectPath InterfaceName DBusMember
+  deriving (Eq, Show)
 
 pathR :: String -> Dependency
 pathR n = AccessiblePath n True False
@@ -295,11 +303,9 @@ callMethod client bus path iface mem = do
            { methodCallDestination = Just bus }
   return $ bimap methodErrorMessage methodReturnBody reply
 
-busSatisfied :: Client -> BusName -> IO (Maybe String)
-busSatisfied client bus = do
-  -- client <- if usesystem then connectSystem else connectSession
+dbusDepSatisfied :: Client -> DBusDep -> IO (Maybe String)
+dbusDepSatisfied client (Bus bus) = do
   ret <- callMethod client queryBus queryPath queryIface queryMem
-  -- disconnect client
   return $ case ret of
         Left e    -> Just e
         Right b -> let ns = bodyGetNames b in
@@ -314,11 +320,8 @@ busSatisfied client bus = do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-endpointSatisfied :: Client -> Endpoint -> IO (Maybe String)
-endpointSatisfied client (Endpoint busname objpath iface mem) = do
-  -- client <- if u then connectSystem else connectSession
+dbusDepSatisfied client (Endpoint busname objpath iface mem) = do
   ret <- callMethod client busname objpath introspectInterface introspectMethod
-  -- disconnect client
   return $ case ret of
         Left e     -> Just e
         Right body -> procBody body
