@@ -90,7 +90,6 @@ main = do
   lockRes <- evalFeature runScreenLock
   let lock = whenSatisfied lockRes
   ext <- evalExternal $ externalBindings ts lock
-  warnMissing $ externalToMissing ext
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   launch
@@ -497,15 +496,10 @@ filterExternal = fmap go
   where
     go k@KeyGroup { kgBindings = bs } = k { kgBindings = mapMaybe flagKeyBinding bs }
 
-externalToMissing :: [KeyGroup (MaybeAction a)] -> [MaybeAction a]
-externalToMissing = concatMap go
-  where
-    go KeyGroup { kgBindings = bs } = fmap kbMaybeAction bs
-
 flagKeyBinding :: KeyBinding MaybeX -> Maybe (KeyBinding (X ()))
 flagKeyBinding k@KeyBinding{ kbDesc = d, kbMaybeAction = a } = case a of
-  (Right x) -> Just $ k{ kbMaybeAction = x }
-  (Left _)  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbMaybeAction = skip }
+  (Just x) -> Just $ k{ kbMaybeAction = x }
+  Nothing  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbMaybeAction = skip }
 
 externalBindings :: ThreadState -> X () -> [KeyGroup FeatureX]
 externalBindings ts lock =

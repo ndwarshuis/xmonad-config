@@ -28,7 +28,6 @@ module XMonad.Internal.Dependency
   , featureExeArgs
   , featureExe
   , featureEndpoint
-  , warnMissing
   , whenSatisfied
   , ifSatisfied
   , executeFeature
@@ -41,7 +40,7 @@ module XMonad.Internal.Dependency
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
 
-import           Data.Bifunctor          (bimap, first)
+import           Data.Bifunctor          (bimap)
 import           Data.List               (find)
 import           Data.Maybe              (catMaybes, fromMaybe, listToMaybe)
 
@@ -139,11 +138,11 @@ featureEndpoint busname path iface mem client = Feature
 -- either the action of the feature or 0 or more error messages that signify
 -- what dependencies are missing and why.
 
-type MaybeAction a = Either [String] a
+type MaybeAction a = Maybe a
 
 type MaybeX = MaybeAction (X ())
 
-evalTree :: DepTree a -> IO (MaybeAction a)
+evalTree :: DepTree a -> IO (Either [String] a)
 
 evalTree (GenTree action ds) = do
   es <- catMaybes <$> mapM evalDependency ds
@@ -172,7 +171,7 @@ evalAction (Single a)   = return $ Right a
 evalAction (Double a b) = fmap a <$> b
 
 evalFeature :: Feature a -> IO (MaybeAction a)
-evalFeature (ConstFeature x) = return $ Right x
+evalFeature (ConstFeature x) = return $ Just x
 evalFeature Feature
   { ftrAction = a
   , ftrName = n
@@ -180,16 +179,17 @@ evalFeature Feature
   } = do
   procName <- getProgName
   res <- evalTree a
-  return $ first (fmtWarnings procName) res
+  either (\es -> printWarnings procName es >> return Nothing) (return . Just) res
   where
-    fmtWarnings procName es = case w of
-      Silent  -> []
-      Default -> fmap (fmtMsg procName "WARNING" . ((n ++ " disabled; ") ++)) es
+    printWarnings procName es = case w of
+      Silent  -> return ()
+      Default -> mapM_ putStrLn $ fmap (fmtMsg procName "WARNING" . ((n ++ " disabled; ") ++)) es
 
+-- TODO this should be 'executeFeatureWith'
 applyFeature :: MonadIO m => (m a -> m a) -> a -> Feature (IO a) -> m a
 applyFeature iof def ftr = do
   a <- io $ evalFeature ftr
-  either (\es -> io $ warnMissing' es >> return def) (iof . io) a
+  maybe (return def) (iof . io) a
 
 applyFeature_ :: MonadIO m => (m () -> m ()) -> Feature (IO ()) -> m ()
 applyFeature_ iof = applyFeature iof ()
@@ -204,8 +204,8 @@ whenSatisfied :: Monad m => MaybeAction (m ()) -> m ()
 whenSatisfied = flip ifSatisfied skip
 
 ifSatisfied ::  MaybeAction a -> a -> a
-ifSatisfied (Right x) _ = x
-ifSatisfied _ alt       = alt
+ifSatisfied (Just x) _ = x
+ifSatisfied _ alt      = alt
 
 --------------------------------------------------------------------------------
 -- | Dependencies
@@ -353,11 +353,11 @@ dbusDepSatisfied client (Endpoint busname objpath iface mem) = do
 --------------------------------------------------------------------------------
 -- | Logging functions
 
-warnMissing :: [MaybeAction a] -> IO ()
-warnMissing xs = warnMissing' $ concat $ [ m | (Left m) <- xs ]
+-- warnMissing :: [MaybeAction a] -> IO ()
+-- warnMissing xs = warnMissing' $ concat $ [ m | (Left m) <- xs ]
 
-warnMissing' :: [String] -> IO ()
-warnMissing' = mapM_ putStrLn
+-- warnMissing' :: [String] -> IO ()
+-- warnMissing' = mapM_ putStrLn
 
 fmtMsg :: String -> String -> String -> String
 fmtMsg procName level msg = unwords [bracket procName, bracket level, msg]

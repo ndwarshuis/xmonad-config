@@ -55,9 +55,7 @@ main :: IO ()
 main = do
   sysClient <- getDBusClient True
   sesClient <- getDBusClient False
-  rs <- rightPlugins sysClient sesClient
-  warnMissing rs
-  cs <- getAllCommands rs
+  cs <- getAllCommands =<< rightPlugins sysClient sesClient
   d <- getXMonadDir
   -- this is needed to see any printed messages
   hFlush stdout
@@ -364,11 +362,8 @@ getAllCommands right = do
   return $ BarRegions
     { brLeft = left
     , brCenter = []
-    , brRight = mapMaybe eval right
+    , brRight = catMaybes right
     }
-  where
-    eval (Right x) = Just x
-    eval _         = Nothing
 
 --------------------------------------------------------------------------------
 -- | various formatting things
