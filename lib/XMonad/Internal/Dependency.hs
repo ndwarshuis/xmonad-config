@@ -32,8 +32,8 @@ module XMonad.Internal.Dependency
   , ifSatisfied
   , executeFeature
   , executeFeature_
-  , applyFeature
-  , applyFeature_
+  , executeFeatureWith
+  , executeFeatureWith_
   , callMethod
   ) where
 
@@ -60,35 +60,21 @@ import           XMonad.Internal.Shell
 --------------------------------------------------------------------------------
 -- | Features
 --
--- A 'feature' is an 'action' (usually an IO ()) that requires one or more
--- 'dependencies'. Features also have a useful name and an error logging
--- protocol.
+-- A 'feature' is composed of a 'dependency tree' which at the root has an
+-- 'action' to be performed with a number of 'dependencies' below it.
 --
 -- NOTE: there is no way to make a feature depend on another feature. This is
 -- very complicated to implement and would only be applicable to a few instances
--- (notable the dbus interfaces). In order to implement a dependency tree, use
+-- (notably the dbus interfaces). In order to implement a dependency tree, use
 -- dependencies that target the output/state of another feature; this is more
 -- robust anyways, at the cost of being a bit slower.
 
 data Feature a = Feature
-  { ftrDepTree  :: DepTree a
+  { ftrDepTree :: DepTree a
   , ftrName    :: String
   , ftrWarning :: Warning
   }
   | ConstFeature a
-
-data DepTree a = GenTree (Action a) [Dependency]
-  | DBusTree (Action (Client -> a)) (Maybe Client) [DBusDep] [Dependency]
-
-data Action a = Single a | forall b. Double (b -> a) (IO (Either [String] b))
-
-instance Functor Action where
-  fmap f (Single a)   = Single (f a)
-  fmap f (Double a b) = Double (f . a) b
-
-instance Functor DepTree where
-  fmap f (GenTree a ds)       = GenTree (f <$> a) ds
-  fmap f (DBusTree a c es ds) = DBusTree (fmap (fmap f) a) c es ds
 
 -- TODO this is silly as is, and could be made more useful by representing
 -- loglevels
@@ -132,6 +118,33 @@ featureEndpoint busname path iface mem client = Feature
     deps = [Endpoint busname path iface $ Method_ mem]
 
 --------------------------------------------------------------------------------
+-- | Dependency Trees
+--
+-- Dependency trees have two subtypes: general and DBus. The latter require a
+-- DBus client to evaluate (and will automatically fail if this is missing).
+-- The former can be evaluated independently.
+
+data DepTree a = GenTree (Action a) [Dependency]
+  | DBusTree (Action (Client -> a)) (Maybe Client) [DBusDep] [Dependency]
+
+instance Functor DepTree where
+  fmap f (GenTree a ds)       = GenTree (f <$> a) ds
+  fmap f (DBusTree a c es ds) = DBusTree (fmap (fmap f) a) c es ds
+
+--------------------------------------------------------------------------------
+-- | Actions
+--
+-- Actions have two subtypes: single and double. Single actions are just one
+-- independent action. Double actions have one dependent pre-step which the
+-- main action consumes (and fails if the pre-step fails).
+
+data Action a = Single a | forall b. Double (b -> a) (IO (Either [String] b))
+
+instance Functor Action where
+  fmap f (Single a)   = Single (f a)
+  fmap f (Double a b) = Double (f . a) b
+
+--------------------------------------------------------------------------------
 -- | Feature evaluation
 --
 -- Evaluate a feature by testing if its dependencies are satisfied, and return
@@ -141,6 +154,27 @@ featureEndpoint busname path iface mem client = Feature
 type MaybeAction a = Maybe a
 
 type MaybeX = MaybeAction (X ())
+
+evalFeature :: Feature a -> IO (MaybeAction a)
+evalFeature (ConstFeature x) = return $ Just x
+evalFeature Feature
+  { ftrDepTree = a
+  , ftrName = n
+  , ftrWarning = w
+  } = do
+  procName <- getProgName
+  res <- evalTree a
+  either (printWarnings procName) (return . Just) res
+  where
+    printWarnings procName es = do
+      case w of
+        Silent  -> skip
+        Default -> let prefix = n ++ " disabled; "
+                       es' = fmap (fmtMsg procName . (prefix ++)) es in
+          mapM_ putStrLn es'
+      return Nothing
+    fmtMsg procName msg = unwords [bracket procName, bracket "WARNING", msg]
+    bracket s = "[" ++ s ++ "]"
 
 evalTree :: DepTree a -> IO (Either [String] a)
 
@@ -170,32 +204,16 @@ evalAction :: Action a -> IO (Either [String] a)
 evalAction (Single a)   = return $ Right a
 evalAction (Double a b) = fmap a <$> b
 
-evalFeature :: Feature a -> IO (MaybeAction a)
-evalFeature (ConstFeature x) = return $ Just x
-evalFeature Feature
-  { ftrDepTree = a
-  , ftrName = n
-  , ftrWarning = w
-  } = do
-  procName <- getProgName
-  res <- evalTree a
-  either (\es -> printWarnings procName es >> return Nothing) (return . Just) res
-  where
-    printWarnings procName es = case w of
-      Silent  -> return ()
-      Default -> mapM_ putStrLn $ fmap (fmtMsg procName "WARNING" . ((n ++ " disabled; ") ++)) es
-
--- TODO this should be 'executeFeatureWith'
-applyFeature :: MonadIO m => (m a -> m a) -> a -> Feature (IO a) -> m a
-applyFeature iof def ftr = do
+executeFeatureWith :: MonadIO m => (m a -> m a) -> a -> Feature (IO a) -> m a
+executeFeatureWith iof def ftr = do
   a <- io $ evalFeature ftr
   maybe (return def) (iof . io) a
 
-applyFeature_ :: MonadIO m => (m () -> m ()) -> Feature (IO ()) -> m ()
-applyFeature_ iof = applyFeature iof ()
+executeFeatureWith_ :: MonadIO m => (m () -> m ()) -> Feature (IO ()) -> m ()
+executeFeatureWith_ iof = executeFeatureWith iof ()
 
 executeFeature :: MonadIO m => a -> Feature (IO a) -> m a
-executeFeature = applyFeature id
+executeFeature = executeFeatureWith id
 
 executeFeature_ :: Feature (IO ()) -> IO ()
 executeFeature_ = executeFeature ()
@@ -208,7 +226,7 @@ ifSatisfied (Just x) _ = x
 ifSatisfied _ alt      = alt
 
 --------------------------------------------------------------------------------
--- | Dependencies
+-- | Dependencies (General)
 
 data Dependency = Executable String
   | AccessiblePath FilePath Bool Bool
@@ -216,16 +234,6 @@ data Dependency = Executable String
   | Systemd UnitType String
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
-
-data DBusMember = Method_ MemberName
-  | Signal_ MemberName
-  | Property_ String
-  deriving (Eq, Show)
-
-data DBusDep =
-  Bus BusName
-  | Endpoint BusName ObjectPath InterfaceName DBusMember
-  deriving (Eq, Show)
 
 pathR :: String -> Dependency
 pathR n = AccessiblePath n True False
@@ -243,7 +251,20 @@ userUnit :: String -> Dependency
 userUnit = Systemd UserUnit
 
 --------------------------------------------------------------------------------
--- | Dependency evaluation
+-- | Dependencies (DBus)
+
+data DBusMember = Method_ MemberName
+  | Signal_ MemberName
+  | Property_ String
+  deriving (Eq, Show)
+
+data DBusDep =
+  Bus BusName
+  | Endpoint BusName ObjectPath InterfaceName DBusMember
+  deriving (Eq, Show)
+
+--------------------------------------------------------------------------------
+-- | Dependency evaluation (General)
 --
 -- Test the existence of dependencies and return either Nothing (which actually
 -- means success) or Just <error message>.
@@ -288,6 +309,9 @@ pathSatisfied p testread testwrite = do
         (Just False, _)          -> Just "file not readable"
         (_, Just False)          -> Just "file not writable"
         _                        -> Nothing
+
+--------------------------------------------------------------------------------
+-- | Dependency evaluation (DBus)
 
 introspectInterface :: InterfaceName
 introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
@@ -349,17 +373,3 @@ dbusDepSatisfied client (Endpoint busname objpath iface mem) = do
       , "on bus"
       , formatBusName busname
       ]
-
---------------------------------------------------------------------------------
--- | Logging functions
-
--- warnMissing :: [MaybeAction a] -> IO ()
--- warnMissing xs = warnMissing' $ concat $ [ m | (Left m) <- xs ]
-
--- warnMissing' :: [String] -> IO ()
--- warnMissing' = mapM_ putStrLn
-
-fmtMsg :: String -> String -> String -> String
-fmtMsg procName level msg = unwords [bracket procName, bracket level, msg]
-  where
-    bracket s = "[" ++ s ++ "]"

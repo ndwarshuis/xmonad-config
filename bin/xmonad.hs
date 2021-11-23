@@ -79,7 +79,7 @@ main = do
   sesClient <- startXMonadService
   sysClient <- getDBusClient True
   (h, p) <- spawnPipe "xmobar"
-  mapM_ (applyFeature_ forkIO_) [runPowermon, runRemovableMon sysClient]
+  mapM_ (executeFeatureWith_ forkIO_) [runPowermon, runRemovableMon sysClient]
   forkIO_ $ runWorkspaceMon allDWs
   let ts = ThreadState
         { tsSessionClient = sesClient
