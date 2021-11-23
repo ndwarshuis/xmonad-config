@@ -126,5 +126,5 @@ clevoKeyboardControls = brightnessControls clevoKeyboardConfig
 callGetBrightnessCK :: Client -> IO (Maybe Brightness)
 callGetBrightnessCK = callGetBrightness clevoKeyboardConfig
 
-matchSignalCK :: (Maybe Brightness -> IO ()) -> IO SignalHandler
+matchSignalCK :: (Maybe Brightness -> IO ()) -> Client -> IO ()
 matchSignalCK = matchSignal clevoKeyboardConfig

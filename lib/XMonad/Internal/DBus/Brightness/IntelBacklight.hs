@@ -108,5 +108,5 @@ intelBacklightControls = brightnessControls intelBacklightConfig
 callGetBrightnessIB :: Client -> IO (Maybe Brightness)
 callGetBrightnessIB = callGetBrightness intelBacklightConfig
 
-matchSignalIB :: (Maybe Brightness -> IO ()) -> IO SignalHandler
+matchSignalIB :: (Maybe Brightness -> IO ()) -> Client -> IO ()
 matchSignalIB = matchSignal intelBacklightConfig

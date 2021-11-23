@@ -71,12 +71,9 @@ signalDep :: BrightnessConfig a b -> DBusDep
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
   Endpoint xmonadBusName p i $ Signal_ memCur
 
-matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> IO SignalHandler
-matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb = do
-  client <- connectSession
-  -- this connections must remain active
-  -- TODO does this need to be cleaned up during shutdown??
-  addMatch client brMatcher $ cb . bodyGetBrightness . signalBody
+matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> Client -> IO ()
+matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
+  addMatchCallback brMatcher (cb . bodyGetBrightness)
   where
     brMatcher = matchAny
       { matchPath = Just p

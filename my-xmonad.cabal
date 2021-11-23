@@ -24,6 +24,7 @@ library
                    , XMonad.Internal.DBus.Control
                    , XMonad.Internal.DBus.Screensaver
                    , XMonad.Internal.Process
+                   , Xmobar.Plugins.BacklightCommon
                    , Xmobar.Plugins.Bluetooth
                    , Xmobar.Plugins.ClevoKeyboard
                    , Xmobar.Plugins.Device

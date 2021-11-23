@@ -129,7 +129,7 @@ callQuery client = do
   reply <- callMethod client xmonadBusName ssPath interface memQuery
   return $ either (const Nothing) bodyGetCurrentState reply
 
-matchSignal :: (Maybe SSState -> IO ()) -> IO SignalHandler
+matchSignal :: (Maybe SSState -> IO ()) -> Client -> IO ()
 matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
 
 ssSignalDep :: DBusDep

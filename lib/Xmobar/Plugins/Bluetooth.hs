@@ -9,24 +9,24 @@
 module Xmobar.Plugins.Bluetooth
   ( Bluetooth(..)
   , btAlias
-  , btBus
-  , btPath
-  , btPowered
-  , btInterface
+  , btDep
   ) where
+
 
 import           DBus
 import           DBus.Client
 
-import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           XMonad.Hooks.DynamicLog    (xmobarColor)
+import           XMonad.Internal.Dependency
 import           Xmobar
 
 data Bluetooth = Bluetooth (String, String, String) Int
     deriving (Read, Show)
 
-callGetPowered :: Client -> IO (Either MethodError Variant)
-callGetPowered client =
-  getProperty client (methodCall btPath btInterface $ memberName_ btPowered)
+-- TODO match property signal here
+callGetPowered :: Client -> IO (Maybe Variant)
+callGetPowered client = either (const Nothing) Just
+  <$> getProperty client (methodCall btPath btInterface $ memberName_ btPowered)
     { methodCallDestination = Just btBus }
 
 btInterface :: InterfaceName
@@ -47,6 +47,9 @@ btPath = "/org/bluez/hci0"
 btAlias :: String
 btAlias = "bluetooth"
 
+btDep :: DBusDep
+btDep = Endpoint btBus btPath btInterface $ Property_ btPowered
+
 instance Exec Bluetooth where
   alias (Bluetooth _ _) = btAlias
   rate  (Bluetooth _ r) = r
@@ -54,12 +57,8 @@ instance Exec Bluetooth where
     client <- connectSystem
     reply <- callGetPowered client
     disconnect client
-    return $ fmtState $ procReply reply
+    return $ fmtState $ fromVariant =<< reply
     where
-      procReply = \case
-        -- TODO handle errors?
-        Right r -> fromVariant r
-        Left _  -> Nothing
       fmtState = \case
         Just s  -> xmobarColor (if s then colorOn else colorOff) "" text
         Nothing -> "N/A"

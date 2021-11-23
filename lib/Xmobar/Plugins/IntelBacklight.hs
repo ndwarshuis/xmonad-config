@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 --------------------------------------------------------------------------------
 -- | Intel backlight plugin
 --
@@ -11,12 +9,9 @@ module Xmobar.Plugins.IntelBacklight
   , blAlias
   ) where
 
-import           Control.Concurrent
-import           Control.Monad
-
-import           DBus.Client
-
 import           Xmobar
+
+import           Xmobar.Plugins.BacklightCommon
 
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 
@@ -27,11 +22,5 @@ blAlias = "intelbacklight"
 
 instance Exec IntelBacklight where
   alias (IntelBacklight _) = blAlias
-  start (IntelBacklight icon) cb = do
-    _ <- matchSignalIB $ cb . formatBrightness
-    cb . formatBrightness =<< callGetBrightnessIB =<< connectSession
-    forever (threadDelay 5000000)
-    where
-      formatBrightness = \case
-        Just b  -> icon ++ show (round b :: Integer) ++ "%"
-        Nothing -> "N/A"
+  start (IntelBacklight icon) cb =
+     startBacklight matchSignalIB callGetBrightnessIB icon cb

@@ -7,12 +7,13 @@ module XMonad.Internal.DBus.Control
   ( Client
   , startXMonadService
   , getDBusClient
+  , withDBusClient
+  , withDBusClient_
   , stopXMonadService
   , pathExists
   , disconnect
   ) where
 
-import           Control.Exception
 import           Control.Monad                                  (forM_, void)
 
 import           Data.Either
@@ -46,12 +47,6 @@ stopXMonadService client = do
   void $ releaseName client xmonadBusName
   disconnect client
 
-getDBusClient :: Bool -> IO (Maybe Client)
-getDBusClient sys = do
-  res <- try $ if sys then connectSystem else connectSession
-  case res of
-    Left e  -> putStrLn (clientErrorMessage e) >> return Nothing
-    Right c -> return $ Just c
 
 requestXMonadName :: Client -> IO ()
 requestXMonadName client = do

@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 --------------------------------------------------------------------------------
 -- | Clevo Keyboard plugin
 --
@@ -11,12 +9,9 @@ module Xmobar.Plugins.ClevoKeyboard
   , ckAlias
   ) where
 
-import           Control.Concurrent
-import           Control.Monad
-
-import           DBus.Client
-
 import           Xmobar
+
+import           Xmobar.Plugins.BacklightCommon
 
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 
@@ -28,12 +23,4 @@ ckAlias = "clevokeyboard"
 instance Exec ClevoKeyboard where
   alias (ClevoKeyboard _) = ckAlias
   start (ClevoKeyboard icon) cb = do
-    _ <- matchSignalCK $ cb . formatBrightness
-    -- TODO this could fail, and also should try to reuse client objects when
-    -- possible
-    cb . formatBrightness =<< callGetBrightnessCK =<< connectSession
-    forever (threadDelay 5000000)
-    where
-      formatBrightness = \case
-        Just b  -> icon ++ show (round b :: Integer) ++ "%"
-        Nothing -> "N/A"
+     startBacklight matchSignalCK callGetBrightnessCK icon cb

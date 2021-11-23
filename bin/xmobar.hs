@@ -12,6 +12,7 @@ module Main (main) where
 -- * A custom Locks plugin from my own forked repo
 
 import           Control.Monad                                  (unless)
+
 import           Data.Either
 import           Data.List
 import           Data.Maybe
@@ -42,12 +43,9 @@ import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
-import           XMonad.Internal.Shell
--- import           XMonad.Internal.DBus.Common                    (xmonadBus)
--- import           XMonad.Internal.DBus.Control                   (pathExists)
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
 import           XMonad.Internal.Dependency
--- import           XMonad.Internal.Shell                          (fmtCmd)
+import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                          as T
 import           Xmobar
 
@@ -223,13 +221,14 @@ dateCmd = CmdSpec
 
 --------------------------------------------------------------------------------
 -- | command runtime checks and setup
-
+--
 -- some commands depend on the presence of interfaces that can only be
 -- determined at runtime; define these checks here
-
+--
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
 -- interfaces always start with "wl"
+
 isWireless :: String -> Bool
 isWireless ('w':'l':_) = True
 isWireless _           = False
@@ -288,11 +287,12 @@ getWireless = Feature
 
 getEthernet :: Maybe Client -> BarFeature
 getEthernet client = Feature
-  { ftrDepTree = DBusTree (Double (\i _ -> ethernetCmd i) (readInterface isEthernet)) client [dep] []
+  { ftrDepTree = DBusTree action client [dep] []
   , ftrName = "ethernet status indicator"
   , ftrWarning = Default
   }
   where
+    action = Double (\i _ -> ethernetCmd i) (readInterface isEthernet)
     dep = Endpoint devBus devPath devInterface $ Method_ devGetByIP
 
 getBattery :: BarFeature
@@ -316,12 +316,10 @@ getVPN client = Feature
 
 getBt :: Maybe Client -> BarFeature
 getBt client = Feature
-  { ftrDepTree = DBusTree (Single (const btCmd)) client [ep] []
+  { ftrDepTree = DBusTree (Single (const btCmd)) client [btDep] []
   , ftrName = "bluetooth status indicator"
   , ftrWarning = Default
   }
-  where
-    ep = Endpoint btBus btPath btInterface $ Property_ btPowered
 
 getAlsa :: BarFeature
 getAlsa = Feature
