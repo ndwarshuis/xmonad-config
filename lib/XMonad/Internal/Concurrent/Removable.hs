@@ -86,7 +86,7 @@ listenDevices = do
 
 runRemovableMon :: Maybe Client -> FeatureIO
 runRemovableMon client = Feature
-  { ftrAction = DBusTree (Single (const listenDevices)) client [addedDep, removedDep] []
+  { ftrDepTree = DBusTree (Single (const listenDevices)) client [addedDep, removedDep] []
   , ftrName = "removeable device monitor"
   , ftrWarning = Default
   }

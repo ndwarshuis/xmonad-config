@@ -95,7 +95,7 @@ bodyGetCurrentState _   = Nothing
 
 exportScreensaver :: Maybe Client -> FeatureIO
 exportScreensaver client = Feature
-  { ftrAction = DBusTree (Single cmd) client [Bus xmonadBusName] [Executable ssExecutable]
+  { ftrDepTree = DBusTree (Single cmd) client [Bus xmonadBusName] [Executable ssExecutable]
   , ftrName = "screensaver interface"
   , ftrWarning = Default
   }

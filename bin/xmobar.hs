@@ -281,14 +281,14 @@ rightPlugins sysClient sesClient = mapM evalFeature
 
 getWireless :: BarFeature
 getWireless = Feature
-  { ftrAction = GenTree (Double wirelessCmd $ readInterface isWireless) []
+  { ftrDepTree = GenTree (Double wirelessCmd $ readInterface isWireless) []
   , ftrName = "wireless status indicator"
   , ftrWarning = Default
   }
 
 getEthernet :: Maybe Client -> BarFeature
 getEthernet client = Feature
-  { ftrAction = DBusTree (Double (\i _ -> ethernetCmd i) (readInterface isEthernet)) client [dep] []
+  { ftrDepTree = DBusTree (Double (\i _ -> ethernetCmd i) (readInterface isEthernet)) client [dep] []
   , ftrName = "ethernet status indicator"
   , ftrWarning = Default
   }
@@ -297,7 +297,7 @@ getEthernet client = Feature
 
 getBattery :: BarFeature
 getBattery = Feature
-  { ftrAction = GenTree (Single batteryCmd) [IOTest hasBattery]
+  { ftrDepTree = GenTree (Single batteryCmd) [IOTest hasBattery]
   , ftrName = "battery level indicator"
   , ftrWarning = Default
   }
@@ -306,7 +306,7 @@ type BarFeature = Feature CmdSpec
 
 getVPN :: Maybe Client -> BarFeature
 getVPN client = Feature
-  { ftrAction = DBusTree (Single (const vpnCmd)) client [ep] [dp]
+  { ftrDepTree = DBusTree (Single (const vpnCmd)) client [ep] [dp]
   , ftrName = "VPN status indicator"
   , ftrWarning = Default
   }
@@ -316,7 +316,7 @@ getVPN client = Feature
 
 getBt :: Maybe Client -> BarFeature
 getBt client = Feature
-  { ftrAction = DBusTree (Single (const btCmd)) client [ep] []
+  { ftrDepTree = DBusTree (Single (const btCmd)) client [ep] []
   , ftrName = "bluetooth status indicator"
   , ftrWarning = Default
   }
@@ -325,28 +325,28 @@ getBt client = Feature
 
 getAlsa :: BarFeature
 getAlsa = Feature
-  { ftrAction = GenTree (Single alsaCmd) [Executable "alsactl"]
+  { ftrDepTree = GenTree (Single alsaCmd) [Executable "alsactl"]
   , ftrName = "volume level indicator"
   , ftrWarning = Default
   }
 
 getBl :: Maybe Client -> BarFeature
 getBl client = Feature
-  { ftrAction = DBusTree (Single (const blCmd)) client [intelBacklightSignalDep] []
+  { ftrDepTree = DBusTree (Single (const blCmd)) client [intelBacklightSignalDep] []
   , ftrName = "Intel backlight indicator"
   , ftrWarning = Default
   }
 
 getCk :: Maybe Client -> BarFeature
 getCk client = Feature
-  { ftrAction = DBusTree (Single (const ckCmd)) client [clevoKeyboardSignalDep] []
+  { ftrDepTree = DBusTree (Single (const ckCmd)) client [clevoKeyboardSignalDep] []
   , ftrName = "Clevo keyboard indicator"
   , ftrWarning = Default
   }
 
 getSs :: Maybe Client -> BarFeature
 getSs client = Feature
-  { ftrAction = DBusTree (Single (const ssCmd)) client [ssSignalDep] []
+  { ftrDepTree = DBusTree (Single (const ssCmd)) client [ssSignalDep] []
   , ftrName = "screensaver indicator"
   , ftrWarning = Default
   }
