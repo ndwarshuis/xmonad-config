@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 --------------------------------------------------------------------------------
 -- | Bluetooth plugin
 --
@@ -12,25 +9,21 @@ module Xmobar.Plugins.Bluetooth
   , btDep
   ) where
 
+import           Data.Maybe
 
 import           DBus
 import           DBus.Client
 
-import           XMonad.Hooks.DynamicLog    (xmobarColor)
+import           XMonad.Hooks.DynamicLog     (xmobarColor)
+import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           Xmobar
 
-data Bluetooth = Bluetooth (String, String, String) Int
-    deriving (Read, Show)
+newtype Bluetooth = Bluetooth (String, String, String) deriving (Read, Show)
 
--- TODO match property signal here
-callGetPowered :: Client -> IO (Maybe Variant)
-callGetPowered client = either (const Nothing) Just
-  <$> getProperty client (methodCall btPath btInterface $ memberName_ btPowered)
-    { methodCallDestination = Just btBus }
 
 btInterface :: InterfaceName
-btInterface = "org.bluez.Adapter1"
+btInterface = interfaceName_ "org.bluez.Adapter1"
 
 -- weird that this is a string when introspecting but a member name when calling
 -- a method, not sure if it is supposed to work like that
@@ -38,11 +31,11 @@ btPowered :: String
 btPowered = "Powered"
 
 btBus :: BusName
-btBus = "org.bluez"
+btBus = busName_ "org.bluez"
 
 -- TODO this feels like something that shouldn't be hardcoded
 btPath :: ObjectPath
-btPath = "/org/bluez/hci0"
+btPath = objectPath_ "/org/bluez/hci0"
 
 btAlias :: String
 btAlias = "bluetooth"
@@ -50,15 +43,21 @@ btAlias = "bluetooth"
 btDep :: DBusDep
 btDep = Endpoint btBus btPath btInterface $ Property_ btPowered
 
+matchPowered :: [Variant] -> SignalMatch Bool
+matchPowered = matchPropertyChanged btInterface btPowered fromVariant
+
+callGetPowered :: Client -> IO [Variant]
+callGetPowered = callPropertyGet btBus btPath btInterface btPowered
+
 instance Exec Bluetooth where
-  alias (Bluetooth _ _) = btAlias
-  rate  (Bluetooth _ r) = r
-  run   (Bluetooth (text, colorOn, colorOff) _) = do
-    client <- connectSystem
-    reply <- callGetPowered client
-    disconnect client
-    return $ fmtState $ fromVariant =<< reply
+  alias (Bluetooth _) = btAlias
+  start (Bluetooth (text, colorOn, colorOff)) cb = do
+    withDBusClientConnection_ True $ \c -> do
+      reply <- callGetPowered c
+      cb $ maybe "N/A" chooseColor $ fromVariant =<< listToMaybe reply
+      addMatchCallback (matchProperty btPath) (procMatch cb . matchPowered) c
     where
-      fmtState = \case
-        Just s  -> xmobarColor (if s then colorOn else colorOff) "" text
-        Nothing -> "N/A"
+      procMatch f (Match on) = f $ chooseColor on
+      procMatch f Failure    = f "N/A"
+      procMatch _ NoMatch    = return ()
+      chooseColor state = xmobarColor (if state then colorOn else colorOff) "" text

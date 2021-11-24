@@ -11,7 +11,7 @@ module Main (main) where
 -- * Theme integration with xmonad (shared module imported below)
 -- * A custom Locks plugin from my own forked repo
 
-import           Control.Monad                                  (unless)
+import           Control.Monad
 
 import           Data.Either
 import           Data.List
@@ -42,7 +42,8 @@ import           XMonad.Hooks.DynamicLog
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
-import           XMonad.Internal.DBus.Control
+import           XMonad.Internal.DBus.Common
+-- import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
@@ -162,7 +163,7 @@ btCmd :: CmdSpec
 btCmd = CmdSpec
   { csAlias = btAlias
   , csRunnable = Run
-    $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor) 5
+    $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor)
   }
 
 alsaCmd :: CmdSpec
