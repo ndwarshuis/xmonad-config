@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 --------------------------------------------------------------------------------
 -- | Screensaver plugin
 --
@@ -11,14 +9,11 @@ module Xmobar.Plugins.Screensaver
   , ssAlias
   ) where
 
-import           Control.Concurrent
-import           Control.Monad
-
 import           Xmobar
 
-import           XMonad.Hooks.DynamicLog          (xmobarColor)
-import           XMonad.Internal.DBus.Control
+import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
+import           Xmobar.Plugins.Common
 
 newtype Screensaver = Screensaver (String, String, String) deriving (Read, Show)
 
@@ -26,14 +21,11 @@ ssAlias :: String
 ssAlias = "screensaver"
 
 instance Exec Screensaver where
-    alias (Screensaver _) = ssAlias
-    start (Screensaver (text, colorOn, colorOff)) cb = do
-      withDBusClient_ False $ \c -> do
-        matchSignal (cb . fmtState) c
-        cb . fmtState =<< callQuery c
-      forever (threadDelay 5000000)
-      where
-        fmtState = \case
-          Just s  -> xmobarColor (if s then colorOn else colorOff) "" text
-          Nothing -> "N/A"
+  alias (Screensaver _) = ssAlias
+  start (Screensaver (text, colorOn, colorOff)) cb = do
+    withDBusClientConnection_ False $ \c -> do
+      matchSignal (cb . fmtState) c
+      cb . fmtState =<< callQuery c
+    where
+      fmtState = maybe "N/A" $ chooseColor text colorOn colorOff
 
