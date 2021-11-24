@@ -9,10 +9,7 @@ module Xmobar.Plugins.VPN
   , vpnDep
   ) where
 
-import           Data.Maybe
-
 import           DBus
-import           DBus.Client
 
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
@@ -39,21 +36,12 @@ vpnAlias = "vpn"
 vpnDep :: DBusDep
 vpnDep = Endpoint vpnBus vpnPath vpnInterface $ Property_ vpnConnType
 
-matchConnType :: [Variant] -> SignalMatch String
-matchConnType = matchPropertyChanged vpnInterface vpnConnType fromVariant
-
-callGetConnectionType :: Client -> IO [Variant]
-callGetConnectionType = callPropertyGet vpnBus vpnPath vpnInterface vpnConnType
-
 instance Exec VPN where
   alias (VPN _) = vpnAlias
-  start (VPN (text, colorOn, colorOff)) cb = do
-    withDBusClientConnection_ True $ \c -> do
-      reply <- callGetConnectionType c
-      cb $ maybe "N/A" chooseColor' $ fromVariant =<< listToMaybe reply
-      addMatchCallback (matchProperty vpnPath) (procMatch cb . matchConnType) c
+  start (VPN (text, colorOn, colorOff)) cb =
+    startListener rule getProp fromSignal chooseColor' cb
     where
-      procMatch f (Match t) = f $ chooseColor' t
-      procMatch f Failure   = f "N/A"
-      procMatch _ NoMatch   = return ()
+      rule = matchProperty vpnPath
+      getProp = callPropertyGet vpnBus vpnPath vpnInterface vpnConnType
+      fromSignal = matchPropertyChanged vpnInterface vpnConnType fromVariant
       chooseColor' = chooseColor text colorOn colorOff . ("vpn" ==)
