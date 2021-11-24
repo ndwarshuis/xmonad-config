@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 --------------------------------------------------------------------------------
 -- | VPN plugin
 --
@@ -9,34 +6,29 @@
 module Xmobar.Plugins.VPN
   ( VPN(..)
   , vpnAlias
-  , vpnBus
-  , vpnPath
-  , vpnInterface
-  , vpnConnType
+  , vpnDep
   ) where
+
+import           Data.Maybe
 
 import           DBus
 import           DBus.Client
 
-import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           XMonad.Internal.DBus.Common
+import           XMonad.Internal.Dependency
 import           Xmobar
+import           Xmobar.Plugins.Common
 
-data VPN = VPN (String, String, String) Int
-    deriving (Read, Show)
-
-callConnectionType :: Client -> IO (Either MethodError Variant)
-callConnectionType client =
-  getProperty client (methodCall vpnPath vpnInterface $ memberName_ vpnConnType)
-    { methodCallDestination = Just vpnBus }
+newtype VPN = VPN (String, String, String) deriving (Read, Show)
 
 vpnBus :: BusName
-vpnBus = "org.freedesktop.NetworkManager"
+vpnBus = busName_ "org.freedesktop.NetworkManager"
 
 vpnPath :: ObjectPath
-vpnPath = "/org/freedesktop/NetworkManager"
+vpnPath = objectPath_ "/org/freedesktop/NetworkManager"
 
 vpnInterface :: InterfaceName
-vpnInterface = "org.freedesktop.NetworkManager"
+vpnInterface = interfaceName_ "org.freedesktop.NetworkManager"
 
 vpnConnType :: String
 vpnConnType = "PrimaryConnectionType"
@@ -44,18 +36,24 @@ vpnConnType = "PrimaryConnectionType"
 vpnAlias :: String
 vpnAlias = "vpn"
 
+vpnDep :: DBusDep
+vpnDep = Endpoint vpnBus vpnPath vpnInterface $ Property_ vpnConnType
+
+matchConnType :: [Variant] -> SignalMatch String
+matchConnType = matchPropertyChanged vpnInterface vpnConnType fromVariant
+
+callGetConnectionType :: Client -> IO [Variant]
+callGetConnectionType = callPropertyGet vpnBus vpnPath vpnInterface vpnConnType
+
 instance Exec VPN where
-  alias (VPN _ _) = vpnAlias
-  rate  (VPN _ r) = r
-  run   (VPN (text, colorOn, colorOff) _) = do
-    client <- connectSystem
-    reply <- callConnectionType client
-    disconnect client
-    return $ fmtState $ procReply reply
+  alias (VPN _) = vpnAlias
+  start (VPN (text, colorOn, colorOff)) cb = do
+    withDBusClientConnection_ True $ \c -> do
+      reply <- callGetConnectionType c
+      cb $ maybe "N/A" chooseColor' $ fromVariant =<< listToMaybe reply
+      addMatchCallback (matchProperty vpnPath) (procMatch cb . matchConnType) c
     where
-      procReply = \case
-        Right r -> (fromVariant r :: Maybe String)
-        Left _  -> Nothing
-      fmtState = \case
-        Just s -> xmobarColor (if s == "vpn" then colorOn else colorOff) "" text
-        Nothing -> "N/A"
+      procMatch f (Match t) = f $ chooseColor' t
+      procMatch f Failure   = f "N/A"
+      procMatch _ NoMatch   = return ()
+      chooseColor' = chooseColor text colorOn colorOff . ("vpn" ==)

@@ -14,10 +14,10 @@ import           Data.Maybe
 import           DBus
 import           DBus.Client
 
-import           XMonad.Hooks.DynamicLog     (xmobarColor)
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           Xmobar
+import           Xmobar.Plugins.Common
 
 newtype Bluetooth = Bluetooth (String, String, String) deriving (Read, Show)
 
@@ -54,10 +54,10 @@ instance Exec Bluetooth where
   start (Bluetooth (text, colorOn, colorOff)) cb = do
     withDBusClientConnection_ True $ \c -> do
       reply <- callGetPowered c
-      cb $ maybe "N/A" chooseColor $ fromVariant =<< listToMaybe reply
+      cb $ maybe "N/A" chooseColor' $ fromVariant =<< listToMaybe reply
       addMatchCallback (matchProperty btPath) (procMatch cb . matchPowered) c
     where
-      procMatch f (Match on) = f $ chooseColor on
+      procMatch f (Match on) = f $ chooseColor' on
       procMatch f Failure    = f "N/A"
       procMatch _ NoMatch    = return ()
-      chooseColor state = xmobarColor (if state then colorOn else colorOff) "" text
+      chooseColor' = chooseColor text colorOn colorOff

@@ -43,7 +43,6 @@ import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
--- import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
@@ -155,8 +154,7 @@ batteryCmd =  CmdSpec
 vpnCmd :: CmdSpec
 vpnCmd = CmdSpec
   { csAlias = vpnAlias
-  , csRunnable = Run
-    $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor) 5
+  , csRunnable = Run $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor)
   }
 
 btCmd :: CmdSpec
@@ -307,12 +305,11 @@ type BarFeature = Feature CmdSpec
 
 getVPN :: Maybe Client -> BarFeature
 getVPN client = Feature
-  { ftrDepTree = DBusTree (Single (const vpnCmd)) client [ep] [dp]
+  { ftrDepTree = DBusTree (Single (const vpnCmd)) client [vpnDep] [dp]
   , ftrName = "VPN status indicator"
   , ftrWarning = Default
   }
   where
-    ep = Endpoint vpnBus vpnPath vpnInterface $ Property_ vpnConnType
     dp = IOTest vpnPresent
 
 getBt :: Maybe Client -> BarFeature
