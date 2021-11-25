@@ -6,7 +6,6 @@
 
 module XMonad.Internal.Concurrent.Removable (runRemovableMon) where
 
-import           Control.Concurrent
 import           Control.Monad
 
 import           Data.Map.Lazy                   (Map, member)
@@ -14,7 +13,6 @@ import           Data.Map.Lazy                   (Map, member)
 import           DBus
 import           DBus.Client
 
--- import           XMonad.Internal.DBus.Control (pathExists)
 import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.Dependency
 
@@ -74,19 +72,17 @@ playSoundMaybe p b = when b $ playSound p
 -- If it not already, we won't see any signals from the dbus until it is
 -- started (it will work after it is started however). It seems safe to simply
 -- enable the udisks2 service at boot; however this is not default behavior.
-listenDevices :: IO ()
-listenDevices = do
-  client <- connectSystem
-  _ <- addMatch' client memAdded driveInsertedSound addedHasDrive
-  _ <- addMatch' client memRemoved driveRemovedSound removedHasDrive
-  forever (threadDelay 5000000)
+listenDevices :: Client -> IO ()
+listenDevices client = do
+  void $ addMatch' memAdded driveInsertedSound addedHasDrive
+  void $ addMatch' memRemoved driveRemovedSound removedHasDrive
   where
-    addMatch' client m p f = addMatch client ruleUdisks { matchMember = Just m }
+    addMatch' m p f = addMatch client ruleUdisks { matchMember = Just m }
       $ playSoundMaybe p . f . signalBody
 
 runRemovableMon :: Maybe Client -> FeatureIO
 runRemovableMon client = Feature
-  { ftrDepTree = DBusTree (Single (const listenDevices)) client [addedDep, removedDep] []
+  { ftrDepTree = DBusTree (Single listenDevices) client [addedDep, removedDep] []
   , ftrName = "removeable device monitor"
   , ftrWarning = Default
   }

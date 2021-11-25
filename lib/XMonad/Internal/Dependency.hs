@@ -35,6 +35,7 @@ module XMonad.Internal.Dependency
   , executeFeatureWith
   , executeFeatureWith_
   , callMethod
+  , callMethod'
   ) where
 
 import           Control.Monad.IO.Class
@@ -320,12 +321,14 @@ introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
 -- TODO this belongs somewhere else, IDK where tho for now
+callMethod' :: Client -> MethodCall -> IO (Either String [Variant])
+callMethod' cl = fmap (bimap methodErrorMessage methodReturnBody) . call cl
+
 callMethod :: Client -> BusName -> ObjectPath -> InterfaceName -> MemberName
   -> IO (Either String [Variant])
-callMethod client bus path iface mem = do
-  reply <- call client (methodCall path iface mem)
-           { methodCallDestination = Just bus }
-  return $ bimap methodErrorMessage methodReturnBody reply
+callMethod client bus path iface mem =
+  callMethod' client (methodCall path iface mem)
+  { methodCallDestination = Just bus }
 
 dbusDepSatisfied :: Client -> DBusDep -> IO (Maybe String)
 dbusDepSatisfied client (Bus bus) = do

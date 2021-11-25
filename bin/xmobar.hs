@@ -120,7 +120,7 @@ ethernetCmd :: String -> CmdSpec
 ethernetCmd iface = CmdSpec
   { csAlias = iface
   , csRunnable = Run
-    $ Device (iface, "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor) 5
+    $ Device (iface, "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor)
   }
 
 batteryCmd :: CmdSpec
@@ -286,13 +286,12 @@ getWireless = Feature
 
 getEthernet :: Maybe Client -> BarFeature
 getEthernet client = Feature
-  { ftrDepTree = DBusTree action client [dep] []
+  { ftrDepTree = DBusTree action client [devDep] []
   , ftrName = "ethernet status indicator"
   , ftrWarning = Default
   }
   where
     action = Double (\i _ -> ethernetCmd i) (readInterface isEthernet)
-    dep = Endpoint devBus devPath devInterface $ Method_ devGetByIP
 
 getBattery :: BarFeature
 getBattery = Feature

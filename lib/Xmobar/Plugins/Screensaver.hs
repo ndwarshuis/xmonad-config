@@ -27,5 +27,5 @@ instance Exec Screensaver where
       matchSignal (cb . fmtState) c
       cb . fmtState =<< callQuery c
     where
-      fmtState = maybe "N/A" $ chooseColor text colorOn colorOff
+      fmtState = maybe na $ chooseColor text colorOn colorOff
 

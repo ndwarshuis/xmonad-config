@@ -9,8 +9,6 @@ module Xmobar.Plugins.Bluetooth
   , btDep
   ) where
 
-import           Data.Maybe
-
 import           DBus
 import           DBus.Client
 
@@ -53,11 +51,8 @@ instance Exec Bluetooth where
   alias (Bluetooth _) = btAlias
   start (Bluetooth (text, colorOn, colorOff)) cb = do
     withDBusClientConnection_ True $ \c -> do
-      reply <- callGetPowered c
-      cb $ maybe "N/A" chooseColor' $ fromVariant =<< listToMaybe reply
-      addMatchCallback (matchProperty btPath) (procMatch cb . matchPowered) c
+      startListener rule callGetPowered matchPowered chooseColor' cb c
     where
-      procMatch f (Match on) = f $ chooseColor' on
-      procMatch f Failure    = f "N/A"
-      procMatch _ NoMatch    = return ()
+      rule = matchProperty btPath
       chooseColor' = chooseColor text colorOn colorOff
+

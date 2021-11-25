@@ -1,74 +1,72 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Xmobar.Plugins.Device
   ( Device(..)
-  , devBus
-  , devPath
-  , devInterface
-  , devGetByIP
+  , devDep
   ) where
 
--- TOOD this name can be more general
 --------------------------------------------------------------------------------
--- | Ethernet plugin
+-- | Devince plugin
 --
 -- Display different text depending on whether or not the interface has
 -- connectivity
 
-
 import           Control.Monad
 
+import           Data.Maybe
 import           Data.Word
 
 import           DBus
 import           DBus.Client
 
-import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           XMonad.Internal.DBus.Common
+import           XMonad.Internal.Dependency
 import           Xmobar
+import           Xmobar.Plugins.Common
 
-data Device = Device (String, String, String, String) Int
-    deriving (Read, Show)
+newtype Device = Device (String, String, String, String) deriving (Read, Show)
 
-devBus :: BusName
-devBus = "org.freedesktop.NetworkManager"
+nmBus :: BusName
+nmBus = busName_ "org.freedesktop.NetworkManager"
 
-devPath :: ObjectPath
-devPath = "/org/freedesktop/NetworkManager"
+nmPath :: ObjectPath
+nmPath = objectPath_ "/org/freedesktop/NetworkManager"
 
-devInterface :: InterfaceName
-devInterface = "org.freedesktop.NetworkManager"
+nmInterface :: InterfaceName
+nmInterface = interfaceName_ "org.freedesktop.NetworkManager"
 
-devGetByIP :: MemberName
-devGetByIP = "GetDeviceByIpIface"
+nmDeviceInterface :: InterfaceName
+nmDeviceInterface = interfaceName_ "org.freedesktop.NetworkManager.Device"
+
+getByIP :: MemberName
+getByIP = memberName_ "GetDeviceByIpIface"
+
+devSignal :: String
+devSignal = "Ip4Connectivity"
+
+devDep :: DBusDep
+devDep = Endpoint nmBus nmPath nmInterface $ Method_ getByIP
 
 getDevice :: Client -> String -> IO (Maybe ObjectPath)
-getDevice client iface = do
-  let mc = methodCall devPath devInterface devGetByIP
-  reply <- call client $ mc { methodCallBody = [toVariant iface]
-                            , methodCallDestination = Just devBus
-                            }
-  return $ case reply of
-    Left _  -> Nothing
-    Right b -> case methodReturnBody b of
-      [objectPath] -> fromVariant objectPath
-      _            -> Nothing
+getDevice client iface = either (const Nothing) (fromVariant <=< listToMaybe)
+  <$> callMethod' client mc
+  where
+    mc = (methodCall nmPath nmInterface getByIP)
+      { methodCallBody = [toVariant iface]
+      , methodCallDestination = Just nmBus
+      }
 
-getDeviceConnected :: Client -> ObjectPath -> IO (Maybe Bool)
-getDeviceConnected client objectPath = do
-  let mc = methodCall objectPath
-           "org.freedesktop.NetworkManager.Device"
-           "Ip4Connectivity"
-  either (const Nothing) (fmap ((> 1) :: Word32 -> Bool) . fromVariant)
-    <$> getProperty client mc { methodCallDestination = Just devBus }
+getDeviceConnected :: ObjectPath -> Client -> IO [Variant]
+getDeviceConnected path = callPropertyGet nmBus path nmDeviceInterface devSignal
+
+matchStatus :: [Variant] -> SignalMatch Word32
+matchStatus = matchPropertyChanged nmDeviceInterface devSignal fromVariant
 
 instance Exec Device where
-  alias (Device (iface, _, _, _) _) = iface
-  rate  (Device _ r) = r
-  run   (Device (iface, text, colorOn, colorOff) _) = do
-    client <- connectSystem
-    dev <- getDevice client iface
-    state <- join <$> mapM (getDeviceConnected client) dev
-    disconnect client
-    return $ maybe "N/A" fmt state
+  alias (Device (iface, _, _, _)) = iface
+  start (Device (iface, text, colorOn, colorOff)) cb = do
+    withDBusClientConnection_ True $ \c -> do
+      path <- getDevice c iface
+      maybe (cb na) (listener c) path
     where
-      fmt s = xmobarColor (if s then colorOn else colorOff) "" text
+      listener client path = startListener (matchProperty path)
+        (getDeviceConnected path) matchStatus chooseColor' cb client
+      chooseColor' = chooseColor text colorOn colorOff . (> 1)
