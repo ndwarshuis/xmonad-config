@@ -130,7 +130,8 @@ callQuery client = do
   return $ either (const Nothing) bodyGetCurrentState reply
 
 matchSignal :: (Maybe SSState -> IO ()) -> Client -> IO ()
-matchSignal cb = addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
+matchSignal cb =
+  fmap void . addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
 
 ssSignalDep :: DBusDep
 ssSignalDep = Endpoint xmonadBusName ssPath interface $ Signal_ memState

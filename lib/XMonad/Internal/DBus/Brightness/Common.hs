@@ -11,7 +11,7 @@ module XMonad.Internal.DBus.Brightness.Common
   , signalDep
   ) where
 
--- import           Control.Monad               (void)
+import           Control.Monad               (void)
 
 import           Data.Int                    (Int32)
 
@@ -73,7 +73,7 @@ signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
 
 matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> Client -> IO ()
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
-  addMatchCallback brMatcher (cb . bodyGetBrightness)
+  void . addMatchCallback brMatcher (cb . bodyGetBrightness)
   where
     brMatcher = matchAny
       { matchPath = Just p

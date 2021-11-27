@@ -39,10 +39,10 @@ vpnDep = Endpoint vpnBus vpnPath vpnInterface $ Property_ vpnConnType
 instance Exec VPN where
   alias (VPN _) = vpnAlias
   start (VPN (text, colorOn, colorOff)) cb =
-    withDBusClientConnection_ True
+    withDBusClientConnection True cb
     $ startListener rule getProp fromSignal chooseColor' cb
     where
       rule = matchProperty vpnPath
       getProp = callPropertyGet vpnBus vpnPath vpnInterface vpnConnType
-      fromSignal = matchPropertyChanged vpnInterface vpnConnType fromVariant
-      chooseColor' = chooseColor text colorOn colorOff . ("vpn" ==)
+      fromSignal = matchPropertyChanged vpnInterface vpnConnType
+      chooseColor' = return . chooseColor text colorOn colorOff . ("vpn" ==)

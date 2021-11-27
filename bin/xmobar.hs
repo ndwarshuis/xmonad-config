@@ -63,9 +63,9 @@ main = do
 config :: BarRegions -> String -> Config
 config br confDir = defaultConfig
   { font = barFont
-  , additionalFonts = [iconFont, iconFontLarge, iconFontXLarge]
+  , additionalFonts = [iconFont, iconFontLarge, iconFontXLarge, iconFontXXLarge]
   , textOffset = 16
-  , textOffsets = [16, 17, 18]
+  , textOffsets = [16, 17, 17, 18]
   , bgColor = T.bgColor
   , fgColor = T.fgColor
   , position = BottomSize C 100 24
@@ -161,7 +161,8 @@ btCmd :: CmdSpec
 btCmd = CmdSpec
   { csAlias = btAlias
   , csRunnable = Run
-    $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor)
+    -- $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor)
+    $ Bluetooth ("<fn=3>\xf5b0</fn>", "<fn=3>\xf5ae</fn>") (T.fgColor, T.backdropFgColor)
   }
 
 alsaCmd :: CmdSpec
@@ -202,10 +203,10 @@ lockCmd = CmdSpec
   { csAlias = "locks"
   , csRunnable = Run
     $ Locks
-    [ "-N", "<fn=3>\xf8a5</fn>"
-    , "-n", xmobarColor T.backdropFgColor "" "<fn=3>\xf8a5</fn>"
+    [ "-N", "<fn=4>\xf8a5</fn>"
+    , "-n", xmobarColor T.backdropFgColor "" "<fn=4>\xf8a5</fn>"
     , "-C", "<fn=3>\xf657</fn>"
-    , "-c", xmobarColor T.backdropFgColor "" "<fn=3>\xf657</fn>"
+    , "-c", xmobarColor T.backdropFgColor "" "<fn=4>\xf657</fn>"
     , "-s", ""
     , "-S", ""
     , "-d", " "
@@ -405,4 +406,7 @@ iconFontLarge :: String
 iconFontLarge = nerdFont 15
 
 iconFontXLarge :: String
-iconFontXLarge = nerdFont 20
+iconFontXLarge = nerdFont 18
+
+iconFontXXLarge :: String
+iconFontXXLarge = nerdFont 20

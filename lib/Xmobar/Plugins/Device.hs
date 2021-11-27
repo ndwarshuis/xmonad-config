@@ -58,15 +58,15 @@ getDeviceConnected :: ObjectPath -> Client -> IO [Variant]
 getDeviceConnected path = callPropertyGet nmBus path nmDeviceInterface devSignal
 
 matchStatus :: [Variant] -> SignalMatch Word32
-matchStatus = matchPropertyChanged nmDeviceInterface devSignal fromVariant
+matchStatus = matchPropertyChanged nmDeviceInterface devSignal
 
 instance Exec Device where
   alias (Device (iface, _, _, _)) = iface
   start (Device (iface, text, colorOn, colorOff)) cb = do
-    withDBusClientConnection_ True $ \c -> do
+    withDBusClientConnection True cb $ \c -> do
       path <- getDevice c iface
       maybe (cb na) (listener c) path
     where
       listener client path = startListener (matchProperty path)
         (getDeviceConnected path) matchStatus chooseColor' cb client
-      chooseColor' = chooseColor text colorOn colorOff . (> 1)
+      chooseColor' = return . chooseColor text colorOn colorOff . (> 1)

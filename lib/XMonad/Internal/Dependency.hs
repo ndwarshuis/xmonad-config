@@ -36,24 +36,36 @@ module XMonad.Internal.Dependency
   , executeFeatureWith_
   , callMethod
   , callMethod'
+  , callGetManagedObjects
+  , ObjectTree
+  , getManagedObjects
+  , omInterface
+  , addInterfaceAddedListener
+  , addInterfaceRemovedListener
   ) where
 
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
 
-import           Data.Bifunctor          (bimap)
-import           Data.List               (find)
-import           Data.Maybe              (catMaybes, fromMaybe, listToMaybe)
+import           Data.Bifunctor              (bimap)
+import           Data.List                   (find)
+import qualified Data.Map                    as M
+import           Data.Maybe                  (catMaybes, fromMaybe, listToMaybe)
 
 import           DBus
 import           DBus.Client
-import qualified DBus.Introspection      as I
+import qualified DBus.Introspection          as I
 
-import           System.Directory        (findExecutable, readable, writable)
+import           System.Directory
+    ( findExecutable
+    , readable
+    , writable
+    )
 import           System.Environment
 import           System.Exit
 
-import           XMonad.Core             (X, io)
+import           XMonad.Core                 (X, io)
+import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.IO
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
@@ -376,3 +388,42 @@ dbusDepSatisfied client (Endpoint busname objpath iface mem) = do
       , "on bus"
       , formatBusName busname
       ]
+
+--------------------------------------------------------------------------------
+-- | Object Manager
+
+type ObjectTree = M.Map ObjectPath (M.Map String (M.Map String Variant))
+
+omInterface :: InterfaceName
+omInterface = interfaceName_ "org.freedesktop.DBus.ObjectManager"
+
+getManagedObjects :: MemberName
+getManagedObjects = memberName_ "GetManagedObjects"
+
+callGetManagedObjects :: Client -> BusName -> ObjectPath -> IO ObjectTree
+callGetManagedObjects client bus path =
+  either (const M.empty) (fromMaybe M.empty . (fromVariant <=< listToMaybe))
+  <$> callMethod client bus path omInterface getManagedObjects
+
+omInterfacesAdded :: MemberName
+omInterfacesAdded = memberName_ "InterfacesAdded"
+
+omInterfacesRemoved :: MemberName
+omInterfacesRemoved = memberName_ "InterfacesRemoved"
+
+-- TODO add busname back to this (use NameGetOwner on org.freedesktop.DBus)
+addInterfaceChangedListener :: MemberName -> ObjectPath -> SignalCallback
+  -> Client -> IO ()
+addInterfaceChangedListener prop path = fmap void . addMatchCallback rule
+  where
+    rule = matchAny
+      { matchPath = Just path
+      , matchInterface = Just omInterface
+      , matchMember = Just prop
+      }
+
+addInterfaceAddedListener :: ObjectPath -> SignalCallback -> Client -> IO ()
+addInterfaceAddedListener = addInterfaceChangedListener omInterfacesAdded
+
+addInterfaceRemovedListener :: ObjectPath -> SignalCallback -> Client -> IO ()
+addInterfaceRemovedListener = addInterfaceChangedListener omInterfacesRemoved
