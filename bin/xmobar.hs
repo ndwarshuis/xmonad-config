@@ -36,10 +36,7 @@ import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
 
 import           XMonad                                         (getXMonadDir)
-import           XMonad.Hooks.DynamicLog
-    ( wrap
-    , xmobarColor
-    )
+import           XMonad.Hooks.DynamicLog                        (wrap)
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
@@ -48,6 +45,7 @@ import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                          as T
 import           Xmobar
+import           Xmobar.Plugins.Common
 
 main :: IO ()
 main = do
@@ -62,10 +60,11 @@ main = do
 
 config :: BarRegions -> String -> Config
 config br confDir = defaultConfig
-  { font = barFont
-  , additionalFonts = [iconFont, iconFontLarge, iconFontXLarge, iconFontXXLarge]
-  , textOffset = 16
-  , textOffsets = [16, 17, 17, 18]
+  -- TODO head makes me feel icky
+  { font = head allFontStrings
+  , additionalFonts = drop 1 allFontStrings
+  , textOffset = head allFontOffsets
+  , textOffsets = drop 1 allFontOffsets
   , bgColor = T.bgColor
   , fgColor = T.fgColor
   , position = BottomSize C 100 24
@@ -120,7 +119,7 @@ ethernetCmd :: String -> CmdSpec
 ethernetCmd iface = CmdSpec
   { csAlias = iface
   , csRunnable = Run
-    $ Device (iface, "<fn=2>\xf0e8</fn>", T.fgColor, T.backdropFgColor)
+    $ Device (iface, fontifyText IconMedium "\xf0e8", colors)
   }
 
 batteryCmd :: CmdSpec
@@ -137,12 +136,14 @@ batteryCmd =  CmdSpec
     , "--"
     , "-a", notify
     , "-P"
-    , "-o" , "<fn=1>\xf0e7</fn>"
-    , "-O" , "<fn=1>\xf1e6</fn>"
-    , "-i" , "<fn=1>\xf1e6</fn>"
+    , "-o" , fontify "\xf0e7"
+    , "-O" , fontify "\xf1e6"
+    , "-i" , fontify "\xf1e6"
     ] 50
   }
   where
+    fontify = fontifyText IconSmall
+    -- TODO format this with standardized notification library from xmonad.internal
     notify = fmtCmd "notify-send"
       [ "-u"
       , "critical"
@@ -154,16 +155,17 @@ batteryCmd =  CmdSpec
 vpnCmd :: CmdSpec
 vpnCmd = CmdSpec
   { csAlias = vpnAlias
-  , csRunnable = Run $ VPN ("<fn=2>\xf023</fn>", T.fgColor, T.backdropFgColor)
+  , csRunnable = Run $ VPN (fontifyText IconMedium "\xf023", colors)
   }
 
 btCmd :: CmdSpec
 btCmd = CmdSpec
   { csAlias = btAlias
   , csRunnable = Run
-    -- $ Bluetooth ("<fn=2>\xf293</fn>", T.fgColor, T.backdropFgColor)
-    $ Bluetooth ("<fn=3>\xf5b0</fn>", "<fn=3>\xf5ae</fn>") (T.fgColor, T.backdropFgColor)
+    $ Bluetooth (fontify "\xf5b0", fontify "\xf5ae") colors
   }
+  where
+    fontify = fontifyText IconLarge
 
 alsaCmd :: CmdSpec
 alsaCmd = CmdSpec
@@ -172,8 +174,8 @@ alsaCmd = CmdSpec
     $ Alsa "default" "Master"
     [ "-t", "<status><volume>%"
     , "--"
-    , "-O", "<fn=1>\xf028</fn>"
-    , "-o", "<fn=1>\xf026 </fn>"
+    , "-O", fontifyText IconSmall "\xf028"
+    , "-o", fontifyText IconSmall "\xf026 "
     , "-c", T.fgColor
     , "-C", T.fgColor
     ]
@@ -182,20 +184,20 @@ alsaCmd = CmdSpec
 blCmd :: CmdSpec
 blCmd = CmdSpec
   { csAlias = blAlias
-  , csRunnable = Run $ IntelBacklight "<fn=1>\xf185</fn>"
+  , csRunnable = Run $ IntelBacklight $ fontifyText IconSmall "\xf185"
   }
 
 ckCmd :: CmdSpec
 ckCmd = CmdSpec
   { csAlias = ckAlias
-  , csRunnable = Run $ ClevoKeyboard "<fn=1>\xf40b</fn>"
+  , csRunnable = Run $ ClevoKeyboard $ fontifyText IconSmall "\xf40b"
   }
 
 ssCmd :: CmdSpec
 ssCmd = CmdSpec
   { csAlias = ssAlias
   , csRunnable = Run
-    $ Screensaver ("<fn=1>\xf254</fn>", T.fgColor, T.backdropFgColor)
+    $ Screensaver (fontifyText IconSmall "\xf254", colors)
   }
 
 lockCmd :: CmdSpec
@@ -203,15 +205,20 @@ lockCmd = CmdSpec
   { csAlias = "locks"
   , csRunnable = Run
     $ Locks
-    [ "-N", "<fn=4>\xf8a5</fn>"
-    , "-n", xmobarColor T.backdropFgColor "" "<fn=4>\xf8a5</fn>"
-    , "-C", "<fn=3>\xf657</fn>"
-    , "-c", xmobarColor T.backdropFgColor "" "<fn=4>\xf657</fn>"
+    [ "-N", numIcon
+    , "-n", disabledColor numIcon
+    , "-C", capIcon
+    , "-c", disabledColor capIcon
     , "-s", ""
     , "-S", ""
     , "-d", " "
     ]
   }
+  where
+    numIcon = fontify "\xf8a5"
+    capIcon = fontify "\xf657"
+    fontify = fontifyText IconXLarge
+    disabledColor = xmobarFGColor T.backdropFgColor
 
 dateCmd :: CmdSpec
 dateCmd = CmdSpec
@@ -228,6 +235,8 @@ dateCmd = CmdSpec
 -- in the case of network interfaces, assume that the system uses systemd in
 -- which case ethernet interfaces always start with "en" and wireless
 -- interfaces always start with "wl"
+
+type BarFeature = Feature CmdSpec
 
 isWireless :: String -> Bool
 isWireless ('w':'l':_) = True
@@ -301,8 +310,6 @@ getBattery = Feature
   , ftrWarning = Default
   }
 
-type BarFeature = Feature CmdSpec
-
 getVPN :: Maybe Client -> BarFeature
 getVPN client = Feature
   { ftrDepTree = DBusTree (Single (const vpnCmd)) client [vpnDep] [dp]
@@ -362,10 +369,63 @@ getAllCommands right = do
     }
 
 --------------------------------------------------------------------------------
+-- | fonts
+
+data Font = Text
+  | IconSmall
+  | IconMedium
+  | IconLarge
+  | IconXLarge
+  deriving (Eq, Enum, Bounded, Show)
+
+-- font data ~ (offset, fontification string)
+fontData :: Font -> (Int, String)
+fontData Text       = (16, barFont)
+fontData IconSmall  = (16, nerdFont 13)
+fontData IconMedium = (17, nerdFont 15)
+fontData IconLarge  = (17, nerdFont 18)
+fontData IconXLarge = (18, nerdFont 20)
+
+fontString :: Font -> String
+fontString = snd . fontData
+
+fontOffset :: Font -> Int
+fontOffset = fst . fontData
+
+allFonts :: [Font]
+allFonts = enumFrom minBound
+
+allFontOffsets :: [Int]
+allFontOffsets = fontOffset <$> allFonts
+
+allFontStrings :: [String]
+allFontStrings = fontString <$> allFonts
+
+barFont :: String
+barFont = T.fmtFontXFT T.font
+  { T.family = "DejaVu Sans Mono"
+  , T.size = Just 11
+  , T.weight = Just T.Bold
+  }
+
+nerdFont :: Int -> String
+nerdFont size = T.fmtFontXFT T.font
+  { T.family = "Symbols Nerd Font"
+  , T.size = Nothing
+  , T.pixelsize = Just size
+  }
+
+fontifyText :: Font -> String -> String
+fontifyText fnt txt = concat ["<fn=", show $ fromEnum fnt, ">", txt, "</fn>"]
+
+--------------------------------------------------------------------------------
 -- | various formatting things
 
+colors :: Colors
+colors = Colors { colorsOn = T.fgColor, colorsOff = T.backdropFgColor }
+
 sep :: String
-sep = xmobarColor T.backdropFgColor "" " : "
+sep = xmobarFGColor T.backdropFgColor " : "
 
 lSep :: Char
 lSep = '}'
@@ -385,28 +445,3 @@ fmtRegions :: BarRegions -> String
 fmtRegions BarRegions { brLeft = l, brCenter = c, brRight = r } =
   fmtSpecs l ++ [lSep] ++ fmtSpecs c ++ [rSep] ++ fmtSpecs r
 
-barFont :: String
-barFont = T.fmtFontXFT T.font
-  { T.family = "DejaVu Sans Mono"
-  , T.size = Just 11
-  , T.weight = Just T.Bold
-  }
-
-nerdFont :: Int -> String
-nerdFont size = T.fmtFontXFT T.font
-  { T.family = "Symbols Nerd Font"
-  , T.size = Nothing
-  , T.pixelsize = Just size
-  }
-
-iconFont :: String
-iconFont = nerdFont 13
-
-iconFontLarge :: String
-iconFontLarge = nerdFont 15
-
-iconFontXLarge :: String
-iconFontXLarge = nerdFont 18
-
-iconFontXXLarge :: String
-iconFontXXLarge = nerdFont 20

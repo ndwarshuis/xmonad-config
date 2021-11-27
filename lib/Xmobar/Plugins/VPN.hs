@@ -18,7 +18,7 @@ import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common
 
-newtype VPN = VPN (String, String, String) deriving (Read, Show)
+newtype VPN = VPN (String, Colors) deriving (Read, Show)
 
 vpnBus :: BusName
 vpnBus = busName_ "org.freedesktop.NetworkManager"
@@ -40,7 +40,7 @@ vpnDep = Endpoint vpnBus vpnPath vpnInterface $ Property_ vpnConnType
 
 instance Exec VPN where
   alias (VPN _) = vpnAlias
-  start (VPN (text, colorOn, colorOff)) cb =
+  start (VPN (text, colors)) cb =
     withDBusClientConnection True cb $ \c -> do
       rule <- matchPropertyFull c vpnBus (Just vpnPath)
       -- TODO intelligently warn user
@@ -48,4 +48,4 @@ instance Exec VPN where
     where
       getProp = callPropertyGet vpnBus vpnPath vpnInterface $ memberName_ vpnConnType
       fromSignal = matchPropertyChanged vpnInterface vpnConnType
-      chooseColor' = return . chooseColor text colorOn colorOff . ("vpn" ==)
+      chooseColor' = return . (\s -> colorText colors s text) . ("vpn" ==)

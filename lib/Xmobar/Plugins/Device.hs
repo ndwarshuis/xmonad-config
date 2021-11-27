@@ -21,7 +21,7 @@ import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common
 
-newtype Device = Device (String, String, String, String) deriving (Read, Show)
+newtype Device = Device (String, String, Colors) deriving (Read, Show)
 
 nmBus :: BusName
 nmBus = busName_ "org.freedesktop.NetworkManager"
@@ -59,8 +59,8 @@ matchStatus :: [Variant] -> SignalMatch Word32
 matchStatus = matchPropertyChanged nmDeviceInterface devSignal
 
 instance Exec Device where
-  alias (Device (iface, _, _, _)) = iface
-  start (Device (iface, text, colorOn, colorOff)) cb = do
+  alias (Device (iface, _, _)) = iface
+  start (Device (iface, text, colors)) cb = do
     withDBusClientConnection True cb $ \client -> do
       path <- getDevice client iface
       displayMaybe' cb (listener client) path
@@ -70,4 +70,4 @@ instance Exec Device where
         -- TODO warn the user here rather than silently drop the listener
         forM_ rule $ \r ->
           startListener r (getDeviceConnected path) matchStatus chooseColor' cb client
-      chooseColor' = return . chooseColor text colorOn colorOff . (> 1)
+      chooseColor' = return . (\s -> colorText colors s text) . (> 1)

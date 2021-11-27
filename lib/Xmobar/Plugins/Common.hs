@@ -1,14 +1,16 @@
 
 module Xmobar.Plugins.Common
-  ( chooseColor
+  ( colorText
   , startListener
   , procSignalMatch
   , na
   , fromSingletonVariant
   , withDBusClientConnection
   , Callback
+  , Colors(..)
   , displayMaybe
   , displayMaybe'
+  , xmobarFGColor
   )
   where
 
@@ -21,6 +23,12 @@ import           DBus.Internal
 import           XMonad.Hooks.DynamicLog (xmobarColor)
 
 type Callback = String -> IO ()
+
+data Colors = Colors
+  { colorsOn  :: String
+  , colorsOff :: String
+  }
+  deriving (Eq, Show, Read)
 
 startListener :: IsVariant a => MatchRule -> (Client -> IO [Variant])
   -> ([Variant] -> SignalMatch a) -> (a -> IO String) -> Callback
@@ -35,9 +43,12 @@ startListener rule getProp fromSignal toColor cb client = do
 procSignalMatch :: Callback -> (a -> IO String) -> SignalMatch a -> IO ()
 procSignalMatch cb f = withSignalMatch (displayMaybe cb f)
 
-chooseColor :: String -> String -> String -> Bool -> String
-chooseColor text colorOn colorOff state =
-  xmobarColor (if state then colorOn else colorOff) "" text
+colorText :: Colors -> Bool -> String -> String
+colorText Colors { colorsOn = c } True   = xmobarFGColor c
+colorText Colors { colorsOff = c } False = xmobarFGColor c
+
+xmobarFGColor :: String -> String -> String
+xmobarFGColor c = xmobarColor c ""
 
 na :: String
 na = "N/A"

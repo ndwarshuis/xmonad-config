@@ -93,16 +93,14 @@ type IconFormatter = (Maybe Bool -> Bool -> String)
 
 type Icons = (String, String)
 
-type Colors = (String, String)
-
 displayIcon :: Callback -> IconFormatter -> MutableBtState -> IO ()
 displayIcon callback formatter =
   callback . uncurry formatter <=< readState
 
 -- TODO maybe I want this to fail when any of the device statuses are Nothing
 iconFormatter :: Icons -> Colors -> IconFormatter
-iconFormatter (iconConn, iconDisc) (colorOn, colorOff) powered connected =
-  maybe na (chooseColor icon colorOn colorOff) powered
+iconFormatter (iconConn, iconDisc) cs powered connected =
+  maybe na (\p -> colorText cs p icon) powered
   where
     icon = if connected then iconConn else iconDisc
 
