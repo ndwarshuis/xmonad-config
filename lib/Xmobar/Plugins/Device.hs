@@ -11,7 +11,6 @@ module Xmobar.Plugins.Device
 
 import           Control.Monad
 
-import           Data.Maybe
 import           Data.Word
 
 import           DBus
@@ -46,16 +45,15 @@ devDep :: DBusDep
 devDep = Endpoint nmBus nmPath nmInterface $ Method_ getByIP
 
 getDevice :: Client -> String -> IO (Maybe ObjectPath)
-getDevice client iface = either (const Nothing) (fromVariant <=< listToMaybe)
-  <$> callMethod' client mc
+getDevice client iface = bodyToMaybe <$> callMethod' client mc
   where
-    mc = (methodCall nmPath nmInterface getByIP)
+    mc = (methodCallBus nmBus nmPath nmInterface getByIP)
       { methodCallBody = [toVariant iface]
-      , methodCallDestination = Just nmBus
       }
 
 getDeviceConnected :: ObjectPath -> Client -> IO [Variant]
-getDeviceConnected path = callPropertyGet nmBus path nmDeviceInterface devSignal
+getDeviceConnected path = callPropertyGet nmBus path nmDeviceInterface
+  $ memberName_ devSignal
 
 matchStatus :: [Variant] -> SignalMatch Word32
 matchStatus = matchPropertyChanged nmDeviceInterface devSignal
@@ -63,10 +61,13 @@ matchStatus = matchPropertyChanged nmDeviceInterface devSignal
 instance Exec Device where
   alias (Device (iface, _, _, _)) = iface
   start (Device (iface, text, colorOn, colorOff)) cb = do
-    withDBusClientConnection True cb $ \c -> do
-      path <- getDevice c iface
-      maybe (cb na) (listener c) path
+    withDBusClientConnection True cb $ \client -> do
+      path <- getDevice client iface
+      displayMaybe' cb (listener client) path
     where
-      listener client path = startListener (matchProperty path)
-        (getDeviceConnected path) matchStatus chooseColor' cb client
+      listener client path = do
+        rule <- matchPropertyFull client nmBus (Just path)
+        -- TODO warn the user here rather than silently drop the listener
+        forM_ rule $ \r ->
+          startListener r (getDeviceConnected path) matchStatus chooseColor' cb client
       chooseColor' = return . chooseColor text colorOn colorOff . (> 1)

@@ -23,8 +23,8 @@ instance Exec Screensaver where
   alias (Screensaver _) = ssAlias
   start (Screensaver (text, colorOn, colorOff)) cb = do
     withDBusClientConnection False cb $ \c -> do
-      matchSignal (cb . fmtState) c
-      cb . fmtState =<< callQuery c
+      matchSignal display c
+      display =<< callQuery c
     where
-      fmtState = maybe na $ chooseColor text colorOn colorOff
+      display = displayMaybe cb $ return . chooseColor text colorOn colorOff
 

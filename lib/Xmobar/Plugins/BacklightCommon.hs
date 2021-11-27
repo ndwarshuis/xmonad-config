@@ -11,11 +11,11 @@ import           DBus.Client
 import           Xmobar.Plugins.Common
 
 startBacklight :: RealFrac a => ((Maybe a -> IO ()) -> Client -> IO ())
-  -> (Client -> IO (Maybe a)) -> String -> (String -> IO ()) -> IO ()
+  -> (Client -> IO (Maybe a)) -> String -> Callback -> IO ()
 startBacklight matchSignal callGetBrightness icon cb = do
     withDBusClientConnection False cb $ \c -> do
-      matchSignal (cb . formatBrightness) c
-      cb . formatBrightness =<< callGetBrightness c
+      matchSignal display c
+      display =<< callGetBrightness c
     where
-      formatBrightness = maybe na $
-        \b -> icon ++ show (round b :: Integer) ++ "%"
+      formatBrightness b = return $ icon ++ show (round b :: Integer) ++ "%"
+      display = displayMaybe cb formatBrightness

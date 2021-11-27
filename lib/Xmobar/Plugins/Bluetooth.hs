@@ -56,7 +56,7 @@ btAlias :: String
 btAlias = "bluetooth"
 
 btDep :: DBusDep
-btDep = Endpoint btBus btOmPath omInterface $ Method_ getManagedObjects
+btDep = Endpoint btBus btOMPath omInterface $ Method_ getManagedObjects
 
 data Bluetooth = Bluetooth Icons Colors deriving (Read, Show)
 
@@ -73,7 +73,8 @@ startAdapter is cs cb cl = do
   forM_ (findAdapter ot) $ \adapter -> do
     -- set up adapter
     initAdapter state adapter cl
-    addAdaptorListener state display adapter cl
+    -- TODO this step could fail; at least warn the user...
+    void $ addAdaptorListener state display adapter cl
     -- set up devices on the adapter (and listeners for adding/removing devices)
     let devices = findDevices adapter ot
     addDeviceAddedListener state display adapter cl
@@ -157,24 +158,27 @@ splitPath :: ObjectPath -> [String]
 splitPath = splitOn "/" . dropWhile (=='/') . formatObjectPath
 
 getBtObjectTree :: Client -> IO ObjectTree
-getBtObjectTree client = callGetManagedObjects client btBus btOmPath
+getBtObjectTree client = callGetManagedObjects client btBus btOMPath
 
 btBus :: BusName
 btBus = busName_ "org.bluez"
 
-btOmPath :: ObjectPath
-btOmPath = objectPath_ "/"
+btOMPath :: ObjectPath
+btOMPath = objectPath_ "/"
+
+addBtOMListener :: SignalCallback -> Client -> IO ()
+addBtOMListener sc = void . addInterfaceAddedListener btBus btOMPath sc
 
 addDeviceAddedListener :: MutableBtState -> IO () -> ObjectPath -> Client -> IO ()
 addDeviceAddedListener state display adapter client =
-  addInterfaceAddedListener btOmPath addDevice client
+  addBtOMListener addDevice client
   where
     addDevice = pathCallback adapter display $ \d ->
       addAndInitDevice state display d client
 
 addDeviceRemovedListener :: MutableBtState -> IO () -> ObjectPath -> Client -> IO ()
 addDeviceRemovedListener state display adapter client =
-  addInterfaceRemovedListener btOmPath remDevice client
+  addBtOMListener remDevice client
   where
     remDevice = pathCallback adapter display $ \d -> do
       old <- removeDevice state d
@@ -193,16 +197,20 @@ initAdapter state adapter client = do
   reply <- callGetPowered adapter client
   putPowered state $ fromSingletonVariant reply
 
-addAdaptorListener :: MutableBtState -> IO () -> ObjectPath -> Client -> IO ()
-addAdaptorListener state display adaptor =
-  void . addMatchCallback rule (procMatch . matchPowered)
+matchBTProperty :: Client -> ObjectPath -> IO (Maybe MatchRule)
+matchBTProperty client p = matchPropertyFull client btBus (Just p)
+
+addAdaptorListener :: MutableBtState -> IO () -> ObjectPath -> Client
+  -> IO (Maybe SignalHandler)
+addAdaptorListener state display adaptor client = do
+  rule <- matchBTProperty client adaptor
+  forM rule $ \r -> addMatchCallback r (procMatch . matchPowered) client
   where
-    rule = matchProperty adaptor
     procMatch = withSignalMatch $ \b -> putPowered state b >> display
 
 callGetPowered :: ObjectPath -> Client -> IO [Variant]
 callGetPowered adapter =
-  callPropertyGet btBus adapter adapterInterface adaptorPowered
+  callPropertyGet btBus adapter adapterInterface $ memberName_ adaptorPowered
 
 matchPowered :: [Variant] -> SignalMatch Bool
 matchPowered = matchPropertyChanged adapterInterface adaptorPowered
@@ -225,7 +233,8 @@ adaptorPowered = "Powered"
 addAndInitDevice :: MutableBtState -> IO () -> ObjectPath -> Client -> IO ()
 addAndInitDevice state display device client = do
   sh <- addDeviceListener state display device client
-  initDevice state sh device client
+  -- TODO add some intelligent error messages here
+  forM_ sh $ \s -> initDevice state s device client
 
 initDevice :: MutableBtState -> SignalHandler -> ObjectPath -> Client -> IO ()
 initDevice state sh device client = do
@@ -235,18 +244,19 @@ initDevice state sh device client = do
              , btDevSigHandler = sh
              }
 
-addDeviceListener :: MutableBtState -> IO () -> ObjectPath -> Client -> IO SignalHandler
-addDeviceListener state display device =
-  addMatchCallback rule (procMatch . matchConnected)
+addDeviceListener :: MutableBtState -> IO () -> ObjectPath -> Client
+  -> IO (Maybe SignalHandler)
+addDeviceListener state display device client = do
+  rule <- matchBTProperty client device
+  forM rule $ \r -> addMatchCallback r (procMatch . matchConnected) client
   where
-    rule = matchProperty device
     procMatch = withSignalMatch $ \c -> updateDevice state device c >> display
 
 matchConnected :: [Variant] -> SignalMatch Bool
 matchConnected = matchPropertyChanged devInterface devConnected
 
 callGetConnected :: ObjectPath -> Client -> IO [Variant]
-callGetConnected p = callPropertyGet btBus p devInterface devConnected
+callGetConnected p = callPropertyGet btBus p devInterface $ memberName_ devConnected
 
 insertDevice :: MutableBtState -> ObjectPath -> BTDevice -> IO Bool
 insertDevice m device dev = modifyMVar m $ \s -> do

@@ -9,6 +9,8 @@ module Xmobar.Plugins.VPN
   , vpnDep
   ) where
 
+import           Control.Monad
+
 import           DBus
 import           DBus.Internal
 
@@ -39,10 +41,11 @@ vpnDep = Endpoint vpnBus vpnPath vpnInterface $ Property_ vpnConnType
 instance Exec VPN where
   alias (VPN _) = vpnAlias
   start (VPN (text, colorOn, colorOff)) cb =
-    withDBusClientConnection True cb
-    $ startListener rule getProp fromSignal chooseColor' cb
+    withDBusClientConnection True cb $ \c -> do
+      rule <- matchPropertyFull c vpnBus (Just vpnPath)
+      -- TODO intelligently warn user
+      forM_ rule $ \r -> startListener r getProp fromSignal chooseColor' cb c
     where
-      rule = matchProperty vpnPath
-      getProp = callPropertyGet vpnBus vpnPath vpnInterface vpnConnType
+      getProp = callPropertyGet vpnBus vpnPath vpnInterface $ memberName_ vpnConnType
       fromSignal = matchPropertyChanged vpnInterface vpnConnType
       chooseColor' = return . chooseColor text colorOn colorOff . ("vpn" ==)

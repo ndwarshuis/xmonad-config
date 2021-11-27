@@ -62,11 +62,10 @@ brightnessControls bc client =
   where
     cb = callBacklight client bc
 
--- TODO not dry
 callGetBrightness :: Num c => BrightnessConfig a b -> Client -> IO (Maybe c)
-callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client = do
-  reply <- callMethod client xmonadBusName p i memGet
-  return $ either (const Nothing) bodyGetBrightness reply
+callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client =
+  either (const Nothing) bodyGetBrightness
+  <$> callMethod client xmonadBusName p i memGet
 
 signalDep :: BrightnessConfig a b -> DBusDep
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
@@ -76,6 +75,7 @@ matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> Client -> 
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
   void . addMatchCallback brMatcher (cb . bodyGetBrightness)
   where
+    -- TODO add busname to this
     brMatcher = matchAny
       { matchPath = Just p
       , matchInterface = Just i
@@ -128,7 +128,8 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
   where
     sig = signal p i memCur
 
-callBacklight :: Maybe Client -> BrightnessConfig a b -> String -> MemberName -> FeatureIO
+callBacklight :: Maybe Client -> BrightnessConfig a b -> String -> MemberName
+  -> FeatureIO
 callBacklight client BrightnessConfig { bcPath = p
                                       , bcInterface = i
                                       , bcName = n } controlName m =

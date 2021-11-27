@@ -4,10 +4,11 @@
 module DBus.Internal
   ( addMatchCallback
   , getDBusClient
+  , fromDBusClient
   , withDBusClient
   , withDBusClient_
   , matchProperty
-  , matchProperty'
+  , matchPropertyFull
   , matchPropertyChanged
   , SignalMatch(..)
   , SignalCallback
@@ -16,12 +17,15 @@ module DBus.Internal
   , callPropertyGet
   , callMethod
   , callMethod'
+  , methodCallBus
   , callGetManagedObjects
   , ObjectTree
   , getManagedObjects
   , omInterface
   , addInterfaceAddedListener
   , addInterfaceRemovedListener
+  , fromSingletonVariant
+  , bodyToMaybe
   ) where
 
 import           Control.Exception
@@ -44,9 +48,33 @@ callMethod' cl = fmap (bimap methodErrorMessage methodReturnBody) . call cl
 
 callMethod :: Client -> BusName -> ObjectPath -> InterfaceName -> MemberName
   -> IO MethodBody
-callMethod client bus path iface mem =
-  callMethod' client (methodCall path iface mem)
-  { methodCallDestination = Just bus }
+callMethod client bus path iface = callMethod' client . methodCallBus bus path iface
+
+methodCallBus :: BusName -> ObjectPath -> InterfaceName -> MemberName -> MethodCall
+methodCallBus b p i m = (methodCall p i m)
+    { methodCallDestination = Just b }
+
+--------------------------------------------------------------------------------
+-- | Bus names
+
+dbusInterface :: InterfaceName
+dbusInterface = interfaceName_ "org.freedesktop.DBus"
+
+callGetNameOwner :: Client -> BusName -> IO (Maybe BusName)
+callGetNameOwner client name = bodyToMaybe <$> callMethod' client mc
+  where
+    mc = (methodCallBus dbusName dbusPath dbusInterface mem)
+      { methodCallBody = [toVariant name] }
+    mem = memberName_ "GetNameOwner"
+
+--------------------------------------------------------------------------------
+-- | Variant parsing
+
+fromSingletonVariant :: IsVariant a => [Variant] -> Maybe a
+fromSingletonVariant = fromVariant <=< listToMaybe
+
+bodyToMaybe :: IsVariant a => MethodBody -> Maybe a
+bodyToMaybe = either (const Nothing) fromSingletonVariant
 
 --------------------------------------------------------------------------------
 -- | Signals
@@ -55,6 +83,20 @@ type SignalCallback = [Variant] -> IO ()
 
 addMatchCallback :: MatchRule -> SignalCallback -> Client -> IO SignalHandler
 addMatchCallback rule cb client = addMatch client rule $ cb . signalBody
+
+matchSignal :: Maybe BusName -> Maybe ObjectPath -> Maybe InterfaceName
+  -> Maybe MemberName -> MatchRule
+matchSignal b p i m = matchAny
+  { matchPath = p
+  , matchSender = b
+  , matchInterface = i
+  , matchMember = m
+  }
+
+matchSignalFull :: Client -> BusName -> Maybe ObjectPath -> Maybe InterfaceName
+  -> Maybe MemberName -> IO (Maybe MatchRule)
+matchSignalFull client b p i m =
+  fmap (\o -> matchSignal (Just o) p i m) <$> callGetNameOwner client b
 
 --------------------------------------------------------------------------------
 -- | Properties
@@ -65,26 +107,18 @@ propertyInterface = interfaceName_ "org.freedesktop.DBus.Properties"
 propertySignal :: MemberName
 propertySignal = memberName_ "PropertiesChanged"
 
-callPropertyGet :: BusName -> ObjectPath -> InterfaceName -> String -> Client
+callPropertyGet :: BusName -> ObjectPath -> InterfaceName -> MemberName -> Client
   -> IO [Variant]
-callPropertyGet bus path iface property client = either (const []) (:[])
-  <$> getProperty client (methodCall path iface $ memberName_ property)
-    { methodCallDestination = Just bus }
+callPropertyGet bus path iface property client = fmap (either (const []) (:[]))
+  $ getProperty client $ methodCallBus bus path iface property
 
--- TODO actually get the real busname when using this (will involve IO)
-matchProperty' :: Maybe ObjectPath -> MatchRule
-matchProperty' p = matchAny
-  -- NOTE: the sender for signals is usually the unique name (eg :X.Y) not the
-  -- requested name (eg "org.something.understandable"). If sender is included
-  -- here, likely nothing will match. Solution is to somehow get the unique
-  -- name, which I could do, but probably won't
-  { matchPath = p
-  , matchInterface = Just propertyInterface
-  , matchMember = Just propertySignal
-  }
+matchProperty :: Maybe BusName -> Maybe ObjectPath -> MatchRule
+matchProperty b p =
+  matchSignal b p (Just propertyInterface) (Just propertySignal)
 
-matchProperty :: ObjectPath -> MatchRule
-matchProperty = matchProperty' . Just
+matchPropertyFull :: Client -> BusName -> Maybe ObjectPath -> IO (Maybe MatchRule)
+matchPropertyFull client b p =
+  matchSignalFull client b p (Just propertyInterface) (Just propertySignal)
 
 data SignalMatch a = Match a | NoMatch | Failure deriving (Eq, Show)
 
@@ -117,18 +151,19 @@ getDBusClient sys = do
     Left e  -> putStrLn (clientErrorMessage e) >> return Nothing
     Right c -> return $ Just c
 
-withDBusClient :: Bool -> (Client -> a) -> IO (Maybe a)
+withDBusClient :: Bool -> (Client -> IO a) -> IO (Maybe a)
 withDBusClient sys f = do
   client <- getDBusClient sys
-  let r = f <$> client
-  mapM_ disconnect client
-  return r
+  forM client $ \c -> do
+    r <- f c
+    disconnect c
+    return r
 
 withDBusClient_ :: Bool -> (Client -> IO ()) -> IO ()
-withDBusClient_ sys f = do
-  client <- getDBusClient sys
-  mapM_ f client
-  mapM_ disconnect client
+withDBusClient_ sys = void . withDBusClient sys
+
+fromDBusClient :: Bool -> (Client -> a) -> IO (Maybe a)
+fromDBusClient sys f = withDBusClient sys (return . f)
 
 --------------------------------------------------------------------------------
 -- | Object Manager
@@ -141,30 +176,29 @@ omInterface = interfaceName_ "org.freedesktop.DBus.ObjectManager"
 getManagedObjects :: MemberName
 getManagedObjects = memberName_ "GetManagedObjects"
 
-callGetManagedObjects :: Client -> BusName -> ObjectPath -> IO ObjectTree
-callGetManagedObjects client bus path =
-  either (const M.empty) (fromMaybe M.empty . (fromVariant <=< listToMaybe))
-  <$> callMethod client bus path omInterface getManagedObjects
-
 omInterfacesAdded :: MemberName
 omInterfacesAdded = memberName_ "InterfacesAdded"
 
 omInterfacesRemoved :: MemberName
 omInterfacesRemoved = memberName_ "InterfacesRemoved"
 
--- TODO add busname back to this (use NameGetOwner on org.freedesktop.DBus)
-addInterfaceChangedListener :: MemberName -> ObjectPath -> SignalCallback
-  -> Client -> IO ()
-addInterfaceChangedListener prop path = fmap void . addMatchCallback rule
-  where
-    rule = matchAny
-      { matchPath = Just path
-      , matchInterface = Just omInterface
-      , matchMember = Just prop
-      }
+callGetManagedObjects :: Client -> BusName -> ObjectPath -> IO ObjectTree
+callGetManagedObjects client bus path =
+  either (const M.empty) (fromMaybe M.empty . fromSingletonVariant)
+  <$> callMethod client bus path omInterface getManagedObjects
 
-addInterfaceAddedListener :: ObjectPath -> SignalCallback -> Client -> IO ()
-addInterfaceAddedListener = addInterfaceChangedListener omInterfacesAdded
+addInterfaceChangedListener :: BusName -> MemberName -> ObjectPath
+  -> SignalCallback -> Client -> IO (Maybe SignalHandler)
+addInterfaceChangedListener bus prop path sc client = do
+  rule <- matchSignalFull client bus (Just path) (Just omInterface) (Just prop)
+  forM rule $ \r -> addMatchCallback r sc client
 
-addInterfaceRemovedListener :: ObjectPath -> SignalCallback -> Client -> IO ()
-addInterfaceRemovedListener = addInterfaceChangedListener omInterfacesRemoved
+addInterfaceAddedListener :: BusName -> ObjectPath -> SignalCallback -> Client
+  -> IO (Maybe SignalHandler)
+addInterfaceAddedListener bus =
+  addInterfaceChangedListener bus omInterfacesAdded
+
+addInterfaceRemovedListener :: BusName -> ObjectPath -> SignalCallback -> Client
+  -> IO (Maybe SignalHandler)
+addInterfaceRemovedListener bus =
+  addInterfaceChangedListener bus omInterfacesRemoved

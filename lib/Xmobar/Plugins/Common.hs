@@ -7,6 +7,8 @@ module Xmobar.Plugins.Common
   , fromSingletonVariant
   , withDBusClientConnection
   , Callback
+  , displayMaybe
+  , displayMaybe'
   )
   where
 
@@ -15,8 +17,6 @@ import           Control.Monad
 import           DBus
 import           DBus.Client
 import           DBus.Internal
-
-import           Data.Maybe
 
 import           XMonad.Hooks.DynamicLog (xmobarColor)
 
@@ -27,15 +27,13 @@ startListener :: IsVariant a => MatchRule -> (Client -> IO [Variant])
   -> Client -> IO ()
 startListener rule getProp fromSignal toColor cb client = do
   reply <- getProp client
-  procMatch $ maybe Failure Match $ fromVariant =<< listToMaybe reply
+  displayMaybe cb toColor $ fromSingletonVariant reply
   void $ addMatchCallback rule (procMatch . fromSignal) client
   where
     procMatch = procSignalMatch cb toColor
 
-procSignalMatch :: (String -> IO ()) -> (a -> IO String) -> SignalMatch a -> IO ()
-procSignalMatch callback formatter (Match x) = callback =<< formatter x
-procSignalMatch callback _ Failure           = callback na
-procSignalMatch _ _ NoMatch                  = return ()
+procSignalMatch :: Callback -> (a -> IO String) -> SignalMatch a -> IO ()
+procSignalMatch cb f = withSignalMatch (displayMaybe cb f)
 
 chooseColor :: String -> String -> String -> Bool -> String
 chooseColor text colorOn colorOff state =
@@ -44,8 +42,11 @@ chooseColor text colorOn colorOff state =
 na :: String
 na = "N/A"
 
-fromSingletonVariant :: IsVariant a => [Variant] -> Maybe a
-fromSingletonVariant = fromVariant <=< listToMaybe
+displayMaybe :: Callback -> (a -> IO String) -> Maybe a -> IO ()
+displayMaybe cb f = cb <=< maybe (return na) f
+
+displayMaybe' :: Callback -> (a -> IO ()) -> Maybe a -> IO ()
+displayMaybe' cb = maybe (cb na)
 
 withDBusClientConnection :: Bool -> Callback -> (Client -> IO ()) -> IO ()
-withDBusClientConnection sys cb f = maybe (cb na) f =<< getDBusClient sys
+withDBusClientConnection sys cb f = displayMaybe' cb f =<< getDBusClient sys

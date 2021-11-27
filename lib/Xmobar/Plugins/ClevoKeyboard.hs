@@ -22,5 +22,5 @@ ckAlias = "clevokeyboard"
 
 instance Exec ClevoKeyboard where
   alias (ClevoKeyboard _) = ckAlias
-  start (ClevoKeyboard icon) cb = do
-     startBacklight matchSignalCK callGetBrightnessCK icon cb
+  start (ClevoKeyboard icon) =
+     startBacklight matchSignalCK callGetBrightnessCK icon

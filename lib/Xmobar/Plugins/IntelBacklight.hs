@@ -22,5 +22,5 @@ blAlias = "intelbacklight"
 
 instance Exec IntelBacklight where
   alias (IntelBacklight _) = blAlias
-  start (IntelBacklight icon) cb =
-     startBacklight matchSignalIB callGetBrightnessIB icon cb
+  start (IntelBacklight icon) =
+     startBacklight matchSignalIB callGetBrightnessIB icon
