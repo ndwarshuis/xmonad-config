@@ -17,6 +17,7 @@ import           Data.Int                    (Int32)
 
 import           DBus
 import           DBus.Client
+import           DBus.Internal
 import qualified DBus.Introspection          as I
 
 import           XMonad.Internal.DBus.Common

@@ -14,11 +14,11 @@ import           Control.Monad
 
 import           DBus
 import           DBus.Client
+import           DBus.Internal
 
 import           Data.Maybe
 
-import           XMonad.Hooks.DynamicLog     (xmobarColor)
-import           XMonad.Internal.DBus.Common
+import           XMonad.Hooks.DynamicLog (xmobarColor)
 
 type Callback = String -> IO ()
 

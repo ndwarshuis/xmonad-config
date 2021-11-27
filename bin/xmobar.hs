@@ -18,6 +18,7 @@ import           Data.List
 import           Data.Maybe
 
 import           DBus.Client
+import           DBus.Internal
 
 import           System.Directory
 import           System.Exit
@@ -42,7 +43,6 @@ import           XMonad.Hooks.DynamicLog
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
-import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell

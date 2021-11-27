@@ -10,8 +10,8 @@ module Xmobar.Plugins.VPN
   ) where
 
 import           DBus
+import           DBus.Internal
 
-import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common

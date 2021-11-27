@@ -10,28 +10,20 @@ module XMonad.Internal.DBus.Control
   , withDBusClient
   , withDBusClient_
   , stopXMonadService
-  , pathExists
   , disconnect
   ) where
 
 import           Control.Monad                                  (forM_, void)
 
-import           Data.Either
-
 import           DBus
 import           DBus.Client
+import           DBus.Internal
 
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Dependency
-
-introspectInterface :: InterfaceName
-introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
-
-introspectMethod :: MemberName
-introspectMethod = memberName_ "Introspect"
 
 startXMonadService :: IO (Maybe Client)
 startXMonadService = do
@@ -47,7 +39,6 @@ stopXMonadService client = do
   void $ releaseName client xmonadBusName
   disconnect client
 
-
 requestXMonadName :: Client -> IO ()
 requestXMonadName client = do
   res <- requestName client xmonadBusName []
@@ -60,11 +51,3 @@ requestXMonadName client = do
   forM_ msg putStrLn
   where
     xn = "'" ++ formatBusName xmonadBusName ++ "'"
-
-pathExists :: Bool -> BusName -> ObjectPath -> IO Bool
-pathExists sysbus n p = do
-  client <- if sysbus then connectSystem else connectSession
-  r <- call client (methodCall p introspectInterface introspectMethod)
-       { methodCallDestination = Just n }
-  disconnect client
-  return $ isRight r

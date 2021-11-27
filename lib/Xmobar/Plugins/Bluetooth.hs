@@ -41,13 +41,13 @@ import           Control.Monad
 
 import           Data.List
 import           Data.List.Split
-import qualified Data.Map                    as M
+import qualified Data.Map                   as M
 import           Data.Maybe
 
 import           DBus
 import           DBus.Client
+import           DBus.Internal
 
-import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common

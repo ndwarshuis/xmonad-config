@@ -16,8 +16,8 @@ import           Data.Word
 
 import           DBus
 import           DBus.Client
+import           DBus.Internal
 
-import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common

@@ -13,6 +13,7 @@ import           Control.Monad               (void)
 
 import           DBus
 import           DBus.Client
+import           DBus.Internal
 import qualified DBus.Introspection          as I
 
 import           Graphics.X11.XScreenSaver
