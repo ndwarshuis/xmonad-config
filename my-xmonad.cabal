@@ -8,7 +8,6 @@ library
     exposed-modules: XMonad.Internal.Concurrent.ClientMessage
                    , XMonad.Internal.Concurrent.ACPIEvent
                    , XMonad.Internal.Concurrent.DynamicWorkspaces
-                   , XMonad.Internal.Concurrent.Removable
                    , XMonad.Internal.Theme
                    , XMonad.Internal.Notify
                    , XMonad.Internal.Shell
@@ -23,6 +22,7 @@ library
                    , XMonad.Internal.DBus.Brightness.Common
                    , XMonad.Internal.DBus.Control
                    , XMonad.Internal.DBus.Screensaver
+                   , XMonad.Internal.DBus.Removable
                    , XMonad.Internal.Process
                    , Xmobar.Plugins.Common
                    , Xmobar.Plugins.BacklightCommon

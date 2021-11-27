@@ -50,12 +50,12 @@ import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ACPIEvent
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Concurrent.DynamicWorkspaces
-import           XMonad.Internal.Concurrent.Removable
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.Common
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.Screensaver
+import           XMonad.Internal.DBus.Removable
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
@@ -79,7 +79,8 @@ main = do
   sesClient <- startXMonadService
   sysClient <- getDBusClient True
   (h, p) <- spawnPipe "xmobar"
-  mapM_ (executeFeatureWith_ forkIO_) [runPowermon, runRemovableMon sysClient]
+  executeFeature_ $ runRemovableMon sysClient
+  executeFeatureWith_ forkIO_ runPowermon 
   forkIO_ $ runWorkspaceMon allDWs
   let ts = ThreadState
         { tsSessionClient = sesClient

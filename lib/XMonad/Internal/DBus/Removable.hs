@@ -4,7 +4,7 @@
 -- Currently, its only purpose is to play Super Mario sounds when a drive is
 -- inserted or removed. Why? Because I can.
 
-module XMonad.Internal.Concurrent.Removable (runRemovableMon) where
+module XMonad.Internal.DBus.Removable (runRemovableMon) where
 
 import           Control.Monad
 
@@ -74,10 +74,10 @@ playSoundMaybe p b = when b $ playSound p
 -- enable the udisks2 service at boot; however this is not default behavior.
 listenDevices :: Client -> IO ()
 listenDevices client = do
-  void $ addMatch' memAdded driveInsertedSound addedHasDrive
-  void $ addMatch' memRemoved driveRemovedSound removedHasDrive
+  addMatch' memAdded driveInsertedSound addedHasDrive
+  addMatch' memRemoved driveRemovedSound removedHasDrive
   where
-    addMatch' m p f = addMatch client ruleUdisks { matchMember = Just m }
+    addMatch' m p f = void $ addMatch client ruleUdisks { matchMember = Just m }
       $ playSoundMaybe p . f . signalBody
 
 runRemovableMon :: Maybe Client -> FeatureIO
