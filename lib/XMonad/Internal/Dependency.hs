@@ -105,11 +105,11 @@ featureExeArgs :: MonadIO m => String -> String -> [String] -> Feature (m ())
 featureExeArgs n cmd args =
   featureDefault n [Executable cmd] $ spawnCmd cmd args
 
-featureEndpoint :: BusName -> ObjectPath -> InterfaceName -> MemberName
+featureEndpoint :: String -> BusName -> ObjectPath -> InterfaceName -> MemberName
   -> Maybe Client -> FeatureIO
-featureEndpoint busname path iface mem client = Feature
+featureEndpoint name busname path iface mem client = Feature
   { ftrDepTree = DBusTree (Single cmd) client deps []
-  , ftrName = "screensaver toggle"
+  , ftrName = name
   , ftrWarning = Default
   }
   where

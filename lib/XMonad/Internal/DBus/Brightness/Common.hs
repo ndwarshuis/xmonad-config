@@ -129,9 +129,10 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
     sig = signal p i memCur
 
 callBacklight :: Maybe Client -> BrightnessConfig a b -> String -> MemberName -> FeatureIO
-callBacklight client BrightnessConfig { bcPath = p, bcInterface = i, bcName = n } controlName m =
-  (featureEndpoint xmonadBusName p i m client)
-  { ftrName = unwords [n, controlName] }
+callBacklight client BrightnessConfig { bcPath = p
+                                      , bcInterface = i
+                                      , bcName = n } controlName m =
+  featureEndpoint (unwords [n, controlName]) xmonadBusName p i m client
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)

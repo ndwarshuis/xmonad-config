@@ -121,9 +121,8 @@ exportScreensaver client = Feature
       }
 
 callToggle :: Maybe Client -> FeatureIO
-callToggle client =
-  (featureEndpoint xmonadBusName ssPath interface memToggle client)
-  { ftrName = "screensaver toggle" }
+callToggle =
+  featureEndpoint "screensaver toggle" xmonadBusName ssPath interface memToggle
 
 callQuery :: Client -> IO (Maybe SSState)
 callQuery client = do
