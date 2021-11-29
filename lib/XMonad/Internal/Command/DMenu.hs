@@ -9,6 +9,7 @@ module XMonad.Internal.Command.DMenu
   , runNetMenu
   , runDevMenu
   , runBwMenu
+  , runBTMenu
   , runShowKeys
   , runAutorandrMenu
   ) where
@@ -38,6 +39,9 @@ myDmenuDevices = "rofi-dev"
 
 myDmenuPasswords :: String
 myDmenuPasswords = "rofi-bw"
+
+myDmenuBluetooth :: String
+myDmenuBluetooth = "rofi-bt"
 
 myDmenuMonitors :: String
 myDmenuMonitors = "rofi-autorandr"
@@ -70,6 +74,10 @@ runDevMenu = featureDefault "device manager" [Executable myDmenuDevices] $ do
     $ ["-c", c]
     ++ "--" : themeArgs "#999933"
     ++ myDmenuMatchingArgs
+
+runBTMenu :: FeatureX
+runBTMenu = featureExeArgs "bluetooth selector" myDmenuBluetooth
+  $ "-c":themeArgs "#0044bb"
 
 runBwMenu :: FeatureX
 runBwMenu = featureDefault "password manager" [Executable myDmenuPasswords] $

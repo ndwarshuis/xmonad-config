@@ -54,8 +54,8 @@ import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.Common
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
-import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.DBus.Removable
+import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
@@ -80,7 +80,7 @@ main = do
   sysClient <- getDBusClient True
   (h, p) <- spawnPipe "xmobar"
   executeFeature_ $ runRemovableMon sysClient
-  executeFeatureWith_ forkIO_ runPowermon 
+  executeFeatureWith_ forkIO_ runPowermon
   forkIO_ $ runWorkspaceMon allDWs
   let ts = ThreadState
         { tsSessionClient = sesClient
@@ -511,6 +511,7 @@ externalBindings ts lock =
     , KeyBinding "M-w" "launch window selector" runWinMenu
     , KeyBinding "M-u" "launch device selector" runDevMenu
     , KeyBinding "M-b" "launch bitwarden selector" runBwMenu
+    , KeyBinding "M-e" "launch bluetooth selector" runBTMenu
     , KeyBinding "M-C-e" "launch editor" runEditor
     , KeyBinding "M-C-w" "launch browser" runBrowser
     , KeyBinding "M-C-t" "launch terminal with tmux" runTMux
