@@ -9,6 +9,7 @@ module XMonad.Internal.Command.DMenu
   , runNetMenu
   , runDevMenu
   , runBwMenu
+  , runVPNMenu
   , runBTMenu
   , runShowKeys
   , runAutorandrMenu
@@ -42,6 +43,9 @@ myDmenuPasswords = "rofi-bw"
 
 myDmenuBluetooth :: String
 myDmenuBluetooth = "rofi-bt"
+
+myDmenuVPN :: String
+myDmenuVPN = "rofi-evpn"
 
 myDmenuMonitors :: String
 myDmenuMonitors = "rofi-autorandr"
@@ -82,6 +86,10 @@ runBTMenu = featureExeArgs "bluetooth selector" myDmenuBluetooth
 runBwMenu :: FeatureX
 runBwMenu = featureDefault "password manager" [Executable myDmenuPasswords] $
   spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
+
+runVPNMenu :: FeatureX
+runVPNMenu = featureDefault "VPN selector" [Executable myDmenuVPN] $
+  spawnCmd myDmenuVPN $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
 -- TODO this is weirdly inverted
 runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction

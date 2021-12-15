@@ -511,6 +511,7 @@ externalBindings ts lock =
     , KeyBinding "M-w" "launch window selector" runWinMenu
     , KeyBinding "M-u" "launch device selector" runDevMenu
     , KeyBinding "M-b" "launch bitwarden selector" runBwMenu
+    , KeyBinding "M-v" "launch ExpressVPN selector" runVPNMenu
     , KeyBinding "M-e" "launch bluetooth selector" runBTMenu
     , KeyBinding "M-C-e" "launch editor" runEditor
     , KeyBinding "M-C-w" "launch browser" runBrowser
