@@ -260,9 +260,8 @@ getCaptureDir = do
     fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> String -> FeatureX
-runFlameshot n mode = featureDefault n [Executable myCapture] $ do
-  ssDir <- io getCaptureDir
-  spawnCmd myCapture $ mode : ["-p", ssDir]
+runFlameshot n mode = featureDefault n [Executable myCapture]
+  $ spawnCmd myCapture [mode]
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
