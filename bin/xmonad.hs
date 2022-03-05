@@ -399,6 +399,7 @@ xMsgEventHook lock ClientMessageEvent { ev_message_type = t, ev_data = d }
     case xtype of
       Workspace -> removeDynamicWorkspace tag
       ACPI      -> handleACPI lock tag
+      Unknown   -> io $ print "WARNING: unknown concurrent message"
     return (All True)
 xMsgEventHook _ _ = return (All True)
 

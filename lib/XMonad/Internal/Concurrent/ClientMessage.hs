@@ -37,6 +37,7 @@ import           Graphics.X11.Xlib.Extras
 -- TODO is there a way to do this in the libraries that import this one?
 data XMsgType = ACPI
     | Workspace
+    | Unknown
     deriving (Eq, Show)
 
 instance Enum XMsgType where
@@ -46,23 +47,7 @@ instance Enum XMsgType where
 
   fromEnum ACPI      = 0
   fromEnum Workspace = 1
-
---------------------------------------------------------------------------------
--- | Internal functions
-
-str2digit :: String -> Time
-str2digit = fromIntegral
-  . sum
-  . map (\(p, n) -> n * 256 ^ p)
-  . zip [0 :: Int ..]
-  . map fromEnum
-
--- WORKAROUND: setClientMessageEvent seems to put garbage on the end
--- of the data field (which is probably some yucky c problem I don't
--- understand). Easy solution, put something at the end of the tag to
--- separate the tag from the garbage
-garbageDelim :: Char
-garbageDelim = '~'
+  fromEnum Unknown   = 2
 
 --------------------------------------------------------------------------------
 -- | Exported API
@@ -70,12 +55,11 @@ garbageDelim = '~'
 -- | Given a string from the data field in a ClientMessage event, return the
 -- type and payload
 splitXMsg :: (Integral a) => [a] -> (XMsgType, String)
-splitXMsg msg = (xtype, tag)
+splitXMsg [] = (Unknown, "")
+splitXMsg (x:xs) = (xtype, tag)
   where
-    xtype = toEnum $ fromInteger $ toInteger $ head msg
-    tag = filterGarbage $ mapToChr $ drop 5 msg
-    filterGarbage = filter isAlphaNum . takeWhile (/= garbageDelim)
-    mapToChr = map (chr . fromInteger . toInteger)
+    xtype = toEnum $ fromInteger $ toInteger x
+    tag = map (chr . fromInteger . toInteger) $ takeWhile (/= 0) xs
 
 -- | Emit a ClientMessage event to the X server with the given type and payloud
 sendXMsg :: XMsgType -> String -> IO ()
@@ -84,16 +68,24 @@ sendXMsg xtype tag = do
   root <- rootWindow dpy $ defaultScreen dpy
   allocaXEvent $ \e -> do
     setEventType e clientMessage
-    -- NOTE: This function is written such that the penultimate
-    -- argument represents the first 40 bits of the 160 bit data
-    -- field, and it also only takes a decimal digit, which means the
-    -- string to be stored in the data field needs to be converted to
-    -- its decimal equivalent. The penultimate argument will be used
-    -- for the magic string and the last will be used for the tag.
-    setClientMessageEvent e root bITMAP 8 x t
+    -- Set the client message for the root window to be something hacky and
+    -- somewhat random that can be intercepted later in the main xmonad thread.
+    --
+    -- Use the bitmap type since this is (hopefully) not going to be used by any
+    -- apps I'm using (let alone the root window). If this isn't the case, the
+    -- logs will have some really weird messages in them. The format field is
+    -- set to 8 (eg one byte) which allows direct conversion between Word8 types
+    -- and chars/string. The last argument is a list of data, where the first
+    -- character represents the message type (Workspace vs ACPI) and the
+    -- remaining members represent the tag. Note that the data payload for the
+    -- message is 20 bytes, so the tag can be 19 characters long. Anything
+    -- longer will be clipped to 19, and anything less than 19 will be padded
+    -- with 0 (note this used to be random garbage before). See this function
+    -- for more details.
+    setClientMessageEvent' e root bITMAP 8 (x:t)
     sendEvent dpy root False substructureNotifyMask e
   flush dpy
   closeDisplay dpy
   where
     x = fromIntegral $ fromEnum xtype
-    t = str2digit $ tag ++ [garbageDelim]
+    t = fmap (fromIntegral . fromEnum) tag
