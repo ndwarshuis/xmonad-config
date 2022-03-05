@@ -133,7 +133,7 @@ instance XPrompt PowerPrompt where
 runPowerPrompt :: X () -> X ()
 runPowerPrompt lock = mkXPrompt PowerPrompt theme comp executeMaybeAction
   where
-    comp = mkComplFunFromList []
+    comp = mkComplFunFromList theme []
     theme = T.promptTheme { promptKeymap = keymap }
     keymap = M.fromList
       $ ((controlMask, xK_g), quit) :

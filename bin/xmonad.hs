@@ -93,22 +93,24 @@ main = do
   ext <- evalExternal $ externalBindings ts lock
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
-  launch
-    $ ewmh
-    $ addKeymap (filterExternal ext)
-    $ def { terminal = myTerm
-          , modMask = myModMask
-          , layoutHook = myLayouts
-          , manageHook = myManageHook
-          , handleEventHook = myEventHook lock
-          , startupHook = myStartupHook
-          , workspaces = myWorkspaces
-          , logHook = myLoghook h
-          , clickJustFocuses = False
-          , focusFollowsMouse = False
-          , normalBorderColor = T.bordersColor
-          , focusedBorderColor = T.selectedBordersColor
-          }
+  ds <- getDirectories
+  let conf = ewmh
+             $ addKeymap (filterExternal ext)
+             $ docks
+             $ def { terminal = myTerm
+                   , modMask = myModMask
+                   , layoutHook = myLayouts
+                   , manageHook = myManageHook
+                   , handleEventHook = myEventHook lock
+                   , startupHook = myStartupHook
+                   , workspaces = myWorkspaces
+                   , logHook = myLoghook h
+                   , clickJustFocuses = False
+                   , focusFollowsMouse = False
+                   , normalBorderColor = T.bordersColor
+                   , focusedBorderColor = T.selectedBordersColor
+                   }
+  launch conf ds
   where
     forkIO_ = void . forkIO
 
@@ -135,7 +137,6 @@ runCleanup ts = io $ do
 -- TODO add _NET_DESKTOP_VIEWPORTS to _NET_SUPPORTED?
 myStartupHook :: X ()
 myStartupHook = setDefaultCursor xC_left_ptr
-  <+> docksStartupHook
   <+> startupHook def
 
 --------------------------------------------------------------------------------
@@ -363,7 +364,7 @@ compareXCoord s0 s1 = compare x0 x1
 -- | Managehook configuration
 
 myManageHook :: ManageHook
-myManageHook = manageApps <+> manageDocks <+> manageHook def
+myManageHook = manageApps <+> manageHook def
 
 manageApps :: ManageHook
 manageApps = composeOne $ concatMap dwHook allDWs ++
@@ -388,7 +389,7 @@ manageApps = composeOne $ concatMap dwHook allDWs ++
 -- | Eventhook configuration
 
 myEventHook :: X () -> Event -> X All
-myEventHook lock = xMsgEventHook lock <+> docksEventHook <+> handleEventHook def
+myEventHook lock = xMsgEventHook lock <+> handleEventHook def
 
 -- | React to ClientMessage events from concurrent threads
 xMsgEventHook :: X () -> Event -> X All
@@ -443,8 +444,8 @@ internalBindings c =
               windows $ W.view n')
         ]
      ] ++
-     [ KeyBinding "M-M1-l" "move up workspace" $ moveTo Next HiddenNonEmptyWS
-     , KeyBinding "M-M1-h" "move down workspace" $ moveTo Prev HiddenNonEmptyWS
+     [ KeyBinding "M-M1-l" "move up workspace" $ moveTo Next (hiddenWS :&: Not emptyWS)
+     , KeyBinding "M-M1-h" "move down workspace" $ moveTo Prev (hiddenWS :&: Not emptyWS)
      ])
 
   , KeyGroup "Dynamic Workspaces"

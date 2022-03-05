@@ -35,7 +35,10 @@ import           Xmobar.Plugins.IntelBacklight
 import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
 
-import           XMonad                                         (getXMonadDir)
+import           XMonad.Core
+    ( cfgDir
+    , getDirectories
+    )
 import           XMonad.Hooks.DynamicLog                        (wrap)
 import           XMonad.Internal.Command.Power                  (hasBattery)
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
@@ -52,7 +55,7 @@ main = do
   sysClient <- getDBusClient True
   sesClient <- getDBusClient False
   cs <- getAllCommands =<< rightPlugins sysClient sesClient
-  d <- getXMonadDir
+  d <- cfgDir <$> getDirectories
   -- this is needed to see any printed messages
   hFlush stdout
   mapM_ (maybe skip disconnect) [sysClient, sesClient]

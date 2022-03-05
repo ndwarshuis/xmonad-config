@@ -43,6 +43,7 @@ import           System.Directory
 import           System.Environment
 import           System.FilePath
 
+import           XMonad                     (asks)
 import           XMonad.Actions.Volume
 import           XMonad.Core                hiding (spawn)
 import           XMonad.Internal.Dependency
@@ -145,7 +146,8 @@ soundDir = "sound"
 
 playSound :: MonadIO m => FilePath -> m ()
 playSound file = do
-  p <- (</> soundDir </> file) <$> getXMonadDir
+  -- manually look up directories to avoid the X monad
+  p <- io $ (</> soundDir </> file) . cfgDir <$> getDirectories
   -- paplay seems to have less latency than aplay
   spawnCmd "paplay" [p]
 
@@ -230,7 +232,7 @@ runRestart = restart "xmonad" True
 runRecompile :: X ()
 runRecompile = do
   -- assume that the conf directory contains a valid stack project
-  confDir <- getXMonadDir
+  confDir <- asks (cfgDir . directories)
   spawnAt confDir $ fmtCmd "stack" ["install"]
     #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "compilation succeeded" }
     #!|| fmtNotifyCmd defNoteError { body = Just $ Text "compilation failed" }
