@@ -113,7 +113,7 @@ featureEndpoint name busname path iface mem client = Feature
   , ftrWarning = Default
   }
   where
-    cmd = \c -> void $ callMethod c busname path iface mem
+    cmd c = void $ callMethod c busname path iface mem
     deps = [Endpoint busname path iface $ Method_ mem]
 
 --------------------------------------------------------------------------------

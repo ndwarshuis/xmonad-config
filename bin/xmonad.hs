@@ -14,7 +14,8 @@ import           Control.Monad
     )
 
 import           Data.List
-    ( isPrefixOf
+    ( intercalate
+    , isPrefixOf
     , sortBy
     , sortOn
     )
@@ -28,6 +29,7 @@ import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
 
+import           System.Environment
 import           System.IO
 import           System.Process
 
@@ -75,22 +77,27 @@ import           XMonad.Util.NamedActions
 import           XMonad.Util.WorkspaceCompare
 
 main :: IO ()
-main = do
-  sesClient <- startXMonadService
-  sysClient <- getDBusClient True
+main = getArgs >>= parse
+
+parse :: [String] -> IO ()
+parse []         = run
+parse ["--deps"] = printDeps
+parse _          = usage
+
+run :: IO ()
+run = do
+  db <- connectDBus
   (h, p) <- spawnPipe "xmobar"
-  executeFeature_ $ runRemovableMon sysClient
+  executeFeature_ $ runRemovableMon $ dbSystemClient db
   executeFeatureWith_ forkIO_ runPowermon
   forkIO_ $ runWorkspaceMon allDWs
   let ts = ThreadState
-        { tsSessionClient = sesClient
-        , tsSystemClient = sysClient
-        , tsChildPIDs = [p]
-        , tsChildHandles = [h]
-        }
+           { tsChildPIDs = [p]
+           , tsChildHandles = [h]
+           }
   lockRes <- evalFeature runScreenLock
   let lock = whenSatisfied lockRes
-  ext <- evalExternal $ externalBindings ts lock
+  ext <- evalExternal $ externalBindings ts db lock
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   ds <- getDirectories
@@ -114,22 +121,54 @@ main = do
   where
     forkIO_ = void . forkIO
 
+printDeps :: IO ()
+printDeps = do
+  db <- connectDBus
+  lockRes <- evalFeature runScreenLock
+  let lock = whenSatisfied lockRes
+  mapM_ printDep $ concatMap flatten $ externalBindings ts db lock
+  where
+    ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
+    flatten = concatMap (dtDeps . ftrDepTree . kbMaybeAction) . kgBindings
+    dtDeps (GenTree _ ds)      = ds
+    dtDeps (DBusTree _ _ _ ds) = ds
+    printDep (Executable s) = putStrLn s
+    printDep _              = skip
+
+usage :: IO ()
+usage = putStrLn $ intercalate "\n"
+  [ "xmonad: run greatest window manager"
+  , "xmonad --deps: print dependencies"
+  ]
+
+connectDBus :: IO DBusState
+connectDBus = do
+  sesClient <- startXMonadService
+  sysClient <- getDBusClient True
+  return DBusState
+    { dbSessionClient = sesClient
+    , dbSystemClient = sysClient
+    }
+
 --------------------------------------------------------------------------------
 -- | Concurrency configuration
 
+data DBusState = DBusState
+    { dbSessionClient :: Maybe Client
+    , dbSystemClient  :: Maybe Client
+    }
+
 data ThreadState = ThreadState
-    { tsSessionClient :: Maybe Client
-    , tsSystemClient  :: Maybe Client
-    , tsChildPIDs     :: [ProcessHandle]
-    , tsChildHandles  :: [Handle]
+    { tsChildPIDs    :: [ProcessHandle]
+    , tsChildHandles :: [Handle]
     }
 
 -- TODO shouldn't this be run by a signal handler?
-runCleanup :: ThreadState -> X ()
-runCleanup ts = io $ do
+runCleanup :: ThreadState -> DBusState -> X ()
+runCleanup ts db = io $ do
   mapM_ killHandle $ tsChildPIDs ts
-  forM_ (tsSessionClient ts) stopXMonadService
-  forM_ (tsSystemClient ts) disconnect
+  forM_ (dbSessionClient db) stopXMonadService
+  forM_ (dbSystemClient db) disconnect
 
 --------------------------------------------------------------------------------
 -- | Startuphook configuration
@@ -504,8 +543,8 @@ flagKeyBinding k@KeyBinding{ kbDesc = d, kbMaybeAction = a } = case a of
   (Just x) -> Just $ k{ kbMaybeAction = x }
   Nothing  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbMaybeAction = skip }
 
-externalBindings :: ThreadState -> X () -> [KeyGroup FeatureX]
-externalBindings ts lock =
+externalBindings :: ThreadState -> DBusState -> X () -> [KeyGroup FeatureX]
+externalBindings ts db lock =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
     , KeyBinding "M-g" "launch clipboard manager" runClipMenu
@@ -564,7 +603,7 @@ externalBindings ts lock =
     , KeyBinding "M-<Home>" "quit xmonad" $ ConstFeature runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" runScreenLock
     -- M-<F1> reserved for showing the keymap
-    , KeyBinding "M-<F2>" "restart xmonad" $ ConstFeature (runCleanup ts >> runRestart)
+    , KeyBinding "M-<F2>" "restart xmonad" $ ConstFeature (runCleanup ts db >> runRestart)
     , KeyBinding "M-<F3>" "recompile xmonad" $ ConstFeature runRecompile
     , KeyBinding "M-<F7>" "start Isync Service" runStartISyncService
     , KeyBinding "M-C-<F7>" "start Isync Timer" runStartISyncTimer
@@ -576,7 +615,7 @@ externalBindings ts lock =
     ]
   ]
   where
-    cl = tsSessionClient ts
+    cl = dbSessionClient db
     brightessControls ctl getter = (ioFeature . getter . ctl) cl
     ib = brightessControls intelBacklightControls
     ck = brightessControls clevoKeyboardControls
