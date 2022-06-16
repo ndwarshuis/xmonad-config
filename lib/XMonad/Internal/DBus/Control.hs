@@ -11,6 +11,7 @@ module XMonad.Internal.DBus.Control
   , withDBusClient_
   , stopXMonadService
   , disconnect
+  , dbusExporters
   ) where
 
 import           Control.Monad                                  (forM_, void)
@@ -29,10 +30,8 @@ startXMonadService :: IO (Maybe Client)
 startXMonadService = do
   client <- getDBusClient False
   forM_ client requestXMonadName
-  mapM_ (\f -> executeFeature_ $ f client) exporters
+  mapM_ (\f -> executeFeature_ $ f client) dbusExporters
   return client
-  where
-    exporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
 
 stopXMonadService :: Client -> IO ()
 stopXMonadService client = do
@@ -51,3 +50,6 @@ requestXMonadName client = do
   forM_ msg putStrLn
   where
     xn = "'" ++ formatBusName xmonadBusName ++ "'"
+
+dbusExporters :: [Maybe Client -> FeatureIO]
+dbusExporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]

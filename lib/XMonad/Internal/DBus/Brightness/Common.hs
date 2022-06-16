@@ -87,11 +87,9 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
 
 brightnessExporter :: RealFrac b => [Dependency] -> BrightnessConfig a b
   -> Maybe Client -> FeatureIO
-brightnessExporter deps bc@BrightnessConfig { bcName = n } client = Feature
-  { ftrDepTree = DBusTree (Single (exportBrightnessControls' bc)) client [Bus xmonadBusName] deps
-  , ftrName = n ++ " exporter"
-  , ftrWarning = Default
-  }
+brightnessExporter deps bc@BrightnessConfig { bcName = n } client = feature
+  (n ++ " exporter") Default
+  $ DBusTree (Single (exportBrightnessControls' bc)) client [Bus xmonadBusName] deps
 
 exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
 exportBrightnessControls' bc client = do

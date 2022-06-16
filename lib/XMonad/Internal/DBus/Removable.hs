@@ -82,8 +82,5 @@ listenDevices client = do
       $ playSoundMaybe p . f . signalBody
 
 runRemovableMon :: Maybe Client -> FeatureIO
-runRemovableMon client = Feature
-  { ftrDepTree = DBusTree (Single listenDevices) client [addedDep, removedDep] []
-  , ftrName = "removeable device monitor"
-  , ftrWarning = Default
-  }
+runRemovableMon client = feature "removeable device monitor" Default
+  $ DBusTree (Single listenDevices) client [addedDep, removedDep] []

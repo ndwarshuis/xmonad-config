@@ -1,5 +1,5 @@
-{-# LANGUAGE GADTs           #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
@@ -13,10 +13,12 @@ module XMonad.Internal.Dependency
   , FeatureX
   , FeatureIO
   , Feature(..)
+  , Feature_(..)
   , Warning(..)
   , Dependency(..)
   , UnitType(..)
   , DBusMember(..)
+  , feature
   , ioFeature
   , evalFeature
   , systemUnit
@@ -34,13 +36,16 @@ module XMonad.Internal.Dependency
   , executeFeature_
   , executeFeatureWith
   , executeFeatureWith_
+  , depName
   ) where
 
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
 
+-- import           Data.Aeson
 import           Data.List               (find)
 import           Data.Maybe              (catMaybes, fromMaybe, listToMaybe)
+-- import qualified Data.Text               as T
 
 import           DBus
 import           DBus.Client
@@ -68,12 +73,24 @@ import           XMonad.Internal.Shell
 -- dependencies that target the output/state of another feature; this is more
 -- robust anyways, at the cost of being a bit slower.
 
-data Feature a = Feature
+-- TODO some things to add to make this more feature-ful (lol)
+-- - use AndOr types to encode alternative dependencies into the tree
+-- - use an Alt data constructor for Features (which will mean "try A before B"
+-- - add an Either String Bool to dependency nodes that encodes testing status
+--   (where Right False means untested)
+-- - add a lens/functor mapper thingy to walk down the tree and update testing
+--   status fields
+-- - print to JSON
+-- - make sum type to hold all type instances of Feature blabla (eg IO and X)
+-- - figure out how to make features a dependency of another feature
+
+data Feature_ a = Feature_
   { ftrDepTree :: DepTree a
   , ftrName    :: String
   , ftrWarning :: Warning
   }
-  | ConstFeature a
+
+data Feature a = Feature (Feature_ a) | ConstFeature a
 
 -- TODO this is silly as is, and could be made more useful by representing
 -- loglevels
@@ -83,20 +100,19 @@ type FeatureX = Feature (X ())
 
 type FeatureIO = Feature (IO ())
 
+feature :: String -> Warning -> DepTree a -> Feature a
+feature n w t = Feature $ Feature_
+  { ftrDepTree = t
+  , ftrName = n
+  , ftrWarning = w
+  }
+
 ioFeature :: MonadIO m => Feature (IO b) -> Feature (m b)
 ioFeature (ConstFeature a) = ConstFeature $ liftIO a
-ioFeature Feature {..} =
-  -- HACK just doing a normal record update here will make GHC complain about
-  -- an 'insufficiently polymorphic record update' ...I guess because my
-  -- GADT isn't polymorphic enough (which is obviously BS)
-  Feature {ftrDepTree = liftIO <$> ftrDepTree, ..}
+ioFeature (Feature f)      = Feature $ f {ftrDepTree = liftIO <$> ftrDepTree f}
 
 featureDefault :: String -> [Dependency] -> a -> Feature a
-featureDefault n ds x = Feature
-  { ftrDepTree = GenTree (Single x) ds
-  , ftrName = n
-  , ftrWarning = Default
-  }
+featureDefault n ds x = feature n Default $ GenTree (Single x) ds
 
 featureExe :: MonadIO m => String -> String -> Feature (m ())
 featureExe n cmd = featureExeArgs n cmd []
@@ -105,13 +121,10 @@ featureExeArgs :: MonadIO m => String -> String -> [String] -> Feature (m ())
 featureExeArgs n cmd args =
   featureDefault n [Executable cmd] $ spawnCmd cmd args
 
-featureEndpoint :: String -> BusName -> ObjectPath -> InterfaceName -> MemberName
-  -> Maybe Client -> FeatureIO
-featureEndpoint name busname path iface mem client = Feature
-  { ftrDepTree = DBusTree (Single cmd) client deps []
-  , ftrName = name
-  , ftrWarning = Default
-  }
+featureEndpoint :: String -> BusName -> ObjectPath -> InterfaceName
+  -> MemberName -> Maybe Client -> FeatureIO
+featureEndpoint name busname path iface mem client = feature name Default
+  $ DBusTree (Single cmd) client deps []
   where
     cmd c = void $ callMethod c busname path iface mem
     deps = [Endpoint busname path iface $ Method_ mem]
@@ -156,11 +169,7 @@ type MaybeX = MaybeAction (X ())
 
 evalFeature :: Feature a -> IO (MaybeAction a)
 evalFeature (ConstFeature x) = return $ Just x
-evalFeature Feature
-  { ftrDepTree = a
-  , ftrName = n
-  , ftrWarning = w
-  } = do
+evalFeature (Feature (Feature_{ftrDepTree = a, ftrName = n, ftrWarning = w})) = do
   procName <- getProgName
   res <- evalTree a
   either (printWarnings procName) (return . Just) res
@@ -229,7 +238,7 @@ ifSatisfied _ alt      = alt
 
 data Dependency = Executable String
   | AccessiblePath FilePath Bool Bool
-  | IOTest (IO (Maybe String))
+  | IOTest String (IO (Maybe String))
   | Systemd UnitType String
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
@@ -270,7 +279,7 @@ data DBusDep =
 
 evalDependency :: Dependency -> IO (Maybe String)
 evalDependency (Executable n)         = exeSatisfied n
-evalDependency (IOTest t)             = t
+evalDependency (IOTest _ t)           = t
 evalDependency (Systemd t n)          = unitSatisfied t n
 evalDependency (AccessiblePath p r w) = pathSatisfied p r w
 
@@ -364,4 +373,41 @@ dbusDepSatisfied client (Endpoint busname objpath iface mem) = do
       , "on bus"
       , formatBusName busname
       ]
+
+--------------------------------------------------------------------------------
+-- | Printing dependencies
+
+-- instance ToJSON (DepTree a) where
+--   toJSON (GenTree _) = undefined
+
+-- instance ToJSON Dependency where
+--   toJSON (Executable n)         = depValue "executable" Nothing n
+--   toJSON (IOTest d _)           = depValue "internal" Nothing d
+--   toJSON (Systemd t n)          = depValue "systemd" (Just $ tp t) n
+--     where
+--       tp SystemUnit = "sys"
+--       tp UserUnit   = "user"
+--   toJSON (AccessiblePath p r w) = depValue "path" perms p
+--     where
+--       perms = case (r, w) of
+--         (True, True)  -> Just "readwrite"
+--         (True, False) -> Just "read"
+--         (False, True) -> Just "write"
+--         _             -> Nothing
+
+-- depValue :: String -> Maybe String -> String -> Value
+-- depValue t s n = object
+--   [ "type" .= t
+--   , "name" .= n
+--   , "subtype" .= maybe Null (String . T.pack) s
+--   ]
+
+depName :: Dependency -> String
+depName (Executable n)         = "executable: " ++ n
+depName (IOTest d _)           = "internal: " ++ d
+depName (Systemd t n)          = "systemd (" ++ tp t ++ "): "  ++ n
+  where
+    tp SystemUnit = "sys"
+    tp UserUnit   = "user"
+depName (AccessiblePath p _ _) = "path: " ++ p
 

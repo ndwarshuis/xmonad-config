@@ -86,7 +86,7 @@ parse _          = usage
 
 run :: IO ()
 run = do
-  db <- connectDBus
+  db <- connectXDBus
   (h, p) <- spawnPipe "xmobar"
   executeFeature_ $ runRemovableMon $ dbSystemClient db
   executeFeatureWith_ forkIO_ runPowermon
@@ -123,17 +123,31 @@ run = do
 
 printDeps :: IO ()
 printDeps = do
-  db <- connectDBus
-  lockRes <- evalFeature runScreenLock
-  let lock = whenSatisfied lockRes
-  mapM_ printDep $ concatMap flatten $ externalBindings ts db lock
+  (i, x) <- allFeatures
+  mapM_ printDep $ concatMap extractFeatures i ++ concatMap extractFeatures x
   where
-    ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
-    flatten = concatMap (dtDeps . ftrDepTree . kbMaybeAction) . kgBindings
+    extractFeatures (Feature f)      = dtDeps $ ftrDepTree f
+    extractFeatures (ConstFeature _) = []
     dtDeps (GenTree _ ds)      = ds
     dtDeps (DBusTree _ _ _ ds) = ds
-    printDep (Executable s) = putStrLn s
-    printDep _              = skip
+    printDep = putStrLn . depName
+
+allFeatures :: IO ([FeatureIO], [FeatureX])
+allFeatures = do
+  ses <- getDBusClient False
+  sys <- getDBusClient True
+  let db = DBusState ses sys
+  lockRes <- evalFeature runScreenLock
+  let lock = whenSatisfied lockRes
+  let bfs = concatMap (fmap kbMaybeAction . kgBindings)
+            $ externalBindings ts db lock
+  let dbus = fmap (\f -> f ses) dbusExporters
+  let others =  [runRemovableMon sys, runPowermon]
+  forM_ ses disconnect
+  forM_ sys disconnect
+  return (dbus ++ others, bfs)
+  where
+    ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
 
 usage :: IO ()
 usage = putStrLn $ intercalate "\n"
@@ -141,13 +155,16 @@ usage = putStrLn $ intercalate "\n"
   , "xmonad --deps: print dependencies"
   ]
 
-connectDBus :: IO DBusState
-connectDBus = do
-  sesClient <- startXMonadService
-  sysClient <- getDBusClient True
+connectXDBus :: IO DBusState
+connectXDBus = connectDBus_ startXMonadService
+
+connectDBus_ :: IO (Maybe Client) -> IO DBusState
+connectDBus_ getSes = do
+  ses <- getSes
+  sys <- getDBusClient True
   return DBusState
-    { dbSessionClient = sesClient
-    , dbSystemClient = sysClient
+    { dbSessionClient = ses
+    , dbSystemClient = sys
     }
 
 --------------------------------------------------------------------------------

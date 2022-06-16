@@ -291,71 +291,47 @@ rightPlugins sysClient sesClient = mapM evalFeature
   ]
 
 getWireless :: BarFeature
-getWireless = Feature
-  { ftrDepTree = GenTree (Double wirelessCmd $ readInterface isWireless) []
-  , ftrName = "wireless status indicator"
-  , ftrWarning = Default
-  }
+getWireless = feature "wireless status indicator" Default
+  $ GenTree (Double wirelessCmd $ readInterface isWireless) []
 
 getEthernet :: Maybe Client -> BarFeature
-getEthernet client = Feature
-  { ftrDepTree = DBusTree action client [devDep] []
-  , ftrName = "ethernet status indicator"
-  , ftrWarning = Default
-  }
+getEthernet client = feature "ethernet status indicator" Default
+  $ DBusTree action client [devDep] []
   where
     action = Double (\i _ -> ethernetCmd i) (readInterface isEthernet)
 
 getBattery :: BarFeature
-getBattery = Feature
-  { ftrDepTree = GenTree (Single batteryCmd) [IOTest hasBattery]
-  , ftrName = "battery level indicator"
-  , ftrWarning = Default
-  }
+getBattery = feature "battery level indicator" Default
+  $ GenTree (Single batteryCmd) [IOTest desc hasBattery]
+  where
+    desc = "Test if battery is present"
 
 getVPN :: Maybe Client -> BarFeature
-getVPN client = Feature
-  { ftrDepTree = DBusTree (Single (const vpnCmd)) client [vpnDep] [dp]
-  , ftrName = "VPN status indicator"
-  , ftrWarning = Default
-  }
+getVPN client = feature "VPN status indicator" Default
+  $ DBusTree (Single (const vpnCmd)) client [vpnDep] [dp]
   where
-    dp = IOTest vpnPresent
+    dp = IOTest desc vpnPresent
+    desc = "Use nmcli to test if VPN is present"
 
 getBt :: Maybe Client -> BarFeature
-getBt client = Feature
-  { ftrDepTree = DBusTree (Single (const btCmd)) client [btDep] []
-  , ftrName = "bluetooth status indicator"
-  , ftrWarning = Default
-  }
+getBt client = feature "bluetooth status indicator" Default
+  $ DBusTree (Single (const btCmd)) client [btDep] []
 
 getAlsa :: BarFeature
-getAlsa = Feature
-  { ftrDepTree = GenTree (Single alsaCmd) [Executable "alsactl"]
-  , ftrName = "volume level indicator"
-  , ftrWarning = Default
-  }
+getAlsa = feature "volume level indicator" Default
+  $ GenTree (Single alsaCmd) [Executable "alsactl"]
 
 getBl :: Maybe Client -> BarFeature
-getBl client = Feature
-  { ftrDepTree = DBusTree (Single (const blCmd)) client [intelBacklightSignalDep] []
-  , ftrName = "Intel backlight indicator"
-  , ftrWarning = Default
-  }
+getBl client = feature "Intel backlight indicator" Default
+  $ DBusTree (Single (const blCmd)) client [intelBacklightSignalDep] []
 
 getCk :: Maybe Client -> BarFeature
-getCk client = Feature
-  { ftrDepTree = DBusTree (Single (const ckCmd)) client [clevoKeyboardSignalDep] []
-  , ftrName = "Clevo keyboard indicator"
-  , ftrWarning = Default
-  }
+getCk client = feature "Clevo keyboard indicator" Default
+  $ DBusTree (Single (const ckCmd)) client [clevoKeyboardSignalDep] []
 
 getSs :: Maybe Client -> BarFeature
-getSs client = Feature
-  { ftrDepTree = DBusTree (Single (const ssCmd)) client [ssSignalDep] []
-  , ftrName = "screensaver indicator"
-  , ftrWarning = Default
-  }
+getSs client = feature "screensaver indicator" Default
+  $ DBusTree (Single (const ssCmd)) client [ssSignalDep] []
 
 getAllCommands :: [MaybeAction CmdSpec] -> IO BarRegions
 getAllCommands right = do

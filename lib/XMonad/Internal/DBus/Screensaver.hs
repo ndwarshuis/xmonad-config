@@ -95,7 +95,7 @@ bodyGetCurrentState _   = Nothing
 -- | Exported haskell API
 
 exportScreensaver :: Maybe Client -> FeatureIO
-exportScreensaver client = Feature
+exportScreensaver client = Feature $ Feature_
   { ftrDepTree = DBusTree (Single cmd) client [Bus xmonadBusName] [Executable ssExecutable]
   , ftrName = "screensaver interface"
   , ftrWarning = Default
