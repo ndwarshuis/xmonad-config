@@ -292,46 +292,47 @@ rightPlugins sysClient sesClient = mapM evalFeature
 
 getWireless :: BarFeature
 getWireless = feature "wireless status indicator" Default
-  $ GenTree (Double wirelessCmd $ readInterface isWireless) []
+  -- TODO this is stupid
+  $ GenTree (Double wirelessCmd $ readInterface isWireless) (Only $ exe "ls")
 
 getEthernet :: Maybe Client -> BarFeature
 getEthernet client = feature "ethernet status indicator" Default
-  $ DBusTree action client [devDep] []
+  $ DBusTree action client (Only $ fullDep devDep)
   where
     action = Double (\i _ -> ethernetCmd i) (readInterface isEthernet)
 
 getBattery :: BarFeature
 getBattery = feature "battery level indicator" Default
-  $ GenTree (Single batteryCmd) [IOTest desc hasBattery]
+  $ GenTree (Single batteryCmd) (Only $ fullDep $ IOTest desc hasBattery)
   where
     desc = "Test if battery is present"
 
 getVPN :: Maybe Client -> BarFeature
 getVPN client = feature "VPN status indicator" Default
-  $ DBusTree (Single (const vpnCmd)) client [vpnDep] [dp]
+  $ DBusTree (Single (const vpnCmd)) client $ And (Only $ fullDep vpnDep) (Only dp)
   where
-    dp = IOTest desc vpnPresent
+    dp = fullDep $ DBusGenDep $ IOTest desc vpnPresent
     desc = "Use nmcli to test if VPN is present"
 
 getBt :: Maybe Client -> BarFeature
 getBt client = feature "bluetooth status indicator" Default
-  $ DBusTree (Single (const btCmd)) client [btDep] []
+  $ DBusTree (Single (const btCmd)) client (Only $ fullDep btDep)
 
 getAlsa :: BarFeature
 getAlsa = feature "volume level indicator" Default
-  $ GenTree (Single alsaCmd) [Executable "alsactl"]
+  $ GenTree (Single alsaCmd) (Only $ exe "alsactl")
 
 getBl :: Maybe Client -> BarFeature
 getBl client = feature "Intel backlight indicator" Default
-  $ DBusTree (Single (const blCmd)) client [intelBacklightSignalDep] []
+  $ DBusTree (Single (const blCmd)) client (Only $ fullDep intelBacklightSignalDep)
 
 getCk :: Maybe Client -> BarFeature
 getCk client = feature "Clevo keyboard indicator" Default
-  $ DBusTree (Single (const ckCmd)) client [clevoKeyboardSignalDep] []
+  $ DBusTree (Single (const ckCmd)) client (Only $ fullDep clevoKeyboardSignalDep)
 
 getSs :: Maybe Client -> BarFeature
 getSs client = feature "screensaver indicator" Default
-  $ DBusTree (Single (const ssCmd)) client [ssSignalDep] []
+  $ DBusTree (Single (const ssCmd)) client (Only $ fullDep ssSignalDep)
 
 getAllCommands :: [MaybeAction CmdSpec] -> IO BarRegions
 getAllCommands right = do

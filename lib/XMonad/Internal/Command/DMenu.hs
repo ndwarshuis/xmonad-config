@@ -72,7 +72,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: FeatureX
-runDevMenu = featureDefault "device manager" [Executable myDmenuDevices] $ do
+runDevMenu = featureDefault "device manager" (Only $ exe myDmenuDevices) $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
@@ -84,11 +84,11 @@ runBTMenu = featureExeArgs "bluetooth selector" myDmenuBluetooth
   $ "-c":themeArgs "#0044bb"
 
 runBwMenu :: FeatureX
-runBwMenu = featureDefault "password manager" [Executable myDmenuPasswords] $
+runBwMenu = featureDefault "password manager" (Only $ exe myDmenuPasswords) $
   spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 runVPNMenu :: FeatureX
-runVPNMenu = featureDefault "VPN selector" [Executable myDmenuVPN] $
+runVPNMenu = featureDefault "VPN selector" (Only $ exe myDmenuVPN) $
   spawnCmd myDmenuVPN $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
 -- TODO this is weirdly inverted
@@ -101,7 +101,7 @@ runShowKeys x = addName "Show Keybindings" $ do
 
 runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> FeatureX
 runDMenuShowKeys kbs =
-  featureDefault "keyboard shortcut menu" [Executable myDmenuCmd] $ io $ do
+  featureDefault "keyboard shortcut menu" (Only $ exe myDmenuCmd) $ io $ do
   (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
   forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
   where
@@ -116,7 +116,7 @@ runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 
 runClipMenu :: FeatureX
 runClipMenu =
-  featureDefault "clipboard manager" [Executable myDmenuCmd, Executable "greenclip"]
+  featureDefault "clipboard manager" (And (Only $ exe myDmenuCmd) (Only $ exe "greenclip"))
   $ spawnCmd myDmenuCmd args
   where
     args = [ "-modi", "\"clipboard:greenclip print\""

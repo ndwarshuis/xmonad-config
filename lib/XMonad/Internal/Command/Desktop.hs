@@ -97,7 +97,7 @@ runTerm = featureExe "terminal" myTerm
 runTMux :: FeatureX
 runTMux = featureDefault "terminal multiplexer" deps cmd
   where
-    deps = [Executable myTerm, Executable "tmux", Executable "bash"]
+    deps = listToAnds (exe myTerm) $ fmap exe ["tmux", "bash"]
     cmd = spawn
       $ "tmux has-session"
       #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
@@ -106,7 +106,7 @@ runTMux = featureDefault "terminal multiplexer" deps cmd
     msg = "could not connect to tmux session"
 
 runCalc :: FeatureX
-runCalc = featureDefault "calculator" [Executable myTerm, Executable "R"]
+runCalc = featureDefault "calculator" (And (Only $ exe myTerm) (Only $ exe "R"))
   $ spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: FeatureX
@@ -153,7 +153,7 @@ playSound file = do
 
 featureSound :: String -> FilePath -> X () -> X () -> FeatureX
 featureSound n file pre post =
-  featureDefault ("volume " ++ n ++ " control") [Executable "paplay"]
+  featureDefault ("volume " ++ n ++ " control") (Only $ exe "paplay")
   $ pre >> playSound file >> post
 
 runVolumeDown :: FeatureX
@@ -192,7 +192,7 @@ runNotificationContext =
 
 runToggleBluetooth :: FeatureX
 runToggleBluetooth =
-  featureDefault "bluetooth toggle" [Executable myBluetooth]
+  featureDefault "bluetooth toggle" (Only $ exe myBluetooth)
   $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
@@ -201,7 +201,7 @@ runToggleBluetooth =
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
 runToggleEthernet :: FeatureX
-runToggleEthernet = featureDefault "ethernet toggle" [Executable "nmcli"]
+runToggleEthernet = featureDefault "ethernet toggle" (Only $ exe "nmcli")
   $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
@@ -210,14 +210,14 @@ runToggleEthernet = featureDefault "ethernet toggle" [Executable "nmcli"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
 runStartISyncTimer :: FeatureX
-runStartISyncTimer = featureDefault "isync timer" [userUnit "mbsync.timer"]
+runStartISyncTimer = featureDefault "isync timer" (Only $ userUnit "mbsync.timer")
   $ spawn
   $ "systemctl --user start mbsync.timer"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
   #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
 runStartISyncService :: FeatureX
-runStartISyncService = featureDefault "isync" [userUnit "mbsync.service"]
+runStartISyncService = featureDefault "isync" (Only $ userUnit "mbsync.service")
   $ spawn
   $ "systemctl --user start mbsync.service"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
@@ -262,7 +262,7 @@ getCaptureDir = do
     fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> String -> FeatureX
-runFlameshot n mode = featureDefault n [Executable myCapture]
+runFlameshot n mode = featureDefault n (Only $ exe myCapture)
   $ spawnCmd myCapture [mode]
 
 -- TODO this will steal focus from the current window (and puts it
@@ -280,6 +280,6 @@ runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: FeatureX
 runCaptureBrowser =
-  featureDefault "screen capture browser" [Executable myImageBrowser] $ do
+  featureDefault "screen capture browser" (Only $ exe myImageBrowser) $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

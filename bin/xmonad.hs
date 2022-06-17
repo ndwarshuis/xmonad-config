@@ -122,32 +122,32 @@ run = do
     forkIO_ = void . forkIO
 
 printDeps :: IO ()
-printDeps = do
-  (i, x) <- allFeatures
-  mapM_ printDep $ concatMap extractFeatures i ++ concatMap extractFeatures x
-  where
-    extractFeatures (Feature f)      = dtDeps $ ftrDepTree f
-    extractFeatures (ConstFeature _) = []
-    dtDeps (GenTree _ ds)      = ds
-    dtDeps (DBusTree _ _ _ ds) = ds
-    printDep = putStrLn . depName
+printDeps = skip
+  -- (i, x) <- allFeatures
+  -- mapM_ printDep $ concatMap extractFeatures i ++ concatMap extractFeatures x
+  -- where
+  --   extractFeatures (Feature f _)    = dtDeps $ ftrDepTree f
+  --   extractFeatures (ConstFeature _) = []
+  --   dtDeps (GenTree _ ds)    = ds
+  --   dtDeps (DBusTree _ _ ds) = ds
+  --   printDep (FullDep d) = putStrLn . depName d
 
-allFeatures :: IO ([FeatureIO], [FeatureX])
-allFeatures = do
-  ses <- getDBusClient False
-  sys <- getDBusClient True
-  let db = DBusState ses sys
-  lockRes <- evalFeature runScreenLock
-  let lock = whenSatisfied lockRes
-  let bfs = concatMap (fmap kbMaybeAction . kgBindings)
-            $ externalBindings ts db lock
-  let dbus = fmap (\f -> f ses) dbusExporters
-  let others =  [runRemovableMon sys, runPowermon]
-  forM_ ses disconnect
-  forM_ sys disconnect
-  return (dbus ++ others, bfs)
-  where
-    ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
+-- allFeatures :: IO ([FeatureIO], [FeatureX])
+-- allFeatures = do
+--   ses <- getDBusClient False
+--   sys <- getDBusClient True
+--   let db = DBusState ses sys
+--   lockRes <- evalFeature runScreenLock
+--   let lock = whenSatisfied lockRes
+--   let bfs = concatMap (fmap kbMaybeAction . kgBindings)
+--             $ externalBindings ts db lock
+--   let dbus = fmap (\f -> f ses) dbusExporters
+--   let others =  [runRemovableMon sys, runPowermon]
+--   forM_ ses disconnect
+--   forM_ sys disconnect
+--   return (dbus ++ others, bfs)
+--   where
+--     ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
 
 usage :: IO ()
 usage = putStrLn $ intercalate "\n"

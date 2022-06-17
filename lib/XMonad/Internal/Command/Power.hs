@@ -101,7 +101,7 @@ runOptimusPrompt' = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: FeatureX
-runOptimusPrompt = featureDefault "graphics switcher" [Executable myOptimusManager]
+runOptimusPrompt = featureDefault "graphics switcher" (Only $ exe myOptimusManager)
   runOptimusPrompt'
 
 --------------------------------------------------------------------------------

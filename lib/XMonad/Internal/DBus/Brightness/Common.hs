@@ -85,11 +85,14 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
 --------------------------------------------------------------------------------
 -- | Internal DBus Crap
 
-brightnessExporter :: RealFrac b => [Dependency] -> BrightnessConfig a b
+brightnessExporter :: RealFrac b => [FullDep Dependency] -> BrightnessConfig a b
   -> Maybe Client -> FeatureIO
 brightnessExporter deps bc@BrightnessConfig { bcName = n } client = feature
   (n ++ " exporter") Default
-  $ DBusTree (Single (exportBrightnessControls' bc)) client [Bus xmonadBusName] deps
+  $ DBusTree (Single (exportBrightnessControls' bc)) client ds
+  where
+    ds = listToAnds (fullDep $ Bus xmonadBusName)
+      $ fmap (fmap DBusGenDep) deps
 
 exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
 exportBrightnessControls' bc client = do

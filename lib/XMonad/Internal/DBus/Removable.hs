@@ -32,13 +32,13 @@ memAdded = memberName_ "InterfacesAdded"
 memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
-dbusDep :: MemberName -> DBusDep
-dbusDep m = Endpoint bus path interface $ Signal_ m
+dbusDep :: MemberName -> FullDep DBusDep
+dbusDep m = fullDep $ Endpoint bus path interface $ Signal_ m
 
-addedDep :: DBusDep
+addedDep :: FullDep DBusDep
 addedDep = dbusDep memAdded
 
-removedDep :: DBusDep
+removedDep :: FullDep DBusDep
 removedDep = dbusDep memRemoved
 
 driveInsertedSound :: FilePath
@@ -83,4 +83,4 @@ listenDevices client = do
 
 runRemovableMon :: Maybe Client -> FeatureIO
 runRemovableMon client = feature "removeable device monitor" Default
-  $ DBusTree (Single listenDevices) client [addedDep, removedDep] []
+  $ DBusTree (Single listenDevices) client $ And (Only addedDep) (Only removedDep)

@@ -89,10 +89,10 @@ intelBacklightConfig = BrightnessConfig
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-curFileDep :: Dependency
+curFileDep :: FullDep Dependency
 curFileDep = pathRW curFile
 
-maxFileDep :: Dependency
+maxFileDep :: FullDep Dependency
 maxFileDep = pathR maxFile
 
 intelBacklightSignalDep :: DBusDep
