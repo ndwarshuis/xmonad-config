@@ -1,12 +1,13 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs         #-}
+{-# LANGUAGE TupleSections #-}
 
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
 
 module XMonad.Internal.DependencyX where
 
-import           Control.Monad.IO.Class
-import           Control.Monad.Identity
+-- import           Control.Monad.IO.Class
+-- import           Control.Monad.Identity
 
 -- import           Data.Aeson
 import           Data.Bifunctor
@@ -24,7 +25,8 @@ import           System.Directory        (findExecutable, readable, writable)
 import           System.Environment
 import           System.Exit
 
-import           XMonad.Core             (X, io)
+-- import           XMonad.Core             (X, io)
+import           XMonad.Core             (X)
 import           XMonad.Internal.IO
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
@@ -56,11 +58,11 @@ printMsg pname lvl (Msg ml mn msg)
 
 -- | Given a feature, return a monadic action if all dependencies are satisfied,
 -- else Nothing (and print errors)
-evalFeature :: Feature a ResultTree p -> ([Msg], Maybe a)
-evalFeature (ConstFeature x) = ([], Just x)
-evalFeature NoFeature = return Nothing
+evalFeature :: Feature a ResultTree p -> (Maybe a, [Msg])
+evalFeature (ConstFeature x) = (Just x, [])
+evalFeature NoFeature = (Nothing, [])
 evalFeature (Feature f alt) =
-  either (\es -> first (++es) $ evalFeature alt) (\a -> ([], Just a))
+  either (\es -> second (++es) $ evalFeature alt) (first Just)
   $ evalFeatureData f
 
 --------------------------------------------------------------------------------
@@ -76,9 +78,11 @@ data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord)
 
 data Msg = Msg LogLevel String String
 
-evalFeatureData :: FeatureData a ResultTree p -> Either [Msg] a
+evalFeatureData :: FeatureData a ResultTree p -> Either [Msg] (a, [Msg])
 evalFeatureData FeatureData { fdTree = t, fdName = n, fdLevel = l } =
-  either (Left . fmap (Msg l n)) Right $ evalActionTree t
+  bimap (msg l) (second (msg $ min l Warn)) $ evalActionTree t
+  where
+    msg lvl = fmap (Msg lvl n)
 
 --------------------------------------------------------------------------------
 -- | Action Tree
@@ -87,20 +91,20 @@ data ActionTree a t p =
   IOTree (Action a p) (t (IODependency a t p) p)
   | DBusTree (Action (Client -> a) p) (Maybe Client) (t (DBusDependency a t p) p)
 
-data Action a p = Standalone a | Consumer (p -> a) (p -> p -> Result p)
+data Action a p = Standalone a
+  | Consumer (p -> a) (p -> Summary p) (p -> p -> Summary p)
 
-evalActionTree :: ActionTree a ResultTree p -> Either [String] a
+evalActionTree :: ActionTree a ResultTree p -> Either [String] (a, [String])
 evalActionTree at = case at of
   (IOTree a t)            -> resolve a t
-  (DBusTree a (Just c) t) -> (\f -> f c) <$> resolve a t
+  (DBusTree a (Just c) t) -> (\(f, w) -> (f c, w)) <$> resolve a t
   -- TODO this is kinda redundant because I'll also get a message the dep tree
-  -- failing what I don't have a client
+  -- failing when I don't have a client
   (DBusTree _ Nothing _)  -> Left ["client not available to build action"]
   where
-    resolve (Standalone f) t       = const (Right f) =<< evalTreeNoop t
-    resolve (Consumer f combine) t = maybe noPayload (Right . f)
-      -- TODO not sure about this Right . Just thing, seems odd that I need it
-      =<< evalTree combine (Right . Just) t
+    resolve (Standalone af) t = (\(_, w) -> Right (af, w)) =<< evalTreeNoop t
+    resolve (Consumer af f1 f2) t = (\(p, w) -> maybe noPayload (\p' -> Right (af p', w)) p)
+      =<< evalTree f1 f2 t
     noPayload = Left ["payload not available to build action"]
 
 --------------------------------------------------------------------------------
@@ -109,58 +113,91 @@ evalActionTree at = case at of
 data Tree d p = And (Tree d p) (Tree d p) | Or (Tree d p) (Tree d p) | Only d
 
 -- | how to interpret ResultTree combinations:
--- First (Success a) (Tree a) -> Or that succeeded on left
--- First (Fail a) (Tree a) -> And that failed on left
--- Both (Fail a) (Fail a) -> Or that failed
--- Both (Success a) (Success a) -> And that succeeded
--- Both (Fail a) (Success a) -> Or that failed first and succeeded second
--- Both (Success a) (Fail a) -> And that failed on the right
+-- First (LeafSuccess a) (Tree a) -> Or that succeeded on left
+-- First (LeafFail a) (Tree a) -> And that failed on left
+-- Both (LeafFail a) (Fail a) -> Or that failed
+-- Both (LeafSuccess a) (LeafSuccess a) -> And that succeeded
+-- Both (LeafFail a) (LeafSuccess a) -> Or that failed first and succeeded second
+-- Both (LeafSuccess a) (LeafFail a) -> And that failed on the right
 
 data ResultTree d p =
   First (ResultTree d p) (Tree d p)
   | Both (ResultTree d p) (ResultTree d p)
-  | Success d (Maybe p)
-  | Fail d [String]
+  | LeafSuccess d (Maybe p, [String])
+  | LeafFail d [String]
+
+type Payload p = (Maybe p, [String])
+
+type Summary p = Either [String] (Payload p)
+
+smryNil :: q -> Summary p
+smryNil = const $ Right (Nothing, [])
+
+smryFail :: String -> Either [String] a
+smryFail msg = Left [msg]
+
+smryInit :: Summary p
+smryInit = Right (Nothing, [])
 
 -- | Given an updated condition tree, collect all evaluations and return a
 -- combined evaluation (which may be Nothing, Something, or an error). Must also
 -- supply a function to combine Results in the corner case where two And
 -- arguments are successful and have non-empty outputs.
-evalTree :: (p -> p -> Result p) -> (p -> Result p) -> ResultTree a p -> Result p
-evalTree f2 f1 = go (Right Nothing)
+evalTree :: (p -> Summary p) -> (p -> p -> Summary p) -> ResultTree a p -> Summary p
+evalTree f1 f2 = go (Right (Nothing, []))
   where
-    go acc (First a _) = case go acc a of
-      -- Or succeeds on left
-      (Right p) -> combine p =<< acc
-      -- And fails on left
+    go smry (First a _) = case go smry a of
+    --   -- Or succeeds on left
+      (Right p) -> combine p =<< smry
+    --   -- And fails on left
       (Left e)  -> Left e
-    go acc (Both a b) = case (go acc a, go acc b) of
+    go smry (Both a b) = case (go smry a, go smry b) of
       -- And succeeds
-      (Right pa, Right pb) -> combine pb =<< combine pa =<< acc
+      (Right pa, Right pb) -> combine pb =<< combine pa =<< smry
       -- Or fails both
-      (Left ea, Left eb)   -> addErrors acc (ea ++ eb)
+      (Left ea, Left eb)   -> addCrits smry (ea ++ eb)
       -- And fails on right
-      (Right _, Left eb)   -> addErrors acc eb
-      -- Or succeeds on right
-      (Left ea, Right pb)  -> either (Left . (ea ++)) (combine pb) acc
-    go acc (Success _ p) = combine p =<< acc
-    go acc (Fail _ e)    = addErrors acc e
-    addErrors cur new = Left $ new ++ fromLeft [] cur
-    combine (Just a) (Just b) = f2 a b
-    combine (Just a) Nothing  = f1 a
-    combine Nothing (Just b)  = f1 b
-    combine _ _               = Right Nothing
+      (Right _, Left eb)   -> addCrits smry eb
+      -- -- Or succeeds on right
+      (Left ea, Right pb)  -> addWarnings ea =<< combine pb =<< smry
+    go smry (LeafSuccess _ s) = combine s =<< smry
+    go smry (LeafFail _ e)    = addCrits smry e
+    combine (Just pa, wa) (Just pb, _) = addWarnings wa =<< f2 pa pb
+    combine (Just pa, wa) (Nothing, _) = addWarnings wa =<< f1 pa
+    combine (Nothing, wa) (Just pb, _) = addWarnings wa =<< f1 pb
+    combine (Nothing, wa) cur          = addWarnings wa cur
+    addWarnings new (p, cur) = Right (p, cur ++ new)
+    addCrits smry crits = Left $ crits ++ fromLeft [] smry
 
-evalTreeNoop :: ResultTree a p -> Result p
-evalTreeNoop = evalTree (const . evalNil) evalNil
+evalTreeNoop :: ResultTree a p -> Summary p
+evalTreeNoop = evalTree smryNil (const . smryNil)
 
-mapMTree :: Monad m => (d -> m (Result p)) -> Tree d p
-  -> m (ResultTree d p)
+--------------------------------------------------------------------------------
+-- | Result
+
+type Result p = Either [String] (Maybe p)
+
+resultNil :: p -> Result q
+resultNil = const $ Right Nothing
+
+-- | Given a condition tree, evaluate all dependencies according to 'fill in'
+-- the results (which may either be Nothing, a returned payload to use for the
+-- action, or an error.
+updateIOConditions :: Tree (IODependency a Tree p) p
+  -> IO (ResultTree (IODependency a Tree p) p)
+updateIOConditions = mapMTree testIODependency
+
+updateDBusConditions :: Client -> Tree (DBusDependency a Tree p) p
+  -> IO (ResultTree (DBusDependency a Tree p) p)
+updateDBusConditions client = mapMTree (evalDBusDependency client)
+
+mapMTree :: Monad m => (d -> m (Summary p)) -> Tree d p -> m (ResultTree d p)
 mapMTree f = fmap snd . go
   where
     go (And a b) = doTest a b True
     go (Or a b) = doTest a b False
-    go (Only a) = either (\x -> (False, Fail a x)) (\x -> (True, Success a x))
+    go (Only a) =
+      either (\es -> (False, LeafFail a es)) (\p -> (True, LeafSuccess a p))
       <$> f a
     doTest a b useAnd = do
       (success, ra) <- go a
@@ -168,7 +205,7 @@ mapMTree f = fmap snd . go
       if try2nd then second (Both ra) <$> go b else return (success, First ra b)
 
 --------------------------------------------------------------------------------
--- | Dependency
+-- | IO Dependency
 
 data IODependency a t p = Executable Bool FilePath
   | AccessiblePath FilePath Bool Bool
@@ -179,54 +216,20 @@ data IODependency a t p = Executable Bool FilePath
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
 
-data DBusDependency a e p =
-  Bus BusName
-  | Endpoint BusName ObjectPath InterfaceName DBusMember
-  | DBusIO (IODependency a e p)
+testIODependency :: IODependency a Tree p -> IO (Summary p)
 
-data DBusMember = Method_ MemberName
-  | Signal_ MemberName
-  | Property_ String
-  deriving (Eq, Show)
-
---------------------------------------------------------------------------------
--- | Result
-
-type Result p = Either [String] (Maybe p)
-
-evalNil :: p -> Result q
-evalNil = const $ Right Nothing
-
-evalFail :: String -> Result p
-evalFail msg = Left [msg]
-
--- | Given a condition tree, evaluate all dependencies according to 'fill in'
--- the results (which may either be Nothing, a returned payload to use for the
--- action, or an error.
-updateIOConditions :: Tree (IODependency a Tree p) p -> IO (ResultTree (IODependency a Tree p) p)
-updateIOConditions = mapMTree testIODependency
-
-updateDBusConditions :: Client -> Tree (DBusDependency a Tree p) p
-  -> IO (ResultTree (DBusDependency a Tree p) p)
-updateDBusConditions client = mapMTree (evalDBusDependency client)
-
---------------------------------------------------------------------------------
--- | IO Dependency
-
-testIODependency :: IODependency a Tree p -> IO (Result p)
-
-testIODependency (Executable _ bin) = maybe err evalNil <$> findExecutable bin
+testIODependency (Executable _ bin) = maybe err smryNil <$> findExecutable bin
   where
     err = Left ["executable '" ++ bin ++ "' not found"]
 
-testIODependency (IOTest _ t) = maybe (Right Nothing) (Left . (:[])) <$> t
+testIODependency (IOTest _ t) = maybe (Right (Nothing, [])) (Left . (:[])) <$> t
 
-testIODependency (IORead _ t) = either (Left . (:[])) Right <$> t
+testIODependency (IORead _ t) = bimap (:[]) (, []) <$> t
 
 testIODependency (Systemd t n) = do
   (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
   return $ case rc of
-    ExitSuccess -> Right Nothing
+    ExitSuccess -> Right (Nothing, [])
     _           -> Left ["systemd " ++ unitType t ++ " unit '" ++ n ++ "' not found"]
   where
     cmd = fmtCmd "systemctl" $ ["--user" | t == UserUnit] ++ ["status", n]
@@ -240,14 +243,14 @@ testIODependency (AccessiblePath p r w) = do
   where
     testPerm False _ _  = Nothing
     testPerm True f res = Just $ f res
-    permMsg NotFoundError            = evalFail "file not found"
-    permMsg PermError                = evalFail "could not get permissions"
+    permMsg NotFoundError            = smryFail "file not found"
+    permMsg PermError                = smryFail "could not get permissions"
     permMsg (PermResult res) =
       case (testPerm r readable res, testPerm w writable res) of
-        (Just False, Just False) -> evalFail "file not readable or writable"
-        (Just False, _)          -> evalFail "file not readable"
-        (_, Just False)          -> evalFail "file not writable"
-        _                        -> Right Nothing
+        (Just False, Just False) -> smryFail "file not readable or writable"
+        (Just False, _)          -> smryFail "file not readable"
+        (_, Just False)          -> smryFail "file not writable"
+        _                        -> Right (Nothing, [])
 
 testIODependency (NestedFeature ftr) = go ftr
   where
@@ -260,12 +263,22 @@ testIODependency (NestedFeature ftr) = go ftr
       where
         failMaybe NoFeature msg = return $ Left msg
         failMaybe f _           = go f
-        evalFun (Standalone _) = evalTreeNoop
-        evalFun (Consumer _ f) = evalTree f (return . return)
-    go _ = return $ Right Nothing
+        evalFun (Standalone _)     = evalTreeNoop
+        evalFun (Consumer _ f1 f2) = evalTree f1 f2
+    go _ = return $ Right (Nothing, [])
 
 --------------------------------------------------------------------------------
 -- | DBus Dependency Result
+
+data DBusDependency a e p =
+  Bus BusName
+  | Endpoint BusName ObjectPath InterfaceName DBusMember
+  | DBusIO (IODependency a e p)
+
+data DBusMember = Method_ MemberName
+  | Signal_ MemberName
+  | Property_ String
+  deriving (Eq, Show)
 
 introspectInterface :: InterfaceName
 introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
@@ -273,15 +286,15 @@ introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
 introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
-evalDBusDependency :: Client -> DBusDependency a Tree p -> IO (Result p)
+evalDBusDependency :: Client -> DBusDependency a Tree p -> IO (Summary p)
 
 evalDBusDependency client (Bus bus) = do
   ret <- callMethod client queryBus queryPath queryIface queryMem
   return $ case ret of
-        Left e    -> evalFail e
+        Left e    -> smryFail e
         Right b -> let ns = bodyGetNames b in
-          if bus' `elem` ns then Right Nothing
-          else evalFail $ unwords ["name", singleQuote bus', "not found on dbus"]
+          if bus' `elem` ns then Right (Nothing, [])
+          else smryFail $ unwords ["name", singleQuote bus', "not found on dbus"]
   where
     bus' = formatBusName bus
     queryBus = busName_ "org.freedesktop.DBus"
@@ -294,14 +307,14 @@ evalDBusDependency client (Bus bus) = do
 evalDBusDependency client (Endpoint busname objpath iface mem) = do
   ret <- callMethod client busname objpath introspectInterface introspectMethod
   return $ case ret of
-        Left e     -> evalFail e
+        Left e     -> smryFail e
         Right body -> procBody body
   where
     procBody body = let res = findMem =<< I.parseXML objpath =<< fromVariant
                           =<< listToMaybe body in
       case res of
-        Just True -> Right Nothing
-        _         -> evalFail $ fmtMsg' mem
+        Just True -> Right (Nothing, [])
+        _         -> smryFail $ fmtMsg' mem
     findMem = fmap (matchMem mem)
       . find (\i -> I.interfaceName i == iface)
       . I.objectInterfaces
