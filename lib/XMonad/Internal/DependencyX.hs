@@ -40,33 +40,35 @@ type FeatureX p = Feature (X ()) p
 
 type FeatureIO p = Feature (IO ()) p
 
-data Feature a p = Feature (FeatureData a Tree_ p) (Feature a p)
+data Feature a p = Feature (FeatureData a Tree p) (Feature a p)
   | NoFeature
   | ConstFeature a
 
 -- TODO this feels icky, and I don't feel like typing it
 data TestedFeature a p = TestedFeature (TestedFeature_ a p)
-  | TestedConst a [String]
+  | TestedConst a [FailedFeature a p]
 
 data TestedFeature_ a p = TestedFeature_
   { tfSuccess  :: Maybe (SuccessfulFeature a p)
-  , tfFailed   :: [Either (FeatureData a Tree_ p, String)
-                   (FeatureData a ResultTree_ p, [String])]
+  , tfFailed   :: [FailedFeature a p]
   , tfUntested :: Feature a p
   }
 
+type FailedFeature a p = Either (FeatureData a Tree p, String)
+  (FeatureData a ResultTree p, [String])
+
 data SuccessfulFeature a p = SuccessfulFeature
-  { sfData     :: FeatureData a ResultTree_ p
+  { sfData     :: FeatureData a ResultTree p
   , sfAction   :: a
   , sfWarnings :: [String]
   }
 
-data FeatureResult a p = Untestable (FeatureData a Tree_ p) String |
-  FailedFtr (FeatureData a ResultTree_ p) [String] |
+data FeatureResult a p = Untestable (FeatureData a Tree p) String |
+  FailedFtr (FeatureData a ResultTree p) [String] |
   SuccessfulFtr (SuccessfulFeature a p)
 
-type ActionTreeMaybe a p = Either (ActionTree a Tree_ p, String)
-  (ActionTree a ResultTree_ p, Maybe a, [String])
+type ActionTreeMaybe a p = Either (ActionTree a Tree p, String)
+  (ActionTree a ResultTree p, Maybe a, [String])
 
 printMsgs :: LogLevel -> [Msg] -> IO ()
 printMsgs lvl ms = do
@@ -105,12 +107,10 @@ data Action a p = Standalone a | Consumer (p -> a)
 --------------------------------------------------------------------------------
 -- | (Result) Tree
 
-data Tree d p = And (Tree d p) (Tree d p) | Or (Tree d p) (Tree d p) | Only d
-
-data Tree_ d p =
-  And_ (p -> p -> p) (Tree_ d p) (Tree_ d p)
-  | Or_ (p -> p) (p -> p) (Tree_ d p) (Tree_ d p)
-  | Only_ d
+data Tree d p =
+  And (p -> p -> p) (Tree d p) (Tree d p)
+  | Or (p -> p) (p -> p) (Tree d p) (Tree d p)
+  | Only d
 
 -- | how to interpret ResultTree combinations:
 -- First (LeafSuccess a) (Tree a) -> Or that succeeded on left
@@ -122,15 +122,9 @@ data Tree_ d p =
 
 data ResultTree d p =
   First (ResultTree d p) (Tree d p)
-  | Both (ResultTree d p) (ResultTree d p)
-  | LeafSuccess d (Maybe p, [String])
+  | Both  (ResultTree d p) (ResultTree d p)
+  | LeafSuccess d [String]
   | LeafFail d [String]
-
-data ResultTree_ d p =
-  First_ (ResultTree_ d p) (Tree_ d p)
-  | Both_  (ResultTree_ d p) (ResultTree_ d p)
-  | LeafSuccess_ d [String]
-  | LeafFail_ d [String]
 
 type Payload p = (Maybe p, [String])
 
@@ -145,7 +139,7 @@ smryFail msg = Left [msg]
 smryInit :: Summary p
 smryInit = Right (Nothing, [])
 
-foldResultTreeMsgs :: ResultTree_ d p -> ([String], [String])
+foldResultTreeMsgs :: ResultTree d p -> ([String], [String])
 foldResultTreeMsgs = undefined
 
 --------------------------------------------------------------------------------
@@ -222,12 +216,11 @@ testFeature = go []
         (FailedFtr fd' errs) -> tryAlt alt $ Right (fd' ,errs):failed
         (SuccessfulFtr s)    -> return $ TestedFeature $ TestedFeature_ (Just s) failed alt
     go failed NoFeature = return $ TestedFeature $ TestedFeature_ Nothing failed NoFeature
-    -- TODO summarize errors here
-    go _ (ConstFeature c) = return $ TestedConst c [] --failed
+    go failed (ConstFeature c) = return $ TestedConst c failed
     tryAlt NoFeature failed = return $ TestedFeature $ TestedFeature_ Nothing failed NoFeature
     tryAlt alt failed       = go failed alt
 
-testFeatureData :: FeatureData a Tree_ p -> IO (FeatureResult a p)
+testFeatureData :: FeatureData a Tree p -> IO (FeatureResult a p)
 testFeatureData fd@(FeatureData { fdTree = t }) = do
   atm <- testActionTree t
   return $ either untestable checkAction atm
@@ -240,7 +233,7 @@ testFeatureData fd@(FeatureData { fdTree = t }) = do
                           }
     checkAction (t', Nothing, ms) = FailedFtr (fd { fdTree = t' }) ms
 
-testActionTree :: ActionTree a Tree_ p -> IO (ActionTreeMaybe a p)
+testActionTree :: ActionTree a Tree p -> IO (ActionTreeMaybe a p)
 testActionTree t = do
   case t of
     (IOTree a d)             -> do
@@ -259,35 +252,35 @@ testActionTree t = do
     apply (Standalone a) _ = a
     apply (Consumer a) p   = a p
 
-testIOTree :: Tree_ (IODependency a p) p
-  -> IO (ResultTree_ (IODependency a p) p, Maybe (Maybe p))
+testIOTree :: Tree (IODependency a p) p
+  -> IO (ResultTree (IODependency a p) p, Maybe (Maybe p))
 testIOTree = testTree testIODependency
 
-testDBusTree :: Client -> Tree_ (DBusDependency a p) p
-  -> IO (ResultTree_ (DBusDependency a p) p, Maybe (Maybe p))
+testDBusTree :: Client -> Tree (DBusDependency a p) p
+  -> IO (ResultTree (DBusDependency a p) p, Maybe (Maybe p))
 testDBusTree client = testTree (testDBusDependency client)
 
-testTree :: Monad m => (d -> m (Summary p)) -> Tree_ d p
-  -> m (ResultTree_ d p, Maybe (Maybe p))
+testTree :: Monad m => (d -> m (Summary p)) -> Tree d p
+  -> m (ResultTree d p, Maybe (Maybe p))
 testTree test = go
   where
-    go (And_ f a b) = do
+    go (And f a b) = do
       (ra, pa) <- go a
       let combine = maybe (const Nothing) (\pa' -> Just . f pa')
       let pass p = test2nd (combine p) ra b
-      let fail_ = return (First_ ra b, Nothing)
+      let fail_ = return (First ra b, Nothing)
       maybe fail_ pass pa
-    go (Or_ fa fb a b) = do
+    go (Or fa fb a b) = do
       (ra, pa) <- go a
-      let pass p = return (First_ ra b, Just $ fa <$> p)
+      let pass p = return (First ra b, Just $ fa <$> p)
       let fail_ = test2nd (Just . fb) ra b
       maybe fail_ pass pa
-    go (Only_ a) =
-      either (\es -> (LeafFail_ a es, Nothing)) (\(p, ws) -> (LeafSuccess_ a ws, Just p))
+    go (Only a) =
+      either (\es -> (LeafFail a es, Nothing)) (\(p, ws) -> (LeafSuccess a ws, Just p))
       <$> test a
     test2nd f ra b = do
       (rb, pb) <- go b
-      return (Both_ ra rb, fmap (f =<<) pb)
+      return (Both ra rb, fmap (f =<<) pb)
 
 testIODependency :: IODependency a p -> IO (Summary p)
 testIODependency (Executable _ bin) = maybe err smryNil <$> findExecutable bin
