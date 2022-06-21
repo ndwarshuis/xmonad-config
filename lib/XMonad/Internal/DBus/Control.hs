@@ -30,7 +30,7 @@ startXMonadService :: IO (Maybe Client)
 startXMonadService = do
   client <- getDBusClient False
   forM_ client requestXMonadName
-  mapM_ (\f -> executeFeature_ $ f client) dbusExporters
+  mapM_ (\f -> executeSometimes_ $ f client) dbusExporters
   return client
 
 stopXMonadService :: Client -> IO ()
@@ -51,5 +51,5 @@ requestXMonadName client = do
   where
     xn = "'" ++ formatBusName xmonadBusName ++ "'"
 
-dbusExporters :: [Maybe Client -> FeatureIO]
+dbusExporters :: [Maybe Client -> SometimesIO]
 dbusExporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]

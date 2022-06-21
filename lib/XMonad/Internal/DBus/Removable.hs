@@ -32,13 +32,13 @@ memAdded = memberName_ "InterfacesAdded"
 memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
-dbusDep :: MemberName -> FullDep DBusDep
-dbusDep m = fullDep $ Endpoint bus path interface $ Signal_ m
+dbusDep :: MemberName -> DBusDependency a p
+dbusDep m = Endpoint bus path interface $ Signal_ m
 
-addedDep :: FullDep DBusDep
+addedDep :: DBusDependency a p
 addedDep = dbusDep memAdded
 
-removedDep :: FullDep DBusDep
+removedDep :: DBusDependency a p
 removedDep = dbusDep memRemoved
 
 driveInsertedSound :: FilePath
@@ -81,6 +81,8 @@ listenDevices client = do
     addMatch' m p f = void $ addMatch client ruleUdisks { matchMember = Just m }
       $ playSoundMaybe p . f . signalBody
 
-runRemovableMon :: Maybe Client -> FeatureIO
-runRemovableMon client = feature "removeable device monitor" Default
-  $ DBusTree (Single listenDevices) client $ And (Only addedDep) (Only removedDep)
+runRemovableMon :: Maybe Client -> SometimesIO
+runRemovableMon cl =
+  sometimesDBus cl "removeable device monitor" deps listenDevices
+  where
+    deps = toAnd addedDep removedDep

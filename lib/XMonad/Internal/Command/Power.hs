@@ -45,8 +45,8 @@ myOptimusManager = "optimus-manager"
 --------------------------------------------------------------------------------
 -- | Core commands
 
-runScreenLock :: Feature (X ())
-runScreenLock = featureExe "screen locker" myScreenlock
+runScreenLock :: SometimesX
+runScreenLock = sometimesExe "screen locker" True myScreenlock
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -100,8 +100,8 @@ runOptimusPrompt' = do
       #!&& unwords [myOptimusManager, "--switch", mode, "--no-confirm"]
       #!&& "killall xmonad"
 
-runOptimusPrompt :: FeatureX
-runOptimusPrompt = featureDefault "graphics switcher" (Only $ exe myOptimusManager)
+runOptimusPrompt :: SometimesX
+runOptimusPrompt = sometimesIO "graphics switcher" (Only $ Executable True myOptimusManager)
   runOptimusPrompt'
 
 --------------------------------------------------------------------------------

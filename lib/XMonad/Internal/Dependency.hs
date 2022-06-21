@@ -1,55 +1,56 @@
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs         #-}
+{-# LANGUAGE TupleSections #-}
 
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
 
 module XMonad.Internal.Dependency
-  ( MaybeAction
-  , AnyFeature(..)
-  , DepChoice(..)
-  , MaybeX
-  , FullDep(..)
-  , DepTree(..)
+  ( AlwaysX
+  , AlwaysIO
+  , Always(..)
+  , SometimesX
+  , SometimesIO
+  , Sometimes
+  , executeSometimes_
+  , executeSometimes
+  , executeAlways_
+  , executeAlways
+  , evalAlways
+  , evalSometimes
+
+  , Subfeature(..)
+  , LogLevel(..)
+
   , Action(..)
-  , DBusDep(..)
-  , FeatureX
-  , FeatureIO
-  , Feature(..)
-  , Feature_(..)
-  , Warning(..)
-  , Dependency(..)
-  , UnitType(..)
+
+  -- feature construction
+  , sometimes1
+  , sometimesIO
+  , sometimesDBus
+  , sometimesExe
+  , sometimesExeArgs
+  , sometimesEndpoint
+
+  -- Dependency tree
+  , ActionTree(..)
+  , Tree(..)
+  , IODependency(..)
+  , DBusDependency(..)
   , DBusMember(..)
-  , feature
-  , ioFeature
-  , evalFeature
-  , systemUnit
-  , userUnit
-  , pathR
-  , pathW
-  , pathRW
-  , featureDefault
-  , featureExeArgs
-  , featureExe
-  , featureEndpoint
-  , whenSatisfied
-  , ifSatisfied
-  , executeFeature
-  , executeFeature_
-  , executeFeatureWith
-  , executeFeatureWith_
-  , depName
-  , fullDep
-  , exe
+  , UnitType(..)
   , listToAnds
+  , toAnd
+  , pathR
+  , pathRW
+  , pathW
   ) where
 
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
 
 -- import           Data.Aeson
+import           Data.Bifunctor
+import           Data.Either
 import           Data.List               (find)
 import           Data.Maybe
 -- import qualified Data.Text               as T
@@ -70,355 +71,182 @@ import           XMonad.Internal.Shell
 
 --------------------------------------------------------------------------------
 -- | Features
---
--- A 'feature' is composed of a 'dependency tree' which at the root has an
--- 'action' to be performed with a number of 'dependencies' below it.
---
--- NOTE: there is no way to make a feature depend on another feature. This is
--- very complicated to implement and would only be applicable to a few instances
--- (notably the dbus interfaces). In order to implement a dependency tree, use
--- dependencies that target the output/state of another feature; this is more
--- robust anyways, at the cost of being a bit slower.
 
--- TODO some things to add to make this more feature-ful (lol)
--- - use AndOr types to encode alternative dependencies into the tree
--- - use an Alt data constructor for Features (which will mean "try A before B"
--- - add an Either String Bool to dependency nodes that encodes testing status
---   (where Right False means untested)
--- - add a lens/functor mapper thingy to walk down the tree and update testing
---   status fields
--- - print to JSON
--- - make sum type to hold all type instances of Feature blabla (eg IO and X)
--- - figure out how to make features a dependency of another feature
+-- data AlwaysAny = AX AlwaysX | AIO AlwaysIO
 
-data Feature_ a = Feature_
-  { ftrDepTree :: DepTree a
-  , ftrName    :: String
-  , ftrWarning :: Warning
+type AlwaysX = Always (X ())
+
+type AlwaysIO = Always (IO ())
+
+type SometimesX = Sometimes (X ())
+
+type SometimesIO = Sometimes (IO ())
+
+data Always a = Option (Subfeature a Tree) (Always a) | Always a
+
+type Sometimes a = [Subfeature a Tree]
+
+data TestedAlways a p =
+  Primary (Finished a p) [FailedFeature a p] (Always a)
+  | Fallback a [FailedFeature a p]
+
+data TestedSometimes a p = TestedSometimes
+  { tsSuccess  :: Maybe (Finished a p)
+  , tsFailed   :: [FailedFeature a p]
+  , tsUntested :: [Subfeature a Tree]
   }
 
-data Feature a = Feature (Feature_ a) (Feature a)
-  | NoFeature
-  | ConstFeature a
+type FailedFeature a p = Either (Subfeature a Tree, String)
+  (Subfeature a ResultTree, [String])
 
--- TODO this is silly as is, and could be made more useful by representing
--- loglevels
-data Warning = Silent | Default
+data Finished a p = Finished
+  { finData     :: Subfeature a ResultTree
+  , finAction   :: a
+  , finWarnings :: [String]
+  }
 
-type FeatureX = Feature (X ())
+data FeatureResult a p = Untestable (Subfeature a Tree) String |
+  FailedFtr (Subfeature a ResultTree) [String] |
+  SuccessfulFtr (Finished a p)
 
-type FeatureIO = Feature (IO ())
+type ActionTreeMaybe a p = Either (ActionTree a Tree, String)
+  (ActionTree a ResultTree, Maybe a, [String])
 
-data AnyFeature = FX FeatureX | FIO FeatureIO
+sometimes1_ :: LogLevel -> String -> ActionTree a Tree -> Sometimes a
+sometimes1_ l n t = [Subfeature{ sfTree = t, sfName = n, sfLevel = l }]
 
-feature :: String -> Warning -> DepTree a -> Feature a
-feature n w t = Feature f NoFeature
-  where
-    f = Feature_
-      { ftrDepTree = t
-      , ftrName = n
-      , ftrWarning = w
-      }
+always1_ :: LogLevel -> String -> ActionTree a Tree -> a -> Always a
+always1_ l n t x =
+  Option (Subfeature{ sfTree = t, sfName = n, sfLevel = l }) (Always x)
 
-ioFeature :: MonadIO m => Feature (IO b) -> Feature (m b)
-ioFeature (ConstFeature a) = ConstFeature $ liftIO a
-ioFeature NoFeature = NoFeature
-ioFeature (Feature f r)
-  = Feature (f {ftrDepTree = liftIO <$> ftrDepTree f}) $ ioFeature r
+sometimes1 :: String -> ActionTree a Tree -> Sometimes a
+sometimes1 = sometimes1_ Error
 
-featureDefault :: String -> DepChoice (FullDep Dependency) -> a -> Feature a
-featureDefault n ds x = feature n Default $ GenTree (Single x) ds
+sometimesIO :: String -> Tree (IODependency a p) p -> a -> Sometimes a
+sometimesIO n t x = sometimes1 n $ IOTree (Standalone x) t
 
-featureExe :: MonadIO m => String -> String -> Feature (m ())
-featureExe n cmd = featureExeArgs n cmd []
-
-featureExeArgs :: MonadIO m => String -> String -> [String] -> Feature (m ())
-featureExeArgs n cmd args =
-  featureDefault n (Only $ FullDep (Right False) $ Executable cmd) $ spawnCmd cmd args
-
-featureEndpoint :: String -> BusName -> ObjectPath -> InterfaceName
-  -> MemberName -> Maybe Client -> FeatureIO
-featureEndpoint name busname path iface mem client = feature name Default
-  $ DBusTree (Single cmd) client deps
-  where
-    cmd c = void $ callMethod c busname path iface mem
-    deps = Only $ FullDep (Right False) $ Endpoint busname path iface $ Method_ mem
+sometimesDBus :: Maybe Client -> String -> Tree (DBusDependency a p) p
+  -> (Client -> a) -> Sometimes a
+sometimesDBus c n t x = sometimes1 n $ DBusTree (Standalone x) c t
 
 --------------------------------------------------------------------------------
--- | Dependency Trees
---
--- Dependency trees have two subtypes: general and DBus. The latter require a
--- DBus client to evaluate (and will automatically fail if this is missing).
--- The former can be evaluated independently.
+-- | Feature Data
 
-data DepChoice a = And (DepChoice a) (DepChoice a)
-  | Or (DepChoice a) (DepChoice a)
-  | Only a
+data Subfeature a t = Subfeature
+  { sfTree  :: ActionTree a t
+  , sfName  :: String
+  , sfLevel :: LogLevel
+  }
 
-listToAnds :: a -> [a] -> DepChoice a
-listToAnds i = foldr (And . Only) (Only i)
+data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord)
 
-data DepTree a = GenTree (Action a) (DepChoice (FullDep Dependency))
-  | DBusTree (Action (Client -> a)) (Maybe Client) (DepChoice (FullDep DBusDep))
-
-instance Functor DepTree where
-  fmap f (GenTree a ds)    = GenTree (f <$> a) ds
-  fmap f (DBusTree a c ds) = DBusTree (fmap (fmap f) a) c ds
+data Msg = Msg LogLevel String String
 
 --------------------------------------------------------------------------------
--- | Actions
---
--- Actions have two subtypes: single and double. Single actions are just one
--- independent action. Double actions have one dependent pre-step which the
--- main action consumes (and fails if the pre-step fails).
+-- | Action Tree
 
-data Action a = Single a | forall b. Double (b -> a) (IO (Either [String] b))
+data ActionTree a t =
+  forall p. IOTree (Action a p) (t (IODependency a p) p)
+  | forall p. DBusTree (Action (Client -> a) p) (Maybe Client) (t (DBusDependency a p) p)
 
-instance Functor Action where
-  fmap f (Single a)   = Single (f a)
-  fmap f (Double a b) = Double (f . a) b
+data Action a p = Standalone a | Consumer (p -> a)
 
 --------------------------------------------------------------------------------
--- | Feature evaluation
---
--- Evaluate a feature by testing if its dependencies are satisfied, and return
--- either the action of the feature or 0 or more error messages that signify
--- what dependencies are missing and why.
+-- | Dependency Tree
 
-type MaybeAction a = Maybe a
+data Tree d p =
+  And (p -> p -> p) (Tree d p) (Tree d p)
+  | Or (p -> p) (p -> p) (Tree d p) (Tree d p)
+  | Only d
 
-type MaybeX = MaybeAction (X ())
+listToAnds :: d -> [d] -> Tree d (Maybe x)
+listToAnds i = foldr (And (const . const Nothing) . Only) (Only i)
 
-evalFeature :: Feature a -> IO (MaybeAction a)
-evalFeature (ConstFeature x) = return $ Just x
-evalFeature NoFeature = return Nothing
--- TODO actually deal with alt
-evalFeature (Feature (Feature_{ftrDepTree = a, ftrName = n, ftrWarning = w}) _) = do
-  procName <- getProgName
-  res <- evalTree =<< evalTree' a
-  either (printWarnings procName) (return . Just) res
-  where
-    printWarnings procName es = do
-      case w of
-        Silent  -> skip
-        Default -> let prefix = n ++ " disabled; "
-                       es' = fmap (fmtMsg procName . (prefix ++)) es in
-          mapM_ putStrLn es'
-      return Nothing
-    fmtMsg procName msg = unwords [bracket procName, bracket "WARNING", msg]
-    bracket s = "[" ++ s ++ "]"
-
-mapMDepChoice :: Monad m => (a -> m a) -> (a -> Bool) -> DepChoice a -> m (DepChoice a)
-mapMDepChoice f pass = fmap snd . go
-  where
-    go d@(And a b) = do
-      (ra, a') <- go a
-      if not ra then return (False, d) else do
-        (rb, b') <- go b
-        return $ if rb then (True, And a' b') else (False, d)
-    go d@(Or a b) = do
-      (ra, a') <- go a
-      if ra then return (True, Or a' b) else do
-        (rb, b') <- go b
-        return $ if rb then (True, Or a' b') else (False, d)
-    go d@(Only a)  = do
-      a' <- f a
-      return $ if pass a' then (True, Only a') else (False, d)
-
--- foldDepChoice :: (a -> Bool) -> DepChoice a -> Bool
--- foldDepChoice get dc = case dc of
---   And a b -> go a && go b
---   Or a b  -> go a || go b
---   Only a  -> get a
---   where
---     go = foldDepChoice get
-
-foldDepChoice' :: Bool -> (a -> Maybe b) -> DepChoice a -> [b]
-foldDepChoice' justSucceed get = fromMaybe [] . go []
-  where
-    go acc (And a b) = Just $ andFun acc a b
-    go acc (Or a b)  = Just $ orFun acc a b
-    go acc (Only a)  = (:acc) <$> get a
-    (andFun, orFun) = if justSucceed then (and', or') else (or', and')
-    and' acc a b = case (go acc a, go acc b) of
-      (Just a', Just b') -> a' ++ b' ++ acc
-      (Just a', Nothing) -> a' ++ acc
-      (Nothing, _)       -> acc
-    or' acc a b = fromMaybe [] (go acc a) ++ fromMaybe [] (go acc b) ++ acc
-
--- foldDepChoice :: DepChoice a -> (a -> Maybe b) -> [b]
--- foldDepChoice dc f = go [] dc
---   where
---     go acc d = case d of
---       And a b -> do
---         acc'@(a':_) <- go acc a
---         if pass a' then go acc' b else return acc
---       Or a b  -> do
---         acc'@(a':_) <- go acc a
---         if pass a' then return [a'] else go acc' b
---       Only a  -> maybe acc $ f a
-
--- TODO wet code
-evalTree :: DepTree a -> IO (Either [String] a)
-evalTree (GenTree a ds) = do
-  case foldDepChoice' False fullDepMsg ds of
-      [] -> evalAction a
-      es -> return $ Left es
-evalTree (DBusTree a (Just client) ds) = do
-  case foldDepChoice' False fullDepMsg ds of
-    [] -> fmap (\f -> f client) <$> evalAction a
-    es -> return $ Left es
-evalTree (DBusTree _ Nothing _) = return $ Left ["client not available"]
-
-fullDepMsg :: FullDep a -> Maybe String
-fullDepMsg (FullDep e _) = either Just (const Nothing) e
-
-evalTree' :: DepTree a -> IO (DepTree a)
-
-evalTree' (GenTree a ds) = GenTree a <$> mapMDepChoice eval pass ds
-  where
-    eval (FullDep _ d) = do
-      r <- evalDependency d
-      return $ FullDep (maybe (Right True) Left r) d
-    pass (FullDep (Right True) _) = True
-    pass  _                       = True
-
-evalTree' d@(DBusTree _ Nothing _) = return d
-evalTree' (DBusTree a (Just client) ds) = DBusTree a (Just client) <$> mapMDepChoice eval pass ds
-  where
-    eval (FullDep _ d) = do
-      r <- eval' d
-      return $ FullDep (maybe (Right True) Left r) d
-    eval' (DBusGenDep d) = evalDependency d
-    eval' x              = dbusDepSatisfied client x
-    pass (FullDep (Right True) _) = True
-    pass  _                       = True
-
-
-evalAction :: Action a -> IO (Either [String] a)
-evalAction (Single a)   = return $ Right a
-evalAction (Double a b) = fmap a <$> b
-
-executeFeatureWith :: MonadIO m => (m a -> m a) -> a -> Feature (IO a) -> m a
-executeFeatureWith iof def ftr = do
-  a <- io $ evalFeature ftr
-  maybe (return def) (iof . io) a
-
-executeFeatureWith_ :: MonadIO m => (m () -> m ()) -> Feature (IO ()) -> m ()
-executeFeatureWith_ iof = executeFeatureWith iof ()
-
-executeFeature :: MonadIO m => a -> Feature (IO a) -> m a
-executeFeature = executeFeatureWith id
-
-executeFeature_ :: Feature (IO ()) -> IO ()
-executeFeature_ = executeFeature ()
-
-whenSatisfied :: Monad m => MaybeAction (m ()) -> m ()
-whenSatisfied = flip ifSatisfied skip
-
-ifSatisfied ::  MaybeAction a -> a -> a
-ifSatisfied (Just x) _ = x
-ifSatisfied _ alt      = alt
+toAnd :: d -> d -> Tree d (Maybe x)
+toAnd a b = And (const . const Nothing) (Only a) (Only b)
 
 --------------------------------------------------------------------------------
--- | Dependencies (General)
+-- | Result Tree
 
-data FullDep a = FullDep (Either String Bool) a deriving (Functor)
+-- | how to interpret ResultTree combinations:
+-- First (LeafSuccess a) (Tree a) -> Or that succeeded on left
+-- First (LeafFail a) (Tree a) -> And that failed on left
+-- Both (LeafFail a) (Fail a) -> Or that failed
+-- Both (LeafSuccess a) (LeafSuccess a) -> And that succeeded
+-- Both (LeafFail a) (LeafSuccess a) -> Or that failed first and succeeded second
+-- Both (LeafSuccess a) (LeafFail a) -> And that failed on the right
 
-fullDep :: a -> FullDep a
-fullDep = FullDep (Right True)
+data ResultTree d p =
+  First (ResultTree d p) (Tree d p)
+  | Both  (ResultTree d p) (ResultTree d p)
+  | LeafSuccess d [String]
+  | LeafFail d [String]
 
-data Dependency = Executable String
+type Payload p = (Maybe p, [String])
+
+type Summary p = Either [String] (Payload p)
+
+smryNil :: q -> Summary p
+smryNil = const $ Right (Nothing, [])
+
+smryFail :: String -> Either [String] a
+smryFail msg = Left [msg]
+
+smryInit :: Summary p
+smryInit = Right (Nothing, [])
+
+foldResultTreeMsgs :: ResultTree d p -> ([String], [String])
+foldResultTreeMsgs = undefined
+
+--------------------------------------------------------------------------------
+-- | Result
+
+type Result p = Either [String] (Maybe p)
+
+resultNil :: p -> Result q
+resultNil = const $ Right Nothing
+
+--------------------------------------------------------------------------------
+-- | IO Dependency
+
+data IODependency a p = Executable Bool FilePath
   | AccessiblePath FilePath Bool Bool
   | IOTest String (IO (Maybe String))
+  | IORead String (IO (Either String (Maybe p)))
   | Systemd UnitType String
-  | DepFeature AnyFeature
+  | NestedAlways (Always a) (a -> p)
+  | NestedSometimes (Sometimes a) (a -> p)
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
 
-exe :: String -> FullDep Dependency
-exe = fullDep . Executable
+sometimesExe :: MonadIO m => String -> Bool -> FilePath -> Sometimes (m ())
+sometimesExe n sys path = sometimesExeArgs n sys path []
 
-pathR :: String -> FullDep Dependency
-pathR n = fullDep $ AccessiblePath n True False
+sometimesExeArgs :: MonadIO m => String -> Bool -> FilePath -> [String] -> Sometimes (m ())
+sometimesExeArgs n sys path args =
+  sometimesIO n (Only (Executable sys path)) $ spawnCmd path args
 
-pathW :: String -> FullDep Dependency
-pathW n = fullDep $ AccessiblePath n False True
+pathR :: String -> IODependency a p
+pathR n = AccessiblePath n True False
 
-pathRW :: String -> FullDep Dependency
-pathRW n = fullDep $ AccessiblePath n True True
+pathW :: String -> IODependency a p
+pathW n = AccessiblePath n False True
 
-systemUnit :: String -> FullDep Dependency
-systemUnit = fullDep . Systemd SystemUnit
-
-userUnit :: String -> FullDep Dependency
-userUnit = fullDep . Systemd UserUnit
+pathRW :: String -> IODependency a p
+pathRW n = AccessiblePath n True True
 
 --------------------------------------------------------------------------------
--- | Dependencies (DBus)
+-- | DBus Dependency Result
+
+data DBusDependency a p =
+  Bus BusName
+  | Endpoint BusName ObjectPath InterfaceName DBusMember
+  | DBusIO (IODependency a p)
 
 data DBusMember = Method_ MemberName
   | Signal_ MemberName
   | Property_ String
   deriving (Eq, Show)
-
-data DBusDep =
-  Bus BusName
-  | Endpoint BusName ObjectPath InterfaceName DBusMember
-  | DBusGenDep Dependency
-
---------------------------------------------------------------------------------
--- | Dependency evaluation (General)
---
--- Test the existence of dependencies and return either Nothing (which actually
--- means success) or Just <error message>.
-
-evalDependency :: Dependency -> IO (Maybe String)
-evalDependency (Executable n)         = exeSatisfied n
-evalDependency (IOTest _ t)           = t
-evalDependency (Systemd t n)          = unitSatisfied t n
-evalDependency (AccessiblePath p r w) = pathSatisfied p r w
-evalDependency (DepFeature _)         = undefined
--- TODO add something here to eval a nested feature's dependencies while
--- bypassing the feature itself
-
-exeSatisfied :: String -> IO (Maybe String)
-exeSatisfied x = do
-  r <- findExecutable x
-  return $ case r of
-    (Just _) -> Nothing
-    _        -> Just $ "executable '" ++ x ++ "' not found"
-
-unitSatisfied :: UnitType -> String -> IO (Maybe String)
-unitSatisfied u x = do
-  (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
-  return $ case rc of
-    ExitSuccess -> Nothing
-    _           -> Just $ "systemd " ++ unitType u ++ " unit '" ++ x ++ "' not found"
-  where
-    cmd = fmtCmd "systemctl" $ ["--user" | u == UserUnit] ++ ["status", x]
-    unitType SystemUnit = "system"
-    unitType UserUnit   = "user"
-
-pathSatisfied :: FilePath -> Bool -> Bool -> IO (Maybe String)
-pathSatisfied p testread testwrite = do
-  res <- getPermissionsSafe p
-  let msg = permMsg res
-  return msg
-  where
-    testPerm False _ _ = Nothing
-    testPerm True f r  = Just $ f r
-    permMsg NotFoundError            = Just "file not found"
-    permMsg PermError                = Just "could not get permissions"
-    permMsg (PermResult r) =
-      case (testPerm testread readable r, testPerm testwrite writable r) of
-        (Just False, Just False) -> Just "file not readable or writable"
-        (Just False, _)          -> Just "file not readable"
-        (_, Just False)          -> Just "file not writable"
-        _                        -> Nothing
-
---------------------------------------------------------------------------------
--- | Dependency evaluation (DBus)
 
 introspectInterface :: InterfaceName
 introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
@@ -426,14 +254,201 @@ introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
 introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
-dbusDepSatisfied :: Client -> DBusDep -> IO (Maybe String)
-dbusDepSatisfied client (Bus bus) = do
+sometimesEndpoint :: MonadIO m => String -> BusName -> ObjectPath -> InterfaceName
+  -> MemberName -> Maybe Client -> Sometimes (m ())
+sometimesEndpoint name busname path iface mem client =
+  sometimesDBus client name deps cmd
+  where
+    deps = Only $ Endpoint busname path iface $ Method_ mem
+    cmd c = io $ void $ callMethod c busname path iface mem
+
+--------------------------------------------------------------------------------
+-- | Feature evaluation
+--
+-- Here we attempt to build and return the monadic actions encoded by each
+-- feature.
+
+executeSometimes_ :: MonadIO m => Sometimes (m a) -> m ()
+executeSometimes_ = void . executeSometimes
+
+executeSometimes :: MonadIO m => Sometimes (m a) -> m (Maybe a)
+executeSometimes a = maybe (return Nothing) (fmap Just) =<< evalSometimes a
+
+-- TODO actually print things
+evalSometimes :: MonadIO m => Sometimes a -> m (Maybe a)
+evalSometimes x = either (const Nothing) (Just . fst) <$> evalSometimesMsg x
+
+-- TODO actually collect error messages here
+-- TODO add feature name to errors
+evalSometimesMsg :: MonadIO m => Sometimes a -> m (Either [String] (a, [String]))
+evalSometimesMsg x = io $ do
+  TestedSometimes { tsSuccess = s, tsFailed = _ } <- testSometimes x
+  return $ maybe (Left []) (\Finished { finAction = a } -> Right (a, [])) s
+
+executeAlways_ :: MonadIO m => Always (m a) -> m ()
+executeAlways_ = void . executeAlways
+
+executeAlways :: MonadIO m => Always (m a) -> m a
+executeAlways = join . evalAlways
+
+-- TODO actually print things
+evalAlways :: MonadIO m => Always a -> m a
+evalAlways a = fst <$> evalAlwaysMsg a
+
+evalAlwaysMsg :: MonadIO m => Always a -> m (a, [String])
+evalAlwaysMsg a = io $ do
+  r <- testAlways a
+  return $ case r of
+    (Primary (Finished { finAction = act }) _ _) -> (act, [])
+    (Fallback act _)                             -> (act, [])
+
+--------------------------------------------------------------------------------
+-- | Dependency Testing
+--
+-- Here we test all dependencies and keep the tree structure so we can print it
+-- for diagnostic purposes. This obviously has overlap with feature evaluation
+-- since we need to resolve dependencies to build each feature.
+
+testAlways :: Always a -> IO (TestedAlways a p)
+testAlways = go []
+  where
+    go failed (Option fd next) = do
+      r <- testSubfeature fd
+      case r of
+        (Untestable fd' err) -> go (Left (fd' ,err):failed) next
+        (FailedFtr fd' errs) -> go (Right (fd' ,errs):failed) next
+        (SuccessfulFtr s)    -> return $ Primary s failed next
+    go failed (Always a) = return $ Fallback a failed
+
+testSometimes :: Sometimes a -> IO (TestedSometimes a p)
+testSometimes = go (TestedSometimes Nothing [] [])
+  where
+    go ts [] = return ts
+    go ts (x:xs) = do
+      r <- testSubfeature x
+      case r of
+        (Untestable fd' err) -> go (addFail ts (Left (fd' ,err))) xs
+        (FailedFtr fd' errs) -> go (addFail ts (Right (fd' ,errs))) xs
+        (SuccessfulFtr s)    -> return $ ts { tsSuccess = Just s }
+    addFail ts@(TestedSometimes { tsFailed = f }) new
+      = ts { tsFailed = new:f }
+
+testSubfeature :: Subfeature a Tree -> IO (FeatureResult a p)
+testSubfeature fd@(Subfeature { sfTree = t }) = do
+  atm <- testActionTree t
+  return $ either untestable checkAction atm
+  where
+    untestable (t', err) = Untestable (fd { sfTree = t' }) err
+    checkAction (t', Just a, ms) = SuccessfulFtr
+      $ Finished { finData = fd { sfTree = t' }
+                 , finAction = a
+                 , finWarnings = ms
+                 }
+    checkAction (t', Nothing, ms) = FailedFtr (fd { sfTree = t' }) ms
+
+testActionTree :: ActionTree a Tree -> IO (ActionTreeMaybe a p)
+testActionTree t = do
+  case t of
+    (IOTree a d)             -> do
+      (t', a', msgs) <- doTest testIOTree d a
+      return $ Right (IOTree a t', a', msgs)
+    (DBusTree a (Just cl) d) -> do
+      (t', a', msgs) <- doTest (testDBusTree cl) d a
+      return $ Right (DBusTree a (Just cl) t', fmap (\f -> f cl) a', msgs)
+    _                        -> return $ Left (t, "client not available")
+  where
+    doTest testFun d a = do
+      (t', r) <- testFun d
+      -- TODO actually recover the proper error messages
+      let (a', msgs) = maybe (Nothing, []) (\p -> (fmap (apply a) p, [])) r
+      return (t', a', msgs)
+    apply (Standalone a) _ = a
+    apply (Consumer a) p   = a p
+
+testIOTree :: Tree (IODependency a p) p
+  -> IO (ResultTree (IODependency a p) p, Maybe (Maybe p))
+testIOTree = testTree testIODependency
+
+testDBusTree :: Client -> Tree (DBusDependency a p) p
+  -> IO (ResultTree (DBusDependency a p) p, Maybe (Maybe p))
+testDBusTree client = testTree (testDBusDependency client)
+
+testTree :: Monad m => (d -> m (Summary p)) -> Tree d p
+  -> m (ResultTree d p, Maybe (Maybe p))
+testTree test = go
+  where
+    go (And f a b) = do
+      (ra, pa) <- go a
+      let combine = maybe (const Nothing) (\pa' -> Just . f pa')
+      let pass p = test2nd (combine p) ra b
+      let fail_ = return (First ra b, Nothing)
+      maybe fail_ pass pa
+    go (Or fa fb a b) = do
+      (ra, pa) <- go a
+      let pass p = return (First ra b, Just $ fa <$> p)
+      let fail_ = test2nd (Just . fb) ra b
+      maybe fail_ pass pa
+    go (Only a) =
+      either (\es -> (LeafFail a es, Nothing)) (\(p, ws) -> (LeafSuccess a ws, Just p))
+      <$> test a
+    test2nd f ra b = do
+      (rb, pb) <- go b
+      return (Both ra rb, fmap (f =<<) pb)
+
+testIODependency :: IODependency a p -> IO (Summary p)
+testIODependency (Executable _ bin) = maybe err smryNil <$> findExecutable bin
+  where
+    err = Left ["executable '" ++ bin ++ "' not found"]
+
+testIODependency (IOTest _ t) = maybe (Right (Nothing, [])) (Left . (:[])) <$> t
+
+testIODependency (IORead _ t) = bimap (:[]) (, []) <$> t
+
+testIODependency (Systemd t n) = do
+  (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
+  return $ case rc of
+    ExitSuccess -> Right (Nothing, [])
+    _           -> Left ["systemd " ++ unitType t ++ " unit '" ++ n ++ "' not found"]
+  where
+    cmd = fmtCmd "systemctl" $ ["--user" | t == UserUnit] ++ ["status", n]
+    unitType SystemUnit = "system"
+    unitType UserUnit   = "user"
+
+testIODependency (AccessiblePath p r w) = do
+  res <- getPermissionsSafe p
+  let msg = permMsg res
+  return msg
+  where
+    testPerm False _ _  = Nothing
+    testPerm True f res = Just $ f res
+    permMsg NotFoundError            = smryFail "file not found"
+    permMsg PermError                = smryFail "could not get permissions"
+    permMsg (PermResult res) =
+      case (testPerm r readable res, testPerm w writable res) of
+        (Just False, Just False) -> smryFail "file not readable or writable"
+        (Just False, _)          -> smryFail "file not readable"
+        (_, Just False)          -> smryFail "file not writable"
+        _                        -> Right (Nothing, [])
+
+-- TODO actually collect errors here
+testIODependency (NestedAlways a f) = do
+  r <- testAlways a
+  return $ Right $ case r of
+    (Primary (Finished { finAction = act }) _ _) -> (Just $ f act, [])
+    (Fallback act _)                             -> (Just $ f act, [])
+
+testIODependency (NestedSometimes x f) = do
+  TestedSometimes { tsSuccess = s, tsFailed = _ } <- testSometimes x
+  return $ maybe (Left []) (\Finished { finAction = a } -> Right (Just $ f a, [])) s
+
+testDBusDependency :: Client -> DBusDependency a p -> IO (Summary p)
+testDBusDependency client (Bus bus) = do
   ret <- callMethod client queryBus queryPath queryIface queryMem
   return $ case ret of
-        Left e    -> Just e
+        Left e    -> smryFail e
         Right b -> let ns = bodyGetNames b in
-          if bus' `elem` ns then Nothing
-          else Just $ unwords ["name", singleQuote bus', "not found on dbus"]
+          if bus' `elem` ns then Right (Nothing, [])
+          else smryFail $ unwords ["name", singleQuote bus', "not found on dbus"]
   where
     bus' = formatBusName bus
     queryBus = busName_ "org.freedesktop.DBus"
@@ -443,17 +458,17 @@ dbusDepSatisfied client (Bus bus) = do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-dbusDepSatisfied client (Endpoint busname objpath iface mem) = do
+testDBusDependency client (Endpoint busname objpath iface mem) = do
   ret <- callMethod client busname objpath introspectInterface introspectMethod
   return $ case ret of
-        Left e     -> Just e
+        Left e     -> smryFail e
         Right body -> procBody body
   where
     procBody body = let res = findMem =<< I.parseXML objpath =<< fromVariant
                           =<< listToMaybe body in
       case res of
-        Just True -> Nothing
-        _         -> Just $ fmtMsg' mem
+        Just True -> Right (Nothing, [])
+        _         -> smryFail $ fmtMsg' mem
     findMem = fmap (matchMem mem)
       . find (\i -> I.interfaceName i == iface)
       . I.objectInterfaces
@@ -473,43 +488,19 @@ dbusDepSatisfied client (Endpoint busname objpath iface mem) = do
       , formatBusName busname
       ]
 
-dbusDepSatisfied _ (DBusGenDep d) = evalDependency d
+testDBusDependency _ (DBusIO d) = testIODependency d
 
 --------------------------------------------------------------------------------
--- | Printing dependencies
+-- | Printing
 
--- instance ToJSON (DepTree a) where
---   toJSON (GenTree _) = undefined
+printMsgs :: LogLevel -> [Msg] -> IO ()
+printMsgs lvl ms = do
+  pn <- getProgName
+  mapM_ (printMsg pn lvl) ms
 
--- instance ToJSON Dependency where
---   toJSON (Executable n)         = depValue "executable" Nothing n
---   toJSON (IOTest d _)           = depValue "internal" Nothing d
---   toJSON (Systemd t n)          = depValue "systemd" (Just $ tp t) n
---     where
---       tp SystemUnit = "sys"
---       tp UserUnit   = "user"
---   toJSON (AccessiblePath p r w) = depValue "path" perms p
---     where
---       perms = case (r, w) of
---         (True, True)  -> Just "readwrite"
---         (True, False) -> Just "read"
---         (False, True) -> Just "write"
---         _             -> Nothing
-
--- depValue :: String -> Maybe String -> String -> Value
--- depValue t s n = object
---   [ "type" .= t
---   , "name" .= n
---   , "subtype" .= maybe Null (String . T.pack) s
---   ]
-
-depName :: Dependency -> String
-depName (Executable n)         = "executable: " ++ n
-depName (IOTest d _)           = "internal: " ++ d
-depName (Systemd t n)          = "systemd (" ++ tp t ++ "): "  ++ n
+printMsg :: String -> LogLevel -> Msg -> IO ()
+printMsg pname lvl (Msg ml mn msg)
+  | lvl > ml = putStrLn $ unwords [bracket pname, bracket mn, msg]
+  | otherwise = skip
   where
-    tp SystemUnit = "sys"
-    tp UserUnit   = "user"
-depName (AccessiblePath p _ _) = "path: " ++ p
-depName (DepFeature _)         = "feature: blablabla"
-
+    bracket s = "[" ++ s ++ "]"

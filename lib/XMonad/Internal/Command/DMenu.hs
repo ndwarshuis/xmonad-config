@@ -56,8 +56,8 @@ myDmenuNetworks = "networkmanager_dmenu"
 --------------------------------------------------------------------------------
 -- | Other internal functions
 
-spawnDmenuCmd :: String -> [String] -> FeatureX
-spawnDmenuCmd n = featureExeArgs n myDmenuCmd
+spawnDmenuCmd :: String -> [String] -> SometimesX
+spawnDmenuCmd n = sometimesExeArgs n True myDmenuCmd
 
 themeArgs :: String -> [String]
 themeArgs hexColor =
@@ -71,66 +71,83 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 --------------------------------------------------------------------------------
 -- | Exported Commands
 
-runDevMenu :: FeatureX
-runDevMenu = featureDefault "device manager" (Only $ exe myDmenuDevices) $ do
+runDevMenu :: SometimesX
+runDevMenu = sometimesIO "device manager" (Only $ Executable False myDmenuDevices) $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
     ++ "--" : themeArgs "#999933"
     ++ myDmenuMatchingArgs
 
-runBTMenu :: FeatureX
-runBTMenu = featureExeArgs "bluetooth selector" myDmenuBluetooth
+runBTMenu :: SometimesX
+runBTMenu = sometimesExeArgs "bluetooth selector" False myDmenuBluetooth
   $ "-c":themeArgs "#0044bb"
 
-runBwMenu :: FeatureX
-runBwMenu = featureDefault "password manager" (Only $ exe myDmenuPasswords) $
+runBwMenu :: SometimesX
+runBwMenu = sometimesIO "password manager" (Only $ Executable False myDmenuPasswords) $
   spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
-runVPNMenu :: FeatureX
-runVPNMenu = featureDefault "VPN selector" (Only $ exe myDmenuVPN) $
+runVPNMenu :: SometimesX
+runVPNMenu = sometimesIO "VPN selector" (Only $ Executable False myDmenuVPN) $
   spawnCmd myDmenuVPN $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
--- TODO this is weirdly inverted
-runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
-runShowKeys x = addName "Show Keybindings" $ do
-  s <- io $ evalFeature $ runDMenuShowKeys x
-  ifSatisfied s
-    $ spawnNotify
-    $ defNoteError { body = Just $ Text "could not display keymap" }
+-- runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
+-- runShowKeys x = addName "Show Keybindings" $ do
+--   s <- io $ evalFeature $ runDMenuShowKeys x
+--   ifSatisfied s
+--     $ spawnNotify
+--     $ defNoteError { body = Just $ Text "could not display keymap" }
 
-runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> FeatureX
+-- TODO not sure what to do with this yet
+runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
+runShowKeys _ = NamedAction (skip :: (X ()))
+  -- addName "Show Keybindings" $ evalAlways $ runDMenuShowKeys x
+
+runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> AlwaysX
 runDMenuShowKeys kbs =
-  featureDefault "keyboard shortcut menu" (Only $ exe myDmenuCmd) $ io $ do
-  (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
-  forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
+  Option (runDMenuShowKeys' kbs) (Always runNotifyShowKeys)
+
+runNotifyShowKeys :: X ()
+runNotifyShowKeys = spawnNotify
+  $ defNoteError { body = Just $ Text "could not display keymap" }
+
+runDMenuShowKeys' :: [((KeyMask, KeySym), NamedAction)] -> Subfeature (X ()) Tree
+runDMenuShowKeys' kbs = Subfeature
+  { sfName = "keyboard shortcut menu"
+  , sfTree = IOTree (Standalone act) deps
+  , sfLevel = Warn
+  }
   where
+    deps = Only $ Executable True myDmenuCmd
+    act = io $ do
+      (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
+      forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
     cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
       ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
 
-runCmdMenu :: FeatureX
+runCmdMenu :: SometimesX
 runCmdMenu = spawnDmenuCmd "command menu" ["-show", "run"]
 
-runAppMenu :: FeatureX
+runAppMenu :: SometimesX
 runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 
-runClipMenu :: FeatureX
-runClipMenu =
-  featureDefault "clipboard manager" (And (Only $ exe myDmenuCmd) (Only $ exe "greenclip"))
-  $ spawnCmd myDmenuCmd args
+runClipMenu :: SometimesX
+runClipMenu = sometimesIO "clipboard manager" deps act
   where
+    act = spawnCmd myDmenuCmd args
+    deps = toAnd (Executable True myDmenuCmd) (Executable True "greenclip")
     args = [ "-modi", "\"clipboard:greenclip print\""
            , "-show", "clipboard"
            , "-run-command", "'{cmd}'"
            ] ++ themeArgs "#00c44e"
 
-runWinMenu :: FeatureX
+runWinMenu :: SometimesX
 runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
-runNetMenu :: FeatureX
+runNetMenu :: SometimesX
 runNetMenu =
-  featureExeArgs "network control menu" myDmenuNetworks $ themeArgs "#ff3333"
+  sometimesExeArgs "network control menu" True myDmenuNetworks $ themeArgs "#ff3333"
 
-runAutorandrMenu :: FeatureX
+runAutorandrMenu :: SometimesX
 runAutorandrMenu =
-  featureExeArgs "autorandr menu" myDmenuMonitors $ themeArgs "#ff0066"
+  sometimesExeArgs "autorandr menu" True myDmenuMonitors $ themeArgs "#ff0066"

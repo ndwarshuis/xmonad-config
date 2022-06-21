@@ -45,10 +45,10 @@ data BrightnessConfig a b = BrightnessConfig
   }
 
 data BrightnessControls = BrightnessControls
-  { bctlMax :: FeatureIO
-  , bctlMin :: FeatureIO
-  , bctlInc :: FeatureIO
-  , bctlDec :: FeatureIO
+  { bctlMax :: SometimesIO
+  , bctlMin :: SometimesIO
+  , bctlInc :: SometimesIO
+  , bctlDec :: SometimesIO
   }
 
 brightnessControls :: BrightnessConfig a b -> Maybe Client -> BrightnessControls
@@ -67,7 +67,7 @@ callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client =
   either (const Nothing) bodyGetBrightness
   <$> callMethod client xmonadBusName p i memGet
 
-signalDep :: BrightnessConfig a b -> DBusDep
+signalDep :: BrightnessConfig a b -> DBusDependency a p
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
   Endpoint xmonadBusName p i $ Signal_ memCur
 
@@ -85,14 +85,12 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
 --------------------------------------------------------------------------------
 -- | Internal DBus Crap
 
-brightnessExporter :: RealFrac b => [FullDep Dependency] -> BrightnessConfig a b
-  -> Maybe Client -> FeatureIO
-brightnessExporter deps bc@BrightnessConfig { bcName = n } client = feature
-  (n ++ " exporter") Default
-  $ DBusTree (Single (exportBrightnessControls' bc)) client ds
+brightnessExporter :: RealFrac b => [IODependency (IO ()) (Maybe x)]
+  -> BrightnessConfig a b -> Maybe Client -> SometimesIO
+brightnessExporter deps bc@BrightnessConfig { bcName = n } client =
+  sometimesDBus client (n ++ " exporter") ds (exportBrightnessControls' bc)
   where
-    ds = listToAnds (fullDep $ Bus xmonadBusName)
-      $ fmap (fmap DBusGenDep) deps
+    ds = listToAnds (Bus xmonadBusName) $ fmap DBusIO deps
 
 exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
 exportBrightnessControls' bc client = do
@@ -130,11 +128,11 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
     sig = signal p i memCur
 
 callBacklight :: Maybe Client -> BrightnessConfig a b -> String -> MemberName
-  -> FeatureIO
+  -> SometimesIO
 callBacklight client BrightnessConfig { bcPath = p
                                       , bcInterface = i
                                       , bcName = n } controlName m =
-  featureEndpoint (unwords [n, controlName]) xmonadBusName p i m client
+  sometimesEndpoint (unwords [n, controlName]) xmonadBusName p i m client
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)

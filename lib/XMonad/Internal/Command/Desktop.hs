@@ -91,51 +91,53 @@ ethernetIface = "enp7s0f1"
 --------------------------------------------------------------------------------
 -- | Some nice apps
 
-runTerm :: FeatureX
-runTerm = featureExe "terminal" myTerm
+runTerm :: SometimesX
+runTerm = sometimesExe "terminal" True myTerm
 
-runTMux :: FeatureX
-runTMux = featureDefault "terminal multiplexer" deps cmd
+runTMux :: SometimesX
+runTMux = sometimesIO "terminal multiplexer" deps act
   where
-    deps = listToAnds (exe myTerm) $ fmap exe ["tmux", "bash"]
-    cmd = spawn
+    deps = listToAnds (Executable True myTerm) $ fmap (Executable True) ["tmux", "bash"]
+    act = spawn
       $ "tmux has-session"
       #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
       #!|| fmtNotifyCmd defNoteError { body = Just $ Text msg }
     c = "exec tmux attach-session -d"
     msg = "could not connect to tmux session"
 
-runCalc :: FeatureX
-runCalc = featureDefault "calculator" (And (Only $ exe myTerm) (Only $ exe "R"))
-  $ spawnCmd myTerm ["-e", "R"]
+runCalc :: SometimesX
+runCalc = sometimesIO "calculator" deps act
+  where
+    deps = toAnd (Executable True myTerm) (Executable True "R")
+    act = spawnCmd myTerm ["-e", "R"]
 
-runBrowser :: FeatureX
-runBrowser = featureExe "web browser" myBrowser
+runBrowser :: SometimesX
+runBrowser = sometimesExe "web browser" False myBrowser
 
-runEditor :: FeatureX
-runEditor = featureExeArgs "text editor" myEditor
+runEditor :: SometimesX
+runEditor = sometimesExeArgs "text editor" True myEditor
   ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
 
-runFileManager :: FeatureX
-runFileManager = featureExe "file browser" "pcmanfm"
+runFileManager :: SometimesX
+runFileManager = sometimesExe "file browser" True "pcmanfm"
 
 --------------------------------------------------------------------------------
 -- | Multimedia Commands
 
-runMultimediaIfInstalled :: String -> String -> FeatureX
+runMultimediaIfInstalled :: String -> String -> SometimesX
 runMultimediaIfInstalled n cmd =
-  featureExeArgs (n ++ " multimedia control") myMultimediaCtl [cmd]
+  sometimesExeArgs (n ++ " multimedia control") True myMultimediaCtl [cmd]
 
-runTogglePlay :: FeatureX
+runTogglePlay :: SometimesX
 runTogglePlay = runMultimediaIfInstalled "play/pause" "play-pause"
 
-runPrevTrack :: FeatureX
+runPrevTrack :: SometimesX
 runPrevTrack = runMultimediaIfInstalled "previous track" "previous"
 
-runNextTrack :: FeatureX
+runNextTrack :: SometimesX
 runNextTrack = runMultimediaIfInstalled "next track" "next"
 
-runStopPlay :: FeatureX
+runStopPlay :: SometimesX
 runStopPlay = runMultimediaIfInstalled "stop playback" "stop"
 
 --------------------------------------------------------------------------------
@@ -151,48 +153,48 @@ playSound file = do
   -- paplay seems to have less latency than aplay
   spawnCmd "paplay" [p]
 
-featureSound :: String -> FilePath -> X () -> X () -> FeatureX
+featureSound :: String -> FilePath -> X () -> X () -> SometimesX
 featureSound n file pre post =
-  featureDefault ("volume " ++ n ++ " control") (Only $ exe "paplay")
+  sometimesIO ("volume " ++ n ++ " control") (Only $ Executable True "paplay")
   $ pre >> playSound file >> post
 
-runVolumeDown :: FeatureX
+runVolumeDown :: SometimesX
 runVolumeDown = featureSound "up" volumeChangeSound (return ()) $ void (lowerVolume 2)
 
-runVolumeUp :: FeatureX
+runVolumeUp :: SometimesX
 runVolumeUp = featureSound "down" volumeChangeSound (return ()) $ void (raiseVolume 2)
 
-runVolumeMute :: FeatureX
+runVolumeMute :: SometimesX
 runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return ()
 
 --------------------------------------------------------------------------------
 -- | Notification control
 
-runNotificationCmd :: String -> String -> FeatureX
+runNotificationCmd :: String -> FilePath -> SometimesX
 runNotificationCmd n cmd =
-  featureExeArgs (n ++ " control") myNotificationCtrl [cmd]
+  sometimesExeArgs (n ++ " control") True myNotificationCtrl [cmd]
 
-runNotificationClose :: FeatureX
+runNotificationClose :: SometimesX
 runNotificationClose = runNotificationCmd "close notification" "close"
 
-runNotificationCloseAll :: FeatureX
+runNotificationCloseAll :: SometimesX
 runNotificationCloseAll =
   runNotificationCmd "close all notifications" "close-all"
 
-runNotificationHistory :: FeatureX
+runNotificationHistory :: SometimesX
 runNotificationHistory =
   runNotificationCmd "see notification history" "history-pop"
 
-runNotificationContext :: FeatureX
+runNotificationContext :: SometimesX
 runNotificationContext =
   runNotificationCmd "open notification context" "context"
 
 --------------------------------------------------------------------------------
 -- | System commands
 
-runToggleBluetooth :: FeatureX
+runToggleBluetooth :: SometimesX
 runToggleBluetooth =
-  featureDefault "bluetooth toggle" (Only $ exe myBluetooth)
+  sometimesIO "bluetooth toggle" (Only $ Executable True myBluetooth)
   $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
@@ -200,8 +202,8 @@ runToggleBluetooth =
   #!>> fmtCmd myBluetooth ["power", "$a", ">", "/dev/null"]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
-runToggleEthernet :: FeatureX
-runToggleEthernet = featureDefault "ethernet toggle" (Only $ exe "nmcli")
+runToggleEthernet :: SometimesX
+runToggleEthernet = sometimesIO "ethernet toggle" (Only $ Executable True "nmcli")
   $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
@@ -209,15 +211,15 @@ runToggleEthernet = featureDefault "ethernet toggle" (Only $ exe "nmcli")
   #!>> fmtCmd "nmcli" ["device", "$a", ethernetIface]
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
-runStartISyncTimer :: FeatureX
-runStartISyncTimer = featureDefault "isync timer" (Only $ userUnit "mbsync.timer")
+runStartISyncTimer :: SometimesX
+runStartISyncTimer = sometimesIO "isync timer" (Only $ Systemd UserUnit "mbsync.timer")
   $ spawn
   $ "systemctl --user start mbsync.timer"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
   #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
-runStartISyncService :: FeatureX
-runStartISyncService = featureDefault "isync" (Only $ userUnit "mbsync.service")
+runStartISyncService :: SometimesX
+runStartISyncService = sometimesIO "isync" (Only $ Systemd UserUnit "mbsync.service")
   $ spawn
   $ "systemctl --user start mbsync.service"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
@@ -261,25 +263,25 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
-runFlameshot :: String -> String -> FeatureX
-runFlameshot n mode = featureDefault n (Only $ exe myCapture)
+runFlameshot :: String -> String -> SometimesX
+runFlameshot n mode = sometimesIO n (Only $ Executable True myCapture)
   $ spawnCmd myCapture [mode]
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
-runAreaCapture :: FeatureX
+runAreaCapture :: SometimesX
 runAreaCapture = runFlameshot "screen area capture" "gui"
 
 -- myWindowCap = "screencap -w" --external script
 
-runDesktopCapture :: FeatureX
+runDesktopCapture :: SometimesX
 runDesktopCapture = runFlameshot "fullscreen capture" "full"
 
-runScreenCapture :: FeatureX
+runScreenCapture :: SometimesX
 runScreenCapture = runFlameshot "screen capture" "screen"
 
-runCaptureBrowser :: FeatureX
+runCaptureBrowser :: SometimesX
 runCaptureBrowser =
-  featureDefault "screen capture browser" (Only $ exe myImageBrowser) $ do
+  sometimesIO "screen capture browser" (Only $ Executable True myImageBrowser) $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]
