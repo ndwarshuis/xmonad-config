@@ -107,13 +107,13 @@ clevoKeyboardConfig = BrightnessConfig
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-stateFileDep :: IODependency a p
+stateFileDep :: IODependency p
 stateFileDep = pathRW stateFile
 
-brightnessFileDep :: IODependency a p
+brightnessFileDep :: IODependency p
 brightnessFileDep = pathR brightnessFile
 
-clevoKeyboardSignalDep :: DBusDependency RawBrightness p
+clevoKeyboardSignalDep :: DBusDependency RawBrightness
 clevoKeyboardSignalDep = signalDep clevoKeyboardConfig
 
 exportClevoKeyboard :: Maybe Client -> SometimesIO

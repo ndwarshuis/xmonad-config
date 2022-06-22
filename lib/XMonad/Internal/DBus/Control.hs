@@ -30,7 +30,7 @@ startXMonadService :: IO (Maybe Client)
 startXMonadService = do
   client <- getDBusClient False
   forM_ client requestXMonadName
-  mapM_ (\f -> executeSometimes_ $ f client) dbusExporters
+  mapM_ (\f -> executeSometimes $ f client) dbusExporters
   return client
 
 stopXMonadService :: Client -> IO ()

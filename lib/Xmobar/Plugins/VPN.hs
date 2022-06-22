@@ -118,5 +118,5 @@ vpnDeviceTun = "org.freedesktop.NetworkManager.Device.Tun"
 vpnAlias :: String
 vpnAlias = "vpn"
 
-vpnDep :: DBusDep
+vpnDep :: DBusDependency p
 vpnDep = Endpoint vpnBus vpnPath omInterface $ Method_ getManagedObjects

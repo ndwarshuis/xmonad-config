@@ -239,7 +239,7 @@ dateCmd = CmdSpec
 -- which case ethernet interfaces always start with "en" and wireless
 -- interfaces always start with "wl"
 
-type BarFeature = Feature CmdSpec
+type BarFeature = Sometimes CmdSpec
 
 isWireless :: String -> Bool
 isWireless ('w':'l':_) = True
@@ -255,13 +255,14 @@ listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
 sysfsNet :: FilePath
 sysfsNet = "/sys/class/net"
 
-readInterface :: (String -> Bool) -> IO (Either [String] String)
+readInterface :: (String -> Bool) -> IO (Either String String)
 readInterface f = do
   ns <- filter f <$> listInterfaces
   case ns of
-    [] -> return $ Left ["no interfaces found"]
+    [] -> return $ Left "no interfaces found"
     (x:xs) -> do
       unless (null xs) $
+        -- TODO store this somehow intead of printing
         putStrLn $ "WARNING: extra interfaces found, using " ++ x
       return $ Right x
 
@@ -275,66 +276,71 @@ vpnPresent = do
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
-rightPlugins :: Maybe Client -> Maybe Client -> IO [MaybeAction CmdSpec]
+rightPlugins :: Maybe Client -> Maybe Client -> IO [Maybe CmdSpec]
 rightPlugins sysClient sesClient = mapM evalFeature
-  [ getWireless
-  , getEthernet sysClient
-  , getVPN sysClient
-  , getBt sysClient
-  , getAlsa
-  , getBattery
-  , getBl sesClient
-  , getCk sesClient
-  , getSs sesClient
-  , ConstFeature lockCmd
-  , ConstFeature dateCmd
+  [ Left getWireless
+  , Left $ getEthernet sysClient
+  , Left $ getVPN sysClient
+  , Left $ getBt sysClient
+  , Left getAlsa
+  , Left getBattery
+  , Left $ getBl sesClient
+  , Left $ getCk sesClient
+  , Left $ getSs sesClient
+  , Right $ Always lockCmd
+  , Right $ Always dateCmd
   ]
 
 getWireless :: BarFeature
-getWireless = feature "wireless status indicator" Default
-  -- TODO this is stupid
-  $ GenTree (Double wirelessCmd $ readInterface isWireless) (Only $ exe "ls")
+getWireless = sometimes1 "wireless status indicator"
+  $ IOTree (Consumer wirelessCmd)
+  $ Only $ IORead "get wifi interface" $ fmap Just <$> readInterface isWireless
 
 getEthernet :: Maybe Client -> BarFeature
-getEthernet client = feature "ethernet status indicator" Default
-  $ DBusTree action client (Only $ fullDep devDep)
+getEthernet client = sometimes1 "ethernet status indicator" $
+  DBusTree (Consumer act) client deps
   where
-    action = Double (\i _ -> ethernetCmd i) (readInterface isEthernet)
+    act i = const $ ethernetCmd i
+    deps = And (\_ s -> s) (Only devDep) (Only readEth)
+    readEth = DBusIO $ IORead "read ethernet interface"
+      $ fmap Just <$> readInterface isEthernet
 
 getBattery :: BarFeature
-getBattery = feature "battery level indicator" Default
-  $ GenTree (Single batteryCmd) (Only $ fullDep $ IOTest desc hasBattery)
-  where
-    desc = "Test if battery is present"
+getBattery = sometimesIO "battery level indicator"
+  (Only $ IOTest "Test if battery is present" hasBattery)
+  batteryCmd
 
 getVPN :: Maybe Client -> BarFeature
-getVPN client = feature "VPN status indicator" Default
-  $ DBusTree (Single (const vpnCmd)) client $ And (Only $ fullDep vpnDep) (Only dp)
+getVPN client = sometimesDBus client "VPN status indicator"
+  (toAnd vpnDep test) (const vpnCmd)
   where
-    dp = fullDep $ DBusGenDep $ IOTest desc vpnPresent
-    desc = "Use nmcli to test if VPN is present"
+    test = DBusIO $ IOTest "Use nmcli to test if VPN is present" vpnPresent
 
 getBt :: Maybe Client -> BarFeature
-getBt client = feature "bluetooth status indicator" Default
-  $ DBusTree (Single (const btCmd)) client (Only $ fullDep btDep)
+getBt client = sometimesDBus client "bluetooth status indicator"
+  (Only btDep)
+  (const btCmd)
 
 getAlsa :: BarFeature
-getAlsa = feature "volume level indicator" Default
-  $ GenTree (Single alsaCmd) (Only $ exe "alsactl")
+getAlsa = sometimesIO "volume level indicator"
+  (Only $ Executable True "alsact")
+  alsaCmd
 
 getBl :: Maybe Client -> BarFeature
-getBl client = feature "Intel backlight indicator" Default
-  $ DBusTree (Single (const blCmd)) client (Only $ fullDep intelBacklightSignalDep)
+getBl client = sometimesDBus client "Intel backlight indicator"
+  (Only intelBacklightSignalDep)
+  (const blCmd)
 
 getCk :: Maybe Client -> BarFeature
-getCk client = feature "Clevo keyboard indicator" Default
-  $ DBusTree (Single (const ckCmd)) client (Only $ fullDep clevoKeyboardSignalDep)
+getCk client = sometimesDBus client "Clevo keyboard indicator"
+  (Only clevoKeyboardSignalDep)
+  (const ckCmd)
 
 getSs :: Maybe Client -> BarFeature
-getSs client = feature "screensaver indicator" Default
-  $ DBusTree (Single (const ssCmd)) client (Only $ fullDep ssSignalDep)
+getSs client = sometimesDBus client "screensaver indicator"
+  (Only ssSignalDep) $ const ssCmd
 
-getAllCommands :: [MaybeAction CmdSpec] -> IO BarRegions
+getAllCommands :: [Maybe CmdSpec] -> IO BarRegions
 getAllCommands right = do
   let left =
         [ CmdSpec

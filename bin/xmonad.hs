@@ -20,9 +20,6 @@ import           Data.List
     , sortOn
     )
 import           Data.Maybe
-    ( isJust
-    , mapMaybe
-    )
 import           Data.Monoid                                    (All (..))
 
 import           Graphics.X11.Types
@@ -88,15 +85,15 @@ run :: IO ()
 run = do
   db <- connectXDBus
   (h, p) <- spawnPipe "xmobar"
-  executeFeature_ $ runRemovableMon $ dbSystemClient db
-  executeFeatureWith_ forkIO_ runPowermon
+  void $ executeSometimes $ runRemovableMon $ dbSystemClient db
+  forkIO_ $ void $ executeSometimes runPowermon
   forkIO_ $ runWorkspaceMon allDWs
   let ts = ThreadState
            { tsChildPIDs = [p]
            , tsChildHandles = [h]
            }
-  lockRes <- evalFeature runScreenLock
-  let lock = whenSatisfied lockRes
+  lockRes <- evalSometimes runScreenLock
+  let lock = fromMaybe skip lockRes
   ext <- evalExternal $ externalBindings ts db lock
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
@@ -127,7 +124,7 @@ printDeps = skip
   -- mapM_ printDep $ concatMap extractFeatures i ++ concatMap extractFeatures x
   -- where
   --   extractFeatures (Feature f _)    = dtDeps $ ftrDepTree f
-  --   extractFeatures (ConstFeature _) = []
+  --   extractFeatures (Always _) = []
   --   dtDeps (GenTree _ ds)    = ds
   --   dtDeps (DBusTree _ _ ds) = ds
   --   printDep (FullDep d) = putStrLn . depName d
@@ -540,13 +537,13 @@ data KeyGroup a = KeyGroup
   , kgBindings :: [KeyBinding a]
   }
 
-evalExternal :: [KeyGroup FeatureX] -> IO [KeyGroup MaybeX]
+evalExternal :: [KeyGroup (FeatureX)] -> IO [KeyGroup MaybeX]
 evalExternal = mapM go
   where
     go k@KeyGroup { kgBindings = bs } =
       (\bs' -> k { kgBindings = bs' }) <$> mapM evalKeyBinding bs
 
-evalKeyBinding :: KeyBinding FeatureX -> IO (KeyBinding MaybeX)
+evalKeyBinding :: KeyBinding (FeatureX) -> IO (KeyBinding MaybeX)
 evalKeyBinding k@KeyBinding { kbMaybeAction = a } =
   (\f -> k { kbMaybeAction = f }) <$> evalFeature a
 
@@ -560,51 +557,51 @@ flagKeyBinding k@KeyBinding{ kbDesc = d, kbMaybeAction = a } = case a of
   (Just x) -> Just $ k{ kbMaybeAction = x }
   Nothing  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbMaybeAction = skip }
 
-externalBindings :: ThreadState -> DBusState -> X () -> [KeyGroup FeatureX]
+externalBindings :: ThreadState -> DBusState -> X () -> [KeyGroup (FeatureX)]
 externalBindings ts db lock =
   [ KeyGroup "Launchers"
-    [ KeyBinding "<XF86Search>" "select/launch app" runAppMenu
-    , KeyBinding "M-g" "launch clipboard manager" runClipMenu
-    , KeyBinding "M-a" "launch network selector" runNetMenu
-    , KeyBinding "M-w" "launch window selector" runWinMenu
-    , KeyBinding "M-u" "launch device selector" runDevMenu
-    , KeyBinding "M-b" "launch bitwarden selector" runBwMenu
-    , KeyBinding "M-v" "launch ExpressVPN selector" runVPNMenu
-    , KeyBinding "M-e" "launch bluetooth selector" runBTMenu
-    , KeyBinding "M-C-e" "launch editor" runEditor
-    , KeyBinding "M-C-w" "launch browser" runBrowser
-    , KeyBinding "M-C-t" "launch terminal with tmux" runTMux
-    , KeyBinding "M-C-S-t" "launch terminal" runTerm
-    , KeyBinding "M-C-q" "launch calc" runCalc
-    , KeyBinding "M-C-f" "launch file manager" runFileManager
+    [ KeyBinding "<XF86Search>" "select/launch app" $ Left runAppMenu
+    , KeyBinding "M-g" "launch clipboard manager" $ Left runClipMenu
+    , KeyBinding "M-a" "launch network selector" $ Left runNetMenu
+    , KeyBinding "M-w" "launch window selector" $ Left runWinMenu
+    , KeyBinding "M-u" "launch device selector" $ Left runDevMenu
+    , KeyBinding "M-b" "launch bitwarden selector" $ Left runBwMenu
+    , KeyBinding "M-v" "launch ExpressVPN selector" $ Left runVPNMenu
+    , KeyBinding "M-e" "launch bluetooth selector" $ Left runBTMenu
+    , KeyBinding "M-C-e" "launch editor" $ Left runEditor
+    , KeyBinding "M-C-w" "launch browser" $ Left runBrowser
+    , KeyBinding "M-C-t" "launch terminal with tmux" $ Left runTMux
+    , KeyBinding "M-C-S-t" "launch terminal" $ Left runTerm
+    , KeyBinding "M-C-q" "launch calc" $ Left runCalc
+    , KeyBinding "M-C-f" "launch file manager" $ Left runFileManager
     ]
 
   , KeyGroup "Actions"
-    [ KeyBinding "M-q" "close window" $ ConstFeature kill1
-    , KeyBinding "M-r" "run program" runCmdMenu
-    , KeyBinding "M-<Space>" "warp pointer" $ ConstFeature $ warpToWindow 0.5 0.5
-    , KeyBinding "M-C-s" "capture area" runAreaCapture
-    , KeyBinding "M-C-S-s" "capture screen" runScreenCapture
-    , KeyBinding "M-C-d" "capture desktop" runDesktopCapture
-    , KeyBinding "M-C-b" "browse captures" runCaptureBrowser
+    [ KeyBinding "M-q" "close window" $ ftrAlways kill1
+    , KeyBinding "M-r" "run program" $ Left runCmdMenu
+    , KeyBinding "M-<Space>" "warp pointer" $ ftrAlways $ warpToWindow 0.5 0.5
+    , KeyBinding "M-C-s" "capture area" $ Left runAreaCapture
+    , KeyBinding "M-C-S-s" "capture screen" $ Left runScreenCapture
+    , KeyBinding "M-C-d" "capture desktop" $ Left runDesktopCapture
+    , KeyBinding "M-C-b" "browse captures" $ Left runCaptureBrowser
     -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
     ]
 
   , KeyGroup "Multimedia"
-    [ KeyBinding "<XF86AudioPlay>" "toggle play/pause" runTogglePlay
-    , KeyBinding "<XF86AudioPrev>" "previous track" runPrevTrack
-    , KeyBinding "<XF86AudioNext>" "next track" runNextTrack
-    , KeyBinding "<XF86AudioStop>" "stop" runStopPlay
-    , KeyBinding "<XF86AudioLowerVolume>" "volume down" runVolumeDown
-    , KeyBinding "<XF86AudioRaiseVolume>" "volume up" runVolumeUp
-    , KeyBinding "<XF86AudioMute>" "volume mute" runVolumeMute
+    [ KeyBinding "<XF86AudioPlay>" "toggle play/pause" $ Left runTogglePlay
+    , KeyBinding "<XF86AudioPrev>" "previous track" $ Left runPrevTrack
+    , KeyBinding "<XF86AudioNext>" "next track" $ Left runNextTrack
+    , KeyBinding "<XF86AudioStop>" "stop" $ Left runStopPlay
+    , KeyBinding "<XF86AudioLowerVolume>" "volume down" $ Left runVolumeDown
+    , KeyBinding "<XF86AudioRaiseVolume>" "volume up" $ Left runVolumeUp
+    , KeyBinding "<XF86AudioMute>" "volume mute" $ Left runVolumeMute
     ]
 
   , KeyGroup "Dunst"
-    [ KeyBinding "M-`" "dunst history" runNotificationHistory
-    , KeyBinding "M-S-`" "dunst close" runNotificationClose
-    , KeyBinding "M-M1-`" "dunst context menu" runNotificationContext
-    , KeyBinding "M-C-`" "dunst close all" runNotificationCloseAll
+    [ KeyBinding "M-`" "dunst history" $ Left runNotificationHistory
+    , KeyBinding "M-S-`" "dunst close" $ Left runNotificationClose
+    , KeyBinding "M-M1-`" "dunst context menu" $ Left runNotificationContext
+    , KeyBinding "M-C-`" "dunst close all" $ Left runNotificationCloseAll
     ]
 
   , KeyGroup "System"
@@ -616,23 +613,28 @@ externalBindings ts db lock =
     , KeyBinding "M-S-," "keyboard down" $ ck bctlDec
     , KeyBinding "M-S-M1-," "keyboard min" $ ck bctlMin
     , KeyBinding "M-S-M1-." "keyboard max" $ ck bctlMax
-    , KeyBinding "M-<End>" "power menu" $ ConstFeature $ runPowerPrompt lock
-    , KeyBinding "M-<Home>" "quit xmonad" $ ConstFeature runQuitPrompt
-    , KeyBinding "M-<Delete>" "lock screen" runScreenLock
+    , KeyBinding "M-<End>" "power menu" $ ftrAlways $ runPowerPrompt lock
+    , KeyBinding "M-<Home>" "quit xmonad" $ ftrAlways runQuitPrompt
+    , KeyBinding "M-<Delete>" "lock screen" $ Left runScreenLock
     -- M-<F1> reserved for showing the keymap
-    , KeyBinding "M-<F2>" "restart xmonad" $ ConstFeature (runCleanup ts db >> runRestart)
-    , KeyBinding "M-<F3>" "recompile xmonad" $ ConstFeature runRecompile
-    , KeyBinding "M-<F7>" "start Isync Service" runStartISyncService
-    , KeyBinding "M-C-<F7>" "start Isync Timer" runStartISyncTimer
-    , KeyBinding "M-<F8>" "select autorandr profile" runAutorandrMenu
-    , KeyBinding "M-<F9>" "toggle ethernet" runToggleEthernet
-    , KeyBinding "M-<F10>" "toggle bluetooth" runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ ioFeature $ callToggle cl
-    , KeyBinding "M-<F12>" "switch gpu" runOptimusPrompt
+    , KeyBinding "M-<F2>" "restart xmonad" $ ftrAlways (runCleanup ts db >> runRestart)
+    , KeyBinding "M-<F3>" "recompile xmonad" $ ftrAlways runRecompile
+    , KeyBinding "M-<F7>" "start Isync Service" $ Left runStartISyncService
+    , KeyBinding "M-C-<F7>" "start Isync Timer" $ Left runStartISyncTimer
+    , KeyBinding "M-<F8>" "select autorandr profile" $ Left runAutorandrMenu
+    , KeyBinding "M-<F9>" "toggle ethernet" $ Left runToggleEthernet
+    , KeyBinding "M-<F10>" "toggle bluetooth" $ Left runToggleBluetooth
+    , KeyBinding "M-<F11>" "toggle screensaver" $ Left $ ioSometimes $ callToggle cl
+    , KeyBinding "M-<F12>" "switch gpu" $ Left runOptimusPrompt
     ]
   ]
   where
     cl = dbSessionClient db
-    brightessControls ctl getter = (ioFeature . getter . ctl) cl
-    ib = brightessControls intelBacklightControls
-    ck = brightessControls clevoKeyboardControls
+    brightessControls ctl getter = (ioSometimes . getter . ctl) cl
+    ib = Left . brightessControls intelBacklightControls
+    ck = Left . brightessControls clevoKeyboardControls
+    ftrAlways = Right . Always
+
+type MaybeX = Maybe (X ())
+
+type FeatureX = Feature (X ())

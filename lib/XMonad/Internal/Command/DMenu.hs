@@ -15,17 +15,17 @@ module XMonad.Internal.Command.DMenu
   , runAutorandrMenu
   ) where
 
-import           Control.Monad.Reader
+-- import           Control.Monad.Reader
 
 import           Graphics.X11.Types
 
 import           System.Directory           (XdgDirectory (..), getXdgDirectory)
-import           System.IO
+-- import           System.IO
 
 import           XMonad.Core                hiding (spawn)
 import           XMonad.Internal.Dependency
-import           XMonad.Internal.Notify
-import           XMonad.Internal.Process
+-- import           XMonad.Internal.Notify
+-- import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import           XMonad.Util.NamedActions
 
@@ -103,27 +103,27 @@ runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
 runShowKeys _ = NamedAction (skip :: (X ()))
   -- addName "Show Keybindings" $ evalAlways $ runDMenuShowKeys x
 
-runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> AlwaysX
-runDMenuShowKeys kbs =
-  Option (runDMenuShowKeys' kbs) (Always runNotifyShowKeys)
+-- runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> AlwaysX
+-- runDMenuShowKeys kbs =
+--   Option (runDMenuShowKeys' kbs) (Always runNotifyShowKeys)
 
-runNotifyShowKeys :: X ()
-runNotifyShowKeys = spawnNotify
-  $ defNoteError { body = Just $ Text "could not display keymap" }
+-- runNotifyShowKeys :: X ()
+-- runNotifyShowKeys = spawnNotify
+--   $ defNoteError { body = Just $ Text "could not display keymap" }
 
-runDMenuShowKeys' :: [((KeyMask, KeySym), NamedAction)] -> Subfeature (X ()) Tree
-runDMenuShowKeys' kbs = Subfeature
-  { sfName = "keyboard shortcut menu"
-  , sfTree = IOTree (Standalone act) deps
-  , sfLevel = Warn
-  }
-  where
-    deps = Only $ Executable True myDmenuCmd
-    act = io $ do
-      (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
-      forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
-    cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
-      ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
+-- runDMenuShowKeys' :: [((KeyMask, KeySym), NamedAction)] -> Subfeature (X ()) Tree
+-- runDMenuShowKeys' kbs = Subfeature
+--   { sfName = "keyboard shortcut menu"
+--   , sfTree = IOTree (Standalone act) deps
+--   , sfLevel = Warn
+--   }
+--   where
+--     deps = Only $ Executable True myDmenuCmd
+--     act = io $ do
+--       (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
+--       forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
+--     cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
+--       ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
 
 runCmdMenu :: SometimesX
 runCmdMenu = spawnDmenuCmd "command menu" ["-show", "run"]

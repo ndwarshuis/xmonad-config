@@ -132,5 +132,5 @@ matchSignal :: (Maybe SSState -> IO ()) -> Client -> IO ()
 matchSignal cb =
   fmap void . addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
 
-ssSignalDep :: DBusDependency a p
+ssSignalDep :: DBusDependency p
 ssSignalDep = Endpoint xmonadBusName ssPath interface $ Signal_ memState

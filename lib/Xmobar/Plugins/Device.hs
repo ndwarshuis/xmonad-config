@@ -41,7 +41,7 @@ getByIP = memberName_ "GetDeviceByIpIface"
 devSignal :: String
 devSignal = "Ip4Connectivity"
 
-devDep :: DBusDep
+devDep :: DBusDependency p
 devDep = Endpoint nmBus nmPath nmInterface $ Method_ getByIP
 
 getDevice :: Client -> String -> IO (Maybe ObjectPath)

@@ -7,13 +7,16 @@
 module XMonad.Internal.Dependency
   ( AlwaysX
   , AlwaysIO
+  , Feature
   , Always(..)
+  , TestedSometimes(..)
   , SometimesX
   , SometimesIO
   , Sometimes
-  , executeSometimes_
+  , ioSometimes
+  , ioAlways
+  , evalFeature
   , executeSometimes
-  , executeAlways_
   , executeAlways
   , evalAlways
   , evalSometimes
@@ -50,7 +53,7 @@ import           Control.Monad.Identity
 
 -- import           Data.Aeson
 import           Data.Bifunctor
-import           Data.Either
+-- import           Data.Either
 import           Data.List               (find)
 import           Data.Maybe
 -- import qualified Data.Text               as T
@@ -61,7 +64,7 @@ import           DBus.Internal
 import qualified DBus.Introspection      as I
 
 import           System.Directory        (findExecutable, readable, writable)
-import           System.Environment
+-- import           System.Environment
 import           System.Exit
 
 import           XMonad.Core             (X, io)
@@ -82,9 +85,18 @@ type SometimesX = Sometimes (X ())
 
 type SometimesIO = Sometimes (IO ())
 
+type Feature a = Either (Sometimes a) (Always a)
+
 data Always a = Option (Subfeature a Tree) (Always a) | Always a
 
 type Sometimes a = [Subfeature a Tree]
+
+ioSometimes :: MonadIO m => Sometimes (IO a) -> Sometimes (m a)
+ioSometimes = fmap ioSubfeature
+
+ioAlways :: MonadIO m => Always (IO a) -> Always (m a)
+ioAlways (Always x)    = Always $ io x
+ioAlways (Option sf a) = Option (ioSubfeature sf) $ ioAlways a
 
 data TestedAlways a p =
   Primary (Finished a p) [FailedFeature a p] (Always a)
@@ -115,17 +127,17 @@ type ActionTreeMaybe a p = Either (ActionTree a Tree, String)
 sometimes1_ :: LogLevel -> String -> ActionTree a Tree -> Sometimes a
 sometimes1_ l n t = [Subfeature{ sfTree = t, sfName = n, sfLevel = l }]
 
-always1_ :: LogLevel -> String -> ActionTree a Tree -> a -> Always a
-always1_ l n t x =
-  Option (Subfeature{ sfTree = t, sfName = n, sfLevel = l }) (Always x)
+-- always1_ :: LogLevel -> String -> ActionTree a Tree -> a -> Always a
+-- always1_ l n t x =
+--   Option (Subfeature{ sfTree = t, sfName = n, sfLevel = l }) (Always x)
 
 sometimes1 :: String -> ActionTree a Tree -> Sometimes a
 sometimes1 = sometimes1_ Error
 
-sometimesIO :: String -> Tree (IODependency a p) p -> a -> Sometimes a
+sometimesIO :: String -> Tree (IODependency p) p -> a -> Sometimes a
 sometimesIO n t x = sometimes1 n $ IOTree (Standalone x) t
 
-sometimesDBus :: Maybe Client -> String -> Tree (DBusDependency a p) p
+sometimesDBus :: Maybe Client -> String -> Tree (DBusDependency p) p
   -> (Client -> a) -> Sometimes a
 sometimesDBus c n t x = sometimes1 n $ DBusTree (Standalone x) c t
 
@@ -140,18 +152,28 @@ data Subfeature a t = Subfeature
 
 data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord)
 
-data Msg = Msg LogLevel String String
+ioSubfeature :: MonadIO m => Subfeature (IO a) t -> Subfeature (m a) t
+ioSubfeature sf = sf { sfTree = ioActionTree $ sfTree sf }
+
+-- data Msg = Msg LogLevel String String
 
 --------------------------------------------------------------------------------
 -- | Action Tree
 
 data ActionTree a t =
-  forall p. IOTree (Action a p) (t (IODependency a p) p)
-  | forall p. DBusTree (Action (Client -> a) p) (Maybe Client) (t (DBusDependency a p) p)
+  forall p. IOTree (Action a p) (t (IODependency p) p)
+  | forall p. DBusTree (Action (Client -> a) p) (Maybe Client)
+    (t (DBusDependency p) p)
 
 data Action a p = Standalone a | Consumer (p -> a)
 
---------------------------------------------------------------------------------
+ioActionTree :: MonadIO m => ActionTree (IO a) t -> ActionTree (m a) t
+ioActionTree (IOTree (Standalone a) t)      = IOTree (Standalone $ io a) t
+ioActionTree (IOTree (Consumer a) t)        = IOTree (Consumer $ io . a) t
+ioActionTree (DBusTree (Standalone a) cl t) = DBusTree (Standalone $ io . a) cl t
+ioActionTree (DBusTree (Consumer a) cl t)   = DBusTree (Consumer (\p c -> io $ a p c)) cl t
+
+-- --------------------------------------------------------------------------------
 -- | Dependency Tree
 
 data Tree d p =
@@ -192,30 +214,30 @@ smryNil = const $ Right (Nothing, [])
 smryFail :: String -> Either [String] a
 smryFail msg = Left [msg]
 
-smryInit :: Summary p
-smryInit = Right (Nothing, [])
+-- smryInit :: Summary p
+-- smryInit = Right (Nothing, [])
 
-foldResultTreeMsgs :: ResultTree d p -> ([String], [String])
-foldResultTreeMsgs = undefined
+-- foldResultTreeMsgs :: ResultTree d p -> ([String], [String])
+-- foldResultTreeMsgs = undefined
 
 --------------------------------------------------------------------------------
 -- | Result
 
-type Result p = Either [String] (Maybe p)
+-- type Result p = Either [String] (Maybe p)
 
-resultNil :: p -> Result q
-resultNil = const $ Right Nothing
+-- resultNil :: p -> Result q
+-- resultNil = const $ Right Nothing
 
 --------------------------------------------------------------------------------
 -- | IO Dependency
 
-data IODependency a p = Executable Bool FilePath
+data IODependency p = Executable Bool FilePath
   | AccessiblePath FilePath Bool Bool
   | IOTest String (IO (Maybe String))
   | IORead String (IO (Either String (Maybe p)))
   | Systemd UnitType String
-  | NestedAlways (Always a) (a -> p)
-  | NestedSometimes (Sometimes a) (a -> p)
+  | forall a. NestedAlways (Always a) (a -> p)
+  | forall a. NestedSometimes (Sometimes a) (a -> p)
 
 data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
 
@@ -226,22 +248,22 @@ sometimesExeArgs :: MonadIO m => String -> Bool -> FilePath -> [String] -> Somet
 sometimesExeArgs n sys path args =
   sometimesIO n (Only (Executable sys path)) $ spawnCmd path args
 
-pathR :: String -> IODependency a p
+pathR :: String -> IODependency p
 pathR n = AccessiblePath n True False
 
-pathW :: String -> IODependency a p
+pathW :: String -> IODependency p
 pathW n = AccessiblePath n False True
 
-pathRW :: String -> IODependency a p
+pathRW :: String -> IODependency p
 pathRW n = AccessiblePath n True True
 
 --------------------------------------------------------------------------------
 -- | DBus Dependency Result
 
-data DBusDependency a p =
+data DBusDependency p =
   Bus BusName
   | Endpoint BusName ObjectPath InterfaceName DBusMember
-  | DBusIO (IODependency a p)
+  | DBusIO (IODependency p)
 
 data DBusMember = Method_ MemberName
   | Signal_ MemberName
@@ -268,11 +290,15 @@ sometimesEndpoint name busname path iface mem client =
 -- Here we attempt to build and return the monadic actions encoded by each
 -- feature.
 
-executeSometimes_ :: MonadIO m => Sometimes (m a) -> m ()
-executeSometimes_ = void . executeSometimes
+executeAlways :: MonadIO m => Always (m a) -> m a
+executeAlways = join . evalAlways
 
 executeSometimes :: MonadIO m => Sometimes (m a) -> m (Maybe a)
 executeSometimes a = maybe (return Nothing) (fmap Just) =<< evalSometimes a
+
+evalFeature :: MonadIO m => Feature a -> m (Maybe a)
+evalFeature (Right a) = Just <$> evalAlways a
+evalFeature (Left s)  = evalSometimes s
 
 -- TODO actually print things
 evalSometimes :: MonadIO m => Sometimes a -> m (Maybe a)
@@ -285,11 +311,6 @@ evalSometimesMsg x = io $ do
   TestedSometimes { tsSuccess = s, tsFailed = _ } <- testSometimes x
   return $ maybe (Left []) (\Finished { finAction = a } -> Right (a, [])) s
 
-executeAlways_ :: MonadIO m => Always (m a) -> m ()
-executeAlways_ = void . executeAlways
-
-executeAlways :: MonadIO m => Always (m a) -> m a
-executeAlways = join . evalAlways
 
 -- TODO actually print things
 evalAlways :: MonadIO m => Always a -> m a
@@ -309,7 +330,7 @@ evalAlwaysMsg a = io $ do
 -- for diagnostic purposes. This obviously has overlap with feature evaluation
 -- since we need to resolve dependencies to build each feature.
 
-testAlways :: Always a -> IO (TestedAlways a p)
+testAlways :: Always m -> IO (TestedAlways m p)
 testAlways = go []
   where
     go failed (Option fd next) = do
@@ -320,7 +341,7 @@ testAlways = go []
         (SuccessfulFtr s)    -> return $ Primary s failed next
     go failed (Always a) = return $ Fallback a failed
 
-testSometimes :: Sometimes a -> IO (TestedSometimes a p)
+testSometimes :: Sometimes m -> IO (TestedSometimes m p)
 testSometimes = go (TestedSometimes Nothing [] [])
   where
     go ts [] = return ts
@@ -333,7 +354,7 @@ testSometimes = go (TestedSometimes Nothing [] [])
     addFail ts@(TestedSometimes { tsFailed = f }) new
       = ts { tsFailed = new:f }
 
-testSubfeature :: Subfeature a Tree -> IO (FeatureResult a p)
+testSubfeature :: Subfeature m Tree -> IO (FeatureResult m p)
 testSubfeature fd@(Subfeature { sfTree = t }) = do
   atm <- testActionTree t
   return $ either untestable checkAction atm
@@ -346,7 +367,7 @@ testSubfeature fd@(Subfeature { sfTree = t }) = do
                  }
     checkAction (t', Nothing, ms) = FailedFtr (fd { sfTree = t' }) ms
 
-testActionTree :: ActionTree a Tree -> IO (ActionTreeMaybe a p)
+testActionTree :: ActionTree m Tree -> IO (ActionTreeMaybe m p)
 testActionTree t = do
   case t of
     (IOTree a d)             -> do
@@ -365,12 +386,12 @@ testActionTree t = do
     apply (Standalone a) _ = a
     apply (Consumer a) p   = a p
 
-testIOTree :: Tree (IODependency a p) p
-  -> IO (ResultTree (IODependency a p) p, Maybe (Maybe p))
+testIOTree :: Tree (IODependency p) p
+  -> IO (ResultTree (IODependency p) p, Maybe (Maybe p))
 testIOTree = testTree testIODependency
 
-testDBusTree :: Client -> Tree (DBusDependency a p) p
-  -> IO (ResultTree (DBusDependency a p) p, Maybe (Maybe p))
+testDBusTree :: Client -> Tree (DBusDependency p) p
+  -> IO (ResultTree (DBusDependency p) p, Maybe (Maybe p))
 testDBusTree client = testTree (testDBusDependency client)
 
 testTree :: Monad m => (d -> m (Summary p)) -> Tree d p
@@ -395,7 +416,7 @@ testTree test = go
       (rb, pb) <- go b
       return (Both ra rb, fmap (f =<<) pb)
 
-testIODependency :: IODependency a p -> IO (Summary p)
+testIODependency :: IODependency p -> IO (Summary p)
 testIODependency (Executable _ bin) = maybe err smryNil <$> findExecutable bin
   where
     err = Left ["executable '" ++ bin ++ "' not found"]
@@ -441,7 +462,7 @@ testIODependency (NestedSometimes x f) = do
   TestedSometimes { tsSuccess = s, tsFailed = _ } <- testSometimes x
   return $ maybe (Left []) (\Finished { finAction = a } -> Right (Just $ f a, [])) s
 
-testDBusDependency :: Client -> DBusDependency a p -> IO (Summary p)
+testDBusDependency :: Client -> DBusDependency p -> IO (Summary p)
 testDBusDependency client (Bus bus) = do
   ret <- callMethod client queryBus queryPath queryIface queryMem
   return $ case ret of
@@ -493,14 +514,14 @@ testDBusDependency _ (DBusIO d) = testIODependency d
 --------------------------------------------------------------------------------
 -- | Printing
 
-printMsgs :: LogLevel -> [Msg] -> IO ()
-printMsgs lvl ms = do
-  pn <- getProgName
-  mapM_ (printMsg pn lvl) ms
+-- printMsgs :: LogLevel -> [Msg] -> IO ()
+-- printMsgs lvl ms = do
+--   pn <- getProgName
+--   mapM_ (printMsg pn lvl) ms
 
-printMsg :: String -> LogLevel -> Msg -> IO ()
-printMsg pname lvl (Msg ml mn msg)
-  | lvl > ml = putStrLn $ unwords [bracket pname, bracket mn, msg]
-  | otherwise = skip
-  where
-    bracket s = "[" ++ s ++ "]"
+-- printMsg :: String -> LogLevel -> Msg -> IO ()
+-- printMsg pname lvl (Msg ml mn msg)
+--   | lvl > ml = putStrLn $ unwords [bracket pname, bracket mn, msg]
+--   | otherwise = skip
+--   where
+--     bracket s = "[" ++ s ++ "]"
