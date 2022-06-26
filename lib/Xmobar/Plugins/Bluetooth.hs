@@ -55,7 +55,7 @@ import           Xmobar.Plugins.Common
 btAlias :: String
 btAlias = "bluetooth"
 
-btDep :: DBusDependency p
+btDep :: DBusDependency_
 btDep = Endpoint btBus btOMPath omInterface $ Method_ getManagedObjects
 
 data Bluetooth = Bluetooth Icons Colors deriving (Read, Show)

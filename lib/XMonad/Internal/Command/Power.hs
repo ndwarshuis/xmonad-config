@@ -101,7 +101,7 @@ runOptimusPrompt' = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: SometimesX
-runOptimusPrompt = sometimesIO "graphics switcher" (Only $ Executable True myOptimusManager)
+runOptimusPrompt = sometimesIO "graphics switcher" (Only_ $ localExe myOptimusManager)
   runOptimusPrompt'
 
 --------------------------------------------------------------------------------

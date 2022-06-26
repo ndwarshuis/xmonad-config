@@ -117,7 +117,7 @@ exportScreensaver client =
         ]
       }
     bus = Bus xmonadBusName
-    ssx = DBusIO $ Executable True ssExecutable
+    ssx = DBusIO $ IOSystem_ $ Executable True ssExecutable
 
 callToggle :: Maybe Client -> SometimesIO
 callToggle = sometimesEndpoint "screensaver toggle" xmonadBusName ssPath
@@ -132,5 +132,5 @@ matchSignal :: (Maybe SSState -> IO ()) -> Client -> IO ()
 matchSignal cb =
   fmap void . addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
 
-ssSignalDep :: DBusDependency p
+ssSignalDep :: DBusDependency_
 ssSignalDep = Endpoint xmonadBusName ssPath interface $ Signal_ memState

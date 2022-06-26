@@ -72,7 +72,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: SometimesX
-runDevMenu = sometimesIO "device manager" (Only $ Executable False myDmenuDevices) $ do
+runDevMenu = sometimesIO "device manager" (Only_ $ localExe myDmenuDevices) $ do
   c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
   spawnCmd myDmenuDevices
     $ ["-c", c]
@@ -84,11 +84,11 @@ runBTMenu = sometimesExeArgs "bluetooth selector" False myDmenuBluetooth
   $ "-c":themeArgs "#0044bb"
 
 runBwMenu :: SometimesX
-runBwMenu = sometimesIO "password manager" (Only $ Executable False myDmenuPasswords) $
+runBwMenu = sometimesIO "password manager" (Only_ $ localExe myDmenuPasswords) $
   spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 runVPNMenu :: SometimesX
-runVPNMenu = sometimesIO "VPN selector" (Only $ Executable False myDmenuVPN) $
+runVPNMenu = sometimesIO "VPN selector" (Only_ $ localExe myDmenuVPN) $
   spawnCmd myDmenuVPN $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
 -- runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
@@ -135,7 +135,7 @@ runClipMenu :: SometimesX
 runClipMenu = sometimesIO "clipboard manager" deps act
   where
     act = spawnCmd myDmenuCmd args
-    deps = toAnd (Executable True myDmenuCmd) (Executable True "greenclip")
+    deps = toAnd (sysExe myDmenuCmd) (sysExe "greenclip")
     args = [ "-modi", "\"clipboard:greenclip print\""
            , "-show", "clipboard"
            , "-run-command", "'{cmd}'"

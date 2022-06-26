@@ -11,8 +11,6 @@ module Main (main) where
 -- * Theme integration with xmonad (shared module imported below)
 -- * A custom Locks plugin from my own forked repo
 
-import           Control.Monad
-
 import           Data.Either
 import           Data.List
 import           Data.Maybe
@@ -255,16 +253,15 @@ listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
 sysfsNet :: FilePath
 sysfsNet = "/sys/class/net"
 
-readInterface :: (String -> Bool) -> IO (Either String String)
-readInterface f = do
-  ns <- filter f <$> listInterfaces
-  case ns of
-    [] -> return $ Left "no interfaces found"
-    (x:xs) -> do
-      unless (null xs) $
-        -- TODO store this somehow intead of printing
-        putStrLn $ "WARNING: extra interfaces found, using " ++ x
-      return $ Right x
+readInterface :: String -> (String -> Bool) -> IODependency String
+readInterface n f = IORead n go
+  where
+    go = do
+      ns <- filter f <$> listInterfaces
+      case ns of
+        [] -> return $ Left ["no interfaces found"]
+        (x:xs) -> do
+          return $ Right $ PostPass x $ fmap ("ignoring extra interface: "++) xs
 
 vpnPresent :: IO (Maybe String)
 vpnPresent = do
@@ -292,53 +289,48 @@ rightPlugins sysClient sesClient = mapM evalFeature
   ]
 
 getWireless :: BarFeature
-getWireless = sometimes1 "wireless status indicator"
-  $ IOTree (Consumer wirelessCmd)
-  $ Only $ IORead "get wifi interface" $ fmap Just <$> readInterface isWireless
+getWireless = sometimes1 "wireless status indicator" $ IORoot wirelessCmd
+  $ Only $ readInterface "get wifi interface" isWireless
 
 getEthernet :: Maybe Client -> BarFeature
 getEthernet client = sometimes1 "ethernet status indicator" $
-  DBusTree (Consumer act) client deps
+  DBusRoot (const . ethernetCmd) tree client
   where
-    act i = const $ ethernetCmd i
-    deps = And (\_ s -> s) (Only devDep) (Only readEth)
-    readEth = DBusIO $ IORead "read ethernet interface"
-      $ fmap Just <$> readInterface isEthernet
+    tree = And1 id (Only readEth) (Only_ devDep)
+    readEth = readInterface "read ethernet interface" isEthernet
 
 getBattery :: BarFeature
 getBattery = sometimesIO "battery level indicator"
-  (Only $ IOTest "Test if battery is present" hasBattery)
+  (Only_ $ sysTest "Test if battery is present" hasBattery)
   batteryCmd
 
 getVPN :: Maybe Client -> BarFeature
 getVPN client = sometimesDBus client "VPN status indicator"
   (toAnd vpnDep test) (const vpnCmd)
   where
-    test = DBusIO $ IOTest "Use nmcli to test if VPN is present" vpnPresent
+    test = DBusIO $ sysTest "Use nmcli to test if VPN is present" vpnPresent
 
 getBt :: Maybe Client -> BarFeature
 getBt client = sometimesDBus client "bluetooth status indicator"
-  (Only btDep)
+  (Only_ btDep)
   (const btCmd)
 
 getAlsa :: BarFeature
-getAlsa = sometimesIO "volume level indicator"
-  (Only $ Executable True "alsact")
-  alsaCmd
+getAlsa = sometimesIO "volume level indicator" (Only_ $ sysExe "alsact") alsaCmd
 
 getBl :: Maybe Client -> BarFeature
 getBl client = sometimesDBus client "Intel backlight indicator"
-  (Only intelBacklightSignalDep)
+  (Only_ intelBacklightSignalDep)
   (const blCmd)
 
 getCk :: Maybe Client -> BarFeature
 getCk client = sometimesDBus client "Clevo keyboard indicator"
-  (Only clevoKeyboardSignalDep)
+  (Only_ clevoKeyboardSignalDep)
   (const ckCmd)
 
 getSs :: Maybe Client -> BarFeature
 getSs client = sometimesDBus client "screensaver indicator"
-  (Only ssSignalDep) $ const ssCmd
+  (Only_ ssSignalDep) $ const ssCmd
 
 getAllCommands :: [Maybe CmdSpec] -> IO BarRegions
 getAllCommands right = do
@@ -430,4 +422,3 @@ fmtSpecs = intercalate sep . fmap go
 fmtRegions :: BarRegions -> String
 fmtRegions BarRegions { brLeft = l, brCenter = c, brRight = r } =
   fmtSpecs l ++ [lSep] ++ fmtSpecs c ++ [rSep] ++ fmtSpecs r
-

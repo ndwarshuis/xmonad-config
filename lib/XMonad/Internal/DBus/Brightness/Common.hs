@@ -67,7 +67,7 @@ callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client =
   either (const Nothing) bodyGetBrightness
   <$> callMethod client xmonadBusName p i memGet
 
-signalDep :: BrightnessConfig a b -> DBusDependency m
+signalDep :: BrightnessConfig a b -> DBusDependency_
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
   Endpoint xmonadBusName p i $ Signal_ memCur
 
@@ -85,8 +85,8 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
 --------------------------------------------------------------------------------
 -- | Internal DBus Crap
 
-brightnessExporter :: RealFrac b => [IODependency (Maybe x)]
-  -> BrightnessConfig a b -> Maybe Client -> SometimesIO
+brightnessExporter :: RealFrac b => [IODependency_] -> BrightnessConfig a b
+  -> Maybe Client -> SometimesIO
 brightnessExporter deps bc@BrightnessConfig { bcName = n } client =
   sometimesDBus client (n ++ " exporter") ds (exportBrightnessControls' bc)
   where
