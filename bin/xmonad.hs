@@ -95,11 +95,12 @@ run = do
   lockRes <- evalSometimes runScreenLock
   let lock = fromMaybe skip lockRes
   ext <- evalExternal $ externalBindings ts db lock
+  sk <- evalAlways runShowKeys
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   ds <- getDirectories
   let conf = ewmh
-             $ addKeymap (filterExternal ext)
+             $ addKeymap sk (filterExternal ext)
              $ docks
              $ def { terminal = myTerm
                    , modMask = myModMask
@@ -462,8 +463,9 @@ xMsgEventHook _ _ = return (All True)
 myModMask :: KeyMask
 myModMask = mod4Mask
 
-addKeymap :: [KeyGroup (X ())] -> XConfig l -> XConfig l
-addKeymap external = addDescrKeys' ((myModMask, xK_F1), runShowKeys)
+addKeymap :: ([((KeyMask, KeySym), NamedAction)] -> X ())
+  -> [KeyGroup (X ())] -> XConfig l -> XConfig l
+addKeymap showKeys external = addDescrKeys' ((myModMask, xK_F1), showKeys)
   (\c -> concatMap (mkNamedSubmap c) $ internalBindings c ++ external)
 
 internalBindings :: XConfig Layout -> [KeyGroup (X ())]

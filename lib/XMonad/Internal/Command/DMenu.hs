@@ -15,17 +15,17 @@ module XMonad.Internal.Command.DMenu
   , runAutorandrMenu
   ) where
 
--- import           Control.Monad.Reader
+import           Control.Monad.Reader
 
 import           Graphics.X11.Types
 
 import           System.Directory           (XdgDirectory (..), getXdgDirectory)
--- import           System.IO
+import           System.IO
 
 import           XMonad.Core                hiding (spawn)
 import           XMonad.Internal.Dependency
--- import           XMonad.Internal.Notify
--- import           XMonad.Internal.Process
+import           XMonad.Internal.Notify
+import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import           XMonad.Util.NamedActions
 
@@ -91,39 +91,27 @@ runVPNMenu :: SometimesX
 runVPNMenu = sometimesIO "VPN selector" (Only_ $ localExe myDmenuVPN) $
   spawnCmd myDmenuVPN $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
--- runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
--- runShowKeys x = addName "Show Keybindings" $ do
---   s <- io $ evalFeature $ runDMenuShowKeys x
---   ifSatisfied s
---     $ spawnNotify
---     $ defNoteError { body = Just $ Text "could not display keymap" }
+runShowKeys :: Always ([((KeyMask, KeySym), NamedAction)] -> X ())
+runShowKeys = Option showKeysDMenu (Always fallback)
+  where
+    -- TODO this should technically depend on dunst
+    fallback = const $ spawnNotify
+      $ defNoteError { body = Just $ Text "could not display keymap" }
 
--- TODO not sure what to do with this yet
-runShowKeys :: [((KeyMask, KeySym), NamedAction)] -> NamedAction
-runShowKeys _ = NamedAction (skip :: (X ()))
-  -- addName "Show Keybindings" $ evalAlways $ runDMenuShowKeys x
+showKeysDMenu :: SubfeatureRoot ([((KeyMask, KeySym), NamedAction)] -> X ())
+showKeysDMenu = Subfeature
+  { sfName = "keyboard shortcut menu"
+  , sfData = IORoot_ showKeys $ Only_ $ sysExe myDmenuCmd
+  , sfLevel = Warn
+  }
 
--- runDMenuShowKeys :: [((KeyMask, KeySym), NamedAction)] -> AlwaysX
--- runDMenuShowKeys kbs =
---   Option (runDMenuShowKeys' kbs) (Always runNotifyShowKeys)
-
--- runNotifyShowKeys :: X ()
--- runNotifyShowKeys = spawnNotify
---   $ defNoteError { body = Just $ Text "could not display keymap" }
-
--- runDMenuShowKeys' :: [((KeyMask, KeySym), NamedAction)] -> Subfeature (X ()) Tree
--- runDMenuShowKeys' kbs = Subfeature
---   { sfName = "keyboard shortcut menu"
---   , sfTree = IOTree (Standalone act) deps
---   , sfLevel = Warn
---   }
---   where
---     deps = Only $ Executable True myDmenuCmd
---     act = io $ do
---       (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
---       forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
---     cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
---       ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
+showKeys :: [((KeyMask, KeySym), NamedAction)] -> X ()
+showKeys kbs = io $ do
+      (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
+      forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
+  where
+    cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
+      ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
 
 runCmdMenu :: SometimesX
 runCmdMenu = spawnDmenuCmd "command menu" ["-show", "run"]

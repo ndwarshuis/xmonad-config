@@ -15,6 +15,7 @@ module XMonad.Internal.Dependency
   , SometimesIO
   , PostPass(..)
   , Subfeature(..)
+  , SubfeatureRoot
   , LogLevel(..)
 
   -- dependency tree types
@@ -176,7 +177,8 @@ data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord)
 -- needed
 data Root a = forall p. IORoot (p -> a) (Tree IODependency IODependency_ p)
   | IORoot_ a (Tree_ IODependency_)
-  | forall p. DBusRoot (p -> Client -> a) (Tree IODependency DBusDependency_ p) (Maybe Client)
+  | forall p. DBusRoot (p -> Client -> a)
+    (Tree IODependency DBusDependency_ p) (Maybe Client)
   | DBusRoot_ (Client -> a) (Tree_ DBusDependency_) (Maybe Client)
 
 -- | The dependency tree with rules to merge results
@@ -210,7 +212,8 @@ data DBusDependency_ = Bus BusName
   | DBusIO IODependency_
 
 -- | A dependency that only requires IO to evaluate (no payload)
-data IODependency_ = IOSystem_ SystemDependency | forall a. IOSometimes_ (Sometimes a)
+data IODependency_ = IOSystem_ SystemDependency
+  | forall a. IOSometimes_ (Sometimes a)
 
 data SystemDependency = Executable Bool FilePath
   | AccessiblePath FilePath Bool Bool
