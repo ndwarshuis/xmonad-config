@@ -90,18 +90,8 @@ listenACPI = do
 acpiPath :: FilePath
 acpiPath = "/var/run/acpid.socket"
 
---------------------------------------------------------------------------------
--- | Exported API
-
--- | Spawn a new thread that will listen for ACPI events on the acpid socket
--- and send ClientMessage events when it receives them
-runPowermon :: SometimesIO
-runPowermon = sometimesIO "ACPI event monitor" (Only_ $ pathR acpiPath) listenACPI
-
-runHandleACPI :: Always (String -> X ())
-runHandleACPI = always1 "ACPI event handler" withLock $ handleACPI skip
-  where
-    withLock =  IORoot handleACPI (Only $ IOSometimes runScreenLock id)
+socketDep :: Tree_ IODependency_
+socketDep = Only_ $ pathR acpiPath
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)
@@ -117,3 +107,15 @@ handleACPI lock tag = do
       forM_ status $ flip when runSuspend
       lock
 
+--------------------------------------------------------------------------------
+-- | Exported API
+
+-- | Spawn a new thread that will listen for ACPI events on the acpid socket
+-- and send ClientMessage events when it receives them
+runPowermon :: SometimesIO
+runPowermon = sometimesIO "ACPI event monitor" socketDep listenACPI
+
+runHandleACPI :: Always (String -> X ())
+runHandleACPI = always1 "ACPI event handler" withLock $ handleACPI skip
+  where
+    withLock = IORoot handleACPI (Only $ IOSometimes runScreenLock id)
