@@ -6,7 +6,7 @@
 
 module XMonad.Internal.Concurrent.ACPIEvent
   ( runPowermon
-  , handleACPI
+  , runHandleACPI
   ) where
 
 import           Control.Exception
@@ -26,6 +26,7 @@ import           XMonad.Core
 import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Dependency
+import           XMonad.Internal.Shell
 
 --------------------------------------------------------------------------------
 -- | Data structure to hold the ACPI events I care about
@@ -97,13 +98,18 @@ acpiPath = "/var/run/acpid.socket"
 runPowermon :: SometimesIO
 runPowermon = sometimesIO "ACPI event monitor" (Only_ $ pathR acpiPath) listenACPI
 
+runHandleACPI :: Always (String -> X ())
+runHandleACPI = always1 "ACPI event handler" withLock $ handleACPI skip
+  where
+    withLock =  IORoot handleACPI (Only $ IOSometimes runScreenLock id)
+
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)
 handleACPI :: X () -> String -> X ()
 handleACPI lock tag = do
   let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
   forM_ acpiTag $ \case
-    Power -> runPowerPrompt lock
+    Power -> powerPrompt lock
     Sleep -> runSuspendPrompt
     LidClose -> do
       status <- io isDischarging

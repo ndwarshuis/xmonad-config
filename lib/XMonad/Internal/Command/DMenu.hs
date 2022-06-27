@@ -91,28 +91,6 @@ runVPNMenu :: SometimesX
 runVPNMenu = sometimesIO "VPN selector" (Only_ $ localExe myDmenuVPN) $
   spawnCmd myDmenuVPN $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
-runShowKeys :: Always ([((KeyMask, KeySym), NamedAction)] -> X ())
-runShowKeys = Option showKeysDMenu (Always fallback)
-  where
-    -- TODO this should technically depend on dunst
-    fallback = const $ spawnNotify
-      $ defNoteError { body = Just $ Text "could not display keymap" }
-
-showKeysDMenu :: SubfeatureRoot ([((KeyMask, KeySym), NamedAction)] -> X ())
-showKeysDMenu = Subfeature
-  { sfName = "keyboard shortcut menu"
-  , sfData = IORoot_ showKeys $ Only_ $ sysExe myDmenuCmd
-  , sfLevel = Warn
-  }
-
-showKeys :: [((KeyMask, KeySym), NamedAction)] -> X ()
-showKeys kbs = io $ do
-      (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
-      forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
-  where
-    cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
-      ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs
-
 runCmdMenu :: SometimesX
 runCmdMenu = spawnDmenuCmd "command menu" ["-show", "run"]
 
@@ -139,3 +117,28 @@ runNetMenu =
 runAutorandrMenu :: SometimesX
 runAutorandrMenu =
   sometimesExeArgs "autorandr menu" True myDmenuMonitors $ themeArgs "#ff0066"
+
+--------------------------------------------------------------------------------
+-- | Shortcut menu
+
+runShowKeys :: Always ([((KeyMask, KeySym), NamedAction)] -> X ())
+runShowKeys = Option showKeysDMenu (Always fallback)
+  where
+    -- TODO this should technically depend on dunst
+    fallback = const $ spawnNotify
+      $ defNoteError { body = Just $ Text "could not display keymap" }
+
+showKeysDMenu :: SubfeatureRoot ([((KeyMask, KeySym), NamedAction)] -> X ())
+showKeysDMenu = Subfeature
+  { sfName = "keyboard shortcut menu"
+  , sfData = IORoot_ showKeys $ Only_ $ sysExe myDmenuCmd
+  , sfLevel = Warn
+  }
+
+showKeys :: [((KeyMask, KeySym), NamedAction)] -> X ()
+showKeys kbs = io $ do
+      (h, _, _, _) <- createProcess' $ (shell' cmd) { std_in = CreatePipe }
+      forM_ h $ \h' -> hPutStr h' (unlines $ showKm kbs) >> hClose h'
+  where
+    cmd = fmtCmd myDmenuCmd $ ["-dmenu", "-p", "commands"]
+      ++ themeArgs "#7f66ff" ++ myDmenuMatchingArgs

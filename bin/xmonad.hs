@@ -92,10 +92,9 @@ run = do
            { tsChildPIDs = [p]
            , tsChildHandles = [h]
            }
-  lockRes <- evalSometimes runScreenLock
-  let lock = fromMaybe skip lockRes
-  ext <- evalExternal $ externalBindings ts db lock
+  ext <- evalExternal $ externalBindings ts db
   sk <- evalAlways runShowKeys
+  ha <- evalAlways runHandleACPI
   -- IDK why this is necessary; nothing prior to this line will print if missing
   hFlush stdout
   ds <- getDirectories
@@ -106,7 +105,7 @@ run = do
                    , modMask = myModMask
                    , layoutHook = myLayouts
                    , manageHook = myManageHook
-                   , handleEventHook = myEventHook lock
+                   , handleEventHook = myEventHook ha
                    , startupHook = myStartupHook
                    , workspaces = myWorkspaces
                    , logHook = myLoghook h
@@ -442,17 +441,17 @@ manageApps = composeOne $ concatMap dwHook allDWs ++
 --------------------------------------------------------------------------------
 -- | Eventhook configuration
 
-myEventHook :: X () -> Event -> X All
-myEventHook lock = xMsgEventHook lock <+> handleEventHook def
+myEventHook :: (String -> X ()) -> Event -> X All
+myEventHook handler = xMsgEventHook handler <+> handleEventHook def
 
 -- | React to ClientMessage events from concurrent threads
-xMsgEventHook :: X () -> Event -> X All
-xMsgEventHook lock ClientMessageEvent { ev_message_type = t, ev_data = d }
+xMsgEventHook :: (String -> X ()) -> Event -> X All
+xMsgEventHook handler ClientMessageEvent { ev_message_type = t, ev_data = d }
   | t == bITMAP = do
     let (xtype, tag) = splitXMsg d
     case xtype of
       Workspace -> removeDynamicWorkspace tag
-      ACPI      -> handleACPI lock tag
+      ACPI      -> handler tag
       Unknown   -> io $ print "WARNING: unknown concurrent message"
     return (All True)
 xMsgEventHook _ _ = return (All True)
@@ -559,8 +558,8 @@ flagKeyBinding k@KeyBinding{ kbDesc = d, kbMaybeAction = a } = case a of
   (Just x) -> Just $ k{ kbMaybeAction = x }
   Nothing  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbMaybeAction = skip }
 
-externalBindings :: ThreadState -> DBusState -> X () -> [KeyGroup (FeatureX)]
-externalBindings ts db lock =
+externalBindings :: ThreadState -> DBusState -> [KeyGroup FeatureX]
+externalBindings ts db =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" $ Left runAppMenu
     , KeyBinding "M-g" "launch clipboard manager" $ Left runClipMenu
@@ -615,7 +614,7 @@ externalBindings ts db lock =
     , KeyBinding "M-S-," "keyboard down" $ ck bctlDec
     , KeyBinding "M-S-M1-," "keyboard min" $ ck bctlMin
     , KeyBinding "M-S-M1-." "keyboard max" $ ck bctlMax
-    , KeyBinding "M-<End>" "power menu" $ ftrAlways $ runPowerPrompt lock
+    , KeyBinding "M-<End>" "power menu" $ Right runPowerPrompt
     , KeyBinding "M-<Home>" "quit xmonad" $ ftrAlways runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" $ Left runScreenLock
     -- M-<F1> reserved for showing the keymap

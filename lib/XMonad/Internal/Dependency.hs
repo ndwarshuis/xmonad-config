@@ -42,6 +42,7 @@ module XMonad.Internal.Dependency
   , ioAlways
 
   -- feature construction
+  , always1
   , sometimes1
   , sometimesIO
   , sometimesDBus
@@ -460,12 +461,15 @@ testDBusDependency_ _ (DBusIO i) = testIODependency_ i
 sometimes1_ :: LogLevel -> String -> Root a -> Sometimes a
 sometimes1_ l n t = [Subfeature{ sfData = t, sfName = n, sfLevel = l }]
 
--- always1_ :: LogLevel -> String -> Root a Tree -> a -> Always a
--- always1_ l n t x =
---   Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always x)
+always1_ :: LogLevel -> String -> Root a -> a -> Always a
+always1_ l n t x =
+  Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always x)
 
 sometimes1 :: String -> Root a -> Sometimes a
 sometimes1 = sometimes1_ Error
+
+always1 :: String -> Root a -> a -> Always a
+always1 = always1_ Error
 
 sometimesIO :: String -> Tree_ IODependency_ -> a -> Sometimes a
 sometimesIO n t x = sometimes1 n $ IORoot_ x t

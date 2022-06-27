@@ -12,6 +12,9 @@ module XMonad.Internal.Command.Power
   , runSuspendPrompt
   , runQuitPrompt
   , hasBattery
+
+
+  , powerPrompt
   ) where
 
 import           Control.Arrow               (first)
@@ -130,8 +133,16 @@ data PowerPrompt = PowerPrompt
 instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
 
-runPowerPrompt :: X () -> X ()
-runPowerPrompt lock = mkXPrompt PowerPrompt theme comp executeMaybeAction
+runPowerPrompt :: AlwaysX
+runPowerPrompt = always1 "power prompt" withLock powerPromptNoLock
+  where
+    withLock =  IORoot powerPrompt (Only $ IOSometimes runScreenLock id)
+
+powerPromptNoLock :: X ()
+powerPromptNoLock = powerPrompt skip
+
+powerPrompt :: X () -> X ()
+powerPrompt lock = mkXPrompt PowerPrompt theme comp executeMaybeAction
   where
     comp = mkComplFunFromList theme []
     theme = T.promptTheme { promptKeymap = keymap }
