@@ -296,7 +296,7 @@ getEthernet :: Maybe Client -> BarFeature
 getEthernet client = sometimes1 "ethernet status indicator" $
   DBusRoot (const . ethernetCmd) tree client
   where
-    tree = And1 id (Only readEth) (Only_ devDep)
+    tree = And1 (Only readEth) (Only_ devDep)
     readEth = readInterface "read ethernet interface" isEthernet
 
 getBattery :: BarFeature
@@ -316,7 +316,7 @@ getBt client = sometimesDBus client "bluetooth status indicator"
   (const btCmd)
 
 getAlsa :: BarFeature
-getAlsa = sometimesIO "volume level indicator" (Only_ $ sysExe "alsact") alsaCmd
+getAlsa = sometimesIO "volume level indicator" (Only_ $ sysExe "alsactl") alsaCmd
 
 getBl :: Maybe Client -> BarFeature
 getBl client = sometimesDBus client "Intel backlight indicator"

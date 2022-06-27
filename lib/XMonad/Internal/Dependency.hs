@@ -185,9 +185,9 @@ data Root a = forall p. IORoot (p -> a) (Tree IODependency IODependency_ p)
 -- | The dependency tree with rules to merge results
 data Tree d d_ p =
   And12 (p -> p -> p) (Tree d d_ p) (Tree d d_ p)
-  | And1 (p -> p) (Tree d d_ p) (Tree_ d_)
-  | And2 (p -> p) (Tree_ d_) (Tree d d_ p)
-  | Or (p -> p) (p -> p) (Tree d d_ p) (Tree d d_ p)
+  | And1 (Tree d d_ p) (Tree_ d_)
+  | And2 (Tree_ d_) (Tree d d_ p)
+  | Or (Tree d d_ p) (Tree d d_ p)
   | Only (d p)
 
 -- | A dependency tree without functions to merge results
@@ -324,36 +324,22 @@ type Result p = Either [String] (PostPass p)
 testTree :: (d_ -> IO Result_) -> (d p -> IO (Result p)) -> Tree d d_ p
   -> IO (Either [String] (PostPass p))
 testTree test_ test = go
-  -- TODO clean this up
   where
-    go (And12 f a b) = either (return . Left) (\ra -> (and2nd f ra =<<) <$> go b)
-      =<< go a
-    go (And1 f a b) = do
+    go (And12 f a b) = do
       ra <- go a
-      case ra of
-        (Right (PostPass pa wa)) -> do
-          rb <- testTree_ test_ b
-          return $ case rb of
-            (Left es)  -> Left es
-            (Right wb) -> Right $ PostPass (f pa) $ wa ++ wb
-        l -> return l
-    go (And2 f a b) = do
+      liftRight (\pa -> (and2nd f pa =<<) <$> go b) ra
+    go (And1 a b) = do
+      ra <- go a
+      liftRight (\p -> fmap (addMsgs p) <$> testTree_ test_ b) ra
+    go (And2 a b) = do
       ra <- testTree_ test_ a
-      case ra of
-        (Right wa) -> do
-          rb <- go b
-          return $ case rb of
-            (Left es)                -> Left es
-            (Right (PostPass pb wb)) -> Right $ PostPass (f pb) $ wa ++ wb
-        (Left l) -> return $ Left l
-    go (Or fa fb a b) = do
+      liftRight (\wa -> fmap (`addMsgs` wa) <$> go b) ra
+    go (Or a b) = do
       ra <- go a
-      case ra of
-        (Right (PostPass pa wa)) -> return $ Right $ PostPass (fa pa) wa
-        (Left ea)                -> (or2nd fb ea =<<) <$> go b
+      either (\ea -> fmap (`addMsgs` ea) <$> go b) (return . Right) ra
     go (Only a)    = test a
     and2nd f (PostPass pa wa) (PostPass pb wb) = Right $ PostPass (f pa pb) $ wa ++ wb
-    or2nd f es (PostPass pb wb) = Right $ PostPass (f pb) $ es ++ wb
+    liftRight = either (return . Left)
 
 testIODependency :: IODependency p -> IO (Result p)
 testIODependency (IORead _ t)      = t
