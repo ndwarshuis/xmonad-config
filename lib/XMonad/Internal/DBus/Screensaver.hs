@@ -96,7 +96,7 @@ bodyGetCurrentState _   = Nothing
 
 exportScreensaver :: Maybe Client -> SometimesIO
 exportScreensaver client =
-  sometimesDBus client "screensaver interface" (toAnd bus ssx) cmd
+  sometimesDBus client "screensaver toggle" "xset" (toAnd bus ssx) cmd
   where
     cmd cl = export cl ssPath defaultInterface
       { interfaceName = interface
@@ -117,11 +117,11 @@ exportScreensaver client =
         ]
       }
     bus = Bus xmonadBusName
-    ssx = DBusIO $ IOSystem_ $ Executable True ssExecutable
+    ssx = DBusIO $ sysExe ssExecutable
 
 callToggle :: Maybe Client -> SometimesIO
-callToggle = sometimesEndpoint "screensaver toggle" xmonadBusName ssPath
-  interface memToggle
+callToggle = sometimesEndpoint "screensaver toggle" "dbus switch" xmonadBusName
+  ssPath interface memToggle
 
 callQuery :: Client -> IO (Maybe SSState)
 callQuery client = do

@@ -573,9 +573,9 @@ externalBindings ts db =
     ]
 
   , KeyGroup "Actions"
-    [ KeyBinding "M-q" "close window" $ ftrAlways kill1
+    [ KeyBinding "M-q" "close window" $ ftrAlways "kill window function" kill1
     , KeyBinding "M-r" "run program" $ Left runCmdMenu
-    , KeyBinding "M-<Space>" "warp pointer" $ ftrAlways $ warpToWindow 0.5 0.5
+    , KeyBinding "M-<Space>" "warp pointer" $ ftrAlways "warp function" $ warpToWindow 0.5 0.5
     , KeyBinding "M-C-s" "capture area" $ Left runAreaCapture
     , KeyBinding "M-C-S-s" "capture screen" $ Left runScreenCapture
     , KeyBinding "M-C-d" "capture desktop" $ Left runDesktopCapture
@@ -610,11 +610,11 @@ externalBindings ts db =
     , KeyBinding "M-S-M1-," "keyboard min" $ ck bctlMin
     , KeyBinding "M-S-M1-." "keyboard max" $ ck bctlMax
     , KeyBinding "M-<End>" "power menu" $ Right runPowerPrompt
-    , KeyBinding "M-<Home>" "quit xmonad" $ ftrAlways runQuitPrompt
+    , KeyBinding "M-<Home>" "quit xmonad" quitf
     , KeyBinding "M-<Delete>" "lock screen" $ Left runScreenLock
     -- M-<F1> reserved for showing the keymap
-    , KeyBinding "M-<F2>" "restart xmonad" $ ftrAlways (runCleanup ts db >> runRestart)
-    , KeyBinding "M-<F3>" "recompile xmonad" $ ftrAlways runRecompile
+    , KeyBinding "M-<F2>" "restart xmonad" restartf
+    , KeyBinding "M-<F3>" "recompile xmonad" recompilef
     , KeyBinding "M-<F7>" "start Isync Service" $ Left runStartISyncService
     , KeyBinding "M-C-<F7>" "start Isync Timer" $ Left runStartISyncTimer
     , KeyBinding "M-<F8>" "select autorandr profile" $ Left runAutorandrMenu
@@ -629,7 +629,10 @@ externalBindings ts db =
     brightessControls ctl getter = (ioSometimes . getter . ctl) cl
     ib = Left . brightessControls intelBacklightControls
     ck = Left . brightessControls clevoKeyboardControls
-    ftrAlways = Right . Always
+    ftrAlways n = Right . Always n . Always_
+    quitf = ftrAlways "quit function" runQuitPrompt
+    restartf = ftrAlways "restart function" (runCleanup ts db >> runRestart)
+    recompilef = ftrAlways "recompile function" runRecompile
 
 type MaybeX = Maybe (X ())
 

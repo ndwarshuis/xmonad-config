@@ -92,10 +92,10 @@ ethernetIface = "enp7s0f1"
 -- | Some nice apps
 
 runTerm :: SometimesX
-runTerm = sometimesExe "terminal" True myTerm
+runTerm = sometimesExe "terminal" "urxvt" True myTerm
 
 runTMux :: SometimesX
-runTMux = sometimesIO "terminal multiplexer" deps act
+runTMux = sometimesIO "terminal multiplexer" "tmux" deps act
   where
     deps = listToAnds (sysExe myTerm) $ fmap sysExe ["tmux", "bash"]
     act = spawn
@@ -106,27 +106,27 @@ runTMux = sometimesIO "terminal multiplexer" deps act
     msg = "could not connect to tmux session"
 
 runCalc :: SometimesX
-runCalc = sometimesIO "calculator" deps act
+runCalc = sometimesIO "calculator" "R" deps act
   where
     deps = toAnd (sysExe myTerm) (sysExe "R")
     act = spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: SometimesX
-runBrowser = sometimesExe "web browser" False myBrowser
+runBrowser = sometimesExe "web browser" "brave" False myBrowser
 
 runEditor :: SometimesX
-runEditor = sometimesExeArgs "text editor" True myEditor
+runEditor = sometimesExeArgs "text editor" "emacs" True myEditor
   ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
 
 runFileManager :: SometimesX
-runFileManager = sometimesExe "file browser" True "pcmanfm"
+runFileManager = sometimesExe "file browser" "pcmanfm" True "pcmanfm"
 
 --------------------------------------------------------------------------------
 -- | Multimedia Commands
 
 runMultimediaIfInstalled :: String -> String -> SometimesX
-runMultimediaIfInstalled n cmd =
-  sometimesExeArgs (n ++ " multimedia control") True myMultimediaCtl [cmd]
+runMultimediaIfInstalled n cmd = sometimesExeArgs (n ++ " multimedia control")
+  "playerctl" True myMultimediaCtl [cmd]
 
 runTogglePlay :: SometimesX
 runTogglePlay = runMultimediaIfInstalled "play/pause" "play-pause"
@@ -155,7 +155,7 @@ playSound file = do
 
 featureSound :: String -> FilePath -> X () -> X () -> SometimesX
 featureSound n file pre post =
-  sometimesIO ("volume " ++ n ++ " control") (Only_ $ sysExe "paplay")
+  sometimesIO ("volume " ++ n ++ " control") "paplay" (Only_ $ sysExe "paplay")
   $ pre >> playSound file >> post
 
 runVolumeDown :: SometimesX
@@ -172,7 +172,7 @@ runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return
 
 runNotificationCmd :: String -> FilePath -> SometimesX
 runNotificationCmd n cmd =
-  sometimesExeArgs (n ++ " control") True myNotificationCtrl [cmd]
+  sometimesExeArgs (n ++ " control") "dunst" True myNotificationCtrl [cmd]
 
 runNotificationClose :: SometimesX
 runNotificationClose = runNotificationCmd "close notification" "close"
@@ -194,7 +194,7 @@ runNotificationContext =
 
 runToggleBluetooth :: SometimesX
 runToggleBluetooth =
-  sometimesIO "bluetooth toggle" (Only_ $ sysExe myBluetooth)
+  sometimesIO "bluetooth toggle" "bluetoothctl" (Only_ $ sysExe myBluetooth)
   $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
@@ -203,7 +203,7 @@ runToggleBluetooth =
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
 runToggleEthernet :: SometimesX
-runToggleEthernet = sometimesIO "ethernet toggle" (Only_ $ sysExe "nmcli")
+runToggleEthernet = sometimesIO "ethernet toggle" "nmcli" (Only_ $ sysExe "nmcli")
   $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
@@ -212,14 +212,16 @@ runToggleEthernet = sometimesIO "ethernet toggle" (Only_ $ sysExe "nmcli")
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
 runStartISyncTimer :: SometimesX
-runStartISyncTimer = sometimesIO "isync timer" (Only_ $ sysdUser "mbsync.timer")
+runStartISyncTimer = sometimesIO "isync timer" "mbsync timer"
+  (Only_ $ sysdUser "mbsync.timer")
   $ spawn
   $ "systemctl --user start mbsync.timer"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
   #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
 runStartISyncService :: SometimesX
-runStartISyncService = sometimesIO "isync" (Only_ $ sysdUser "mbsync.service")
+runStartISyncService = sometimesIO "isync" "mbsync service"
+  (Only_ $ sysdUser "mbsync.service")
   $ spawn
   $ "systemctl --user start mbsync.service"
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
@@ -264,7 +266,7 @@ getCaptureDir = do
     fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> String -> SometimesX
-runFlameshot n mode = sometimesIO n (Only_ $ sysExe myCapture)
+runFlameshot n mode = sometimesIO n "flameshot" (Only_ $ sysExe myCapture)
   $ spawnCmd myCapture [mode]
 
 -- TODO this will steal focus from the current window (and puts it
@@ -281,7 +283,7 @@ runScreenCapture :: SometimesX
 runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: SometimesX
-runCaptureBrowser =
-  sometimesIO "screen capture browser" (Only_ $ sysExe myImageBrowser) $ do
+runCaptureBrowser = sometimesIO "screen capture browser" "feh"
+  (Only_ $ sysExe myImageBrowser) $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

@@ -113,9 +113,9 @@ handleACPI lock tag = do
 -- | Spawn a new thread that will listen for ACPI events on the acpid socket
 -- and send ClientMessage events when it receives them
 runPowermon :: SometimesIO
-runPowermon = sometimesIO "ACPI event monitor" socketDep listenACPI
+runPowermon = sometimesIO "ACPI event monitor" "acpid" socketDep listenACPI
 
 runHandleACPI :: Always (String -> X ())
-runHandleACPI = always1 "ACPI event handler" withLock $ handleACPI skip
+runHandleACPI = always1 "ACPI event handler" "acpid" withLock $ handleACPI skip
   where
     withLock = IORoot handleACPI (Only $ IOSometimes runScreenLock id)

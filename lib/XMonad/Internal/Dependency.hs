@@ -9,7 +9,9 @@ module XMonad.Internal.Dependency
   -- feature types
   ( Feature
   , Always(..)
-  , Sometimes
+  , Always_(..)
+  , Sometimes(..)
+  , Sometimes_
   , AlwaysX
   , AlwaysIO
   , SometimesX
@@ -137,26 +139,26 @@ dumpFeature = either dumpSometimes dumpAlways
 
 -- | Dump the status of an Always to stdout
 dumpAlways :: Always a -> IO JSONUnquotable
-dumpAlways = go []
+dumpAlways (Always n x) = go [] x
   where
     go failed (Option o os) = do
       (s, r) <- dumpSubfeatureRoot o
       if r
-        then return $ jsonAlways (Just s) failed $ untested [] os
+        then return $ jsonAlways (Q n) (Just s) failed $ untested [] os
         else go (s:failed) os
-    go failed (Always _) = return $ jsonAlways (Just (UQ "true")) failed []
-    untested acc (Always _)    = acc
+    go failed (Always_ _) = return $ jsonAlways (Q n) (Just (UQ "true")) failed []
+    untested acc (Always_ _)   = acc
     untested acc (Option o os) = untested (dataSubfeatureRoot o:acc) os
 
 -- | Dump the status of a Sometimes to stdout
 dumpSometimes :: Sometimes a -> IO JSONUnquotable
-dumpSometimes = go []
+dumpSometimes (Sometimes n a) = go [] a
   where
-    go failed [] = return $ jsonSometimes Nothing failed []
+    go failed [] = return $ jsonSometimes (Q n) Nothing failed []
     go failed (x:xs) = do
       (s, r) <- dumpSubfeatureRoot x
       if r
-        then return $ jsonSometimes (Just s) failed $ fmap dataSubfeatureRoot xs
+        then return $ jsonSometimes (Q n) (Just s) failed $ fmap dataSubfeatureRoot xs
         else go (s:failed) xs
 
 --------------------------------------------------------------------------------
@@ -178,12 +180,18 @@ type Feature a = Either (Sometimes a) (Always a)
 -- | Feature that is guaranteed to work
 -- This is composed of sub-features that are tested in order, and if all fail
 -- the fallback is a monadic action (eg a plain haskell function)
-data Always a = Option (SubfeatureRoot a) (Always a) | Always a
+data Always a = Always String (Always_ a)
+
+-- | Feature that is guaranteed to work (inner data)
+data Always_ a = Option (SubfeatureRoot a) (Always_ a) | Always_ a
 
 -- | Feature that might not be present
 -- This is like an Always except it doesn't fall back on a guaranteed monadic
 -- action
-type Sometimes a = [SubfeatureRoot a]
+data Sometimes a = Sometimes String (Sometimes_ a)
+
+-- | Feature that might not be present (inner data)
+type Sometimes_ a = [SubfeatureRoot a]
 
 -- | Individually tested sub-feature data for Always/sometimes
 -- The polymorphism allows representing tested and untested states. Includes
@@ -259,7 +267,7 @@ data DBusMember = Method_ MemberName
 -- and dump on the CLI (unless there is a way to make Aeson work inside an IO)
 
 -- | Tested Always feature
-data PostAlways a = Primary (SubfeaturePass a) [SubfeatureFail] (Always a)
+data PostAlways a = Primary (SubfeaturePass a) [SubfeatureFail] (Always_ a)
   | Fallback a [SubfeatureFail]
 
 -- | Tested Sometimes feature
@@ -287,20 +295,20 @@ data PostFail = PostFail [String] | PostMissing String
 -- | Testing pipeline
 
 evalSometimesMsg :: MonadIO m => Sometimes a -> m (Result a)
-evalSometimesMsg x = io $ do
-  PostSometimes { psSuccess = s, psFailed = fs } <- testSometimes x
+evalSometimesMsg (Sometimes n xs) = io $ do
+  PostSometimes { psSuccess = s, psFailed = fs } <- testSometimes xs
   case s of
-    (Just (Subfeature { sfData = p })) -> Right . addMsgs p <$> failedMsgs False fs
-    _                                  -> Left <$> failedMsgs True fs
+    (Just (Subfeature { sfData = p })) -> Right . addMsgs p <$> failedMsgs False n fs
+    _                                  -> Left <$> failedMsgs True n fs
 
 evalAlwaysMsg :: MonadIO m => Always a -> m (PostPass a)
-evalAlwaysMsg x = io $ do
+evalAlwaysMsg (Always n x) = io $ do
   r <- testAlways x
   case r of
-    (Primary (Subfeature { sfData = p }) fs _) -> addMsgs p <$> failedMsgs False fs
-    (Fallback act fs) -> PostPass act <$> failedMsgs False fs
+    (Primary (Subfeature { sfData = p }) fs _) -> addMsgs p <$> failedMsgs False n fs
+    (Fallback act fs) -> PostPass act <$> failedMsgs False n fs
 
-testAlways :: Always a -> IO (PostAlways a)
+testAlways :: Always_ a -> IO (PostAlways a)
 testAlways = go []
   where
     go failed (Option fd next) = do
@@ -308,9 +316,9 @@ testAlways = go []
       case r of
         (Left l)     -> go (l:failed) next
         (Right pass) -> return $ Primary pass failed next
-    go failed (Always a) = return $ Fallback a failed
+    go failed (Always_ a) = return $ Fallback a failed
 
-testSometimes :: Sometimes a -> IO (PostSometimes a)
+testSometimes :: Sometimes_ a -> IO (PostSometimes a)
 testSometimes = go (PostSometimes Nothing [])
   where
     go ts [] = return ts
@@ -486,11 +494,14 @@ testDBusDependency_ _ (DBusIO i) = testIODependency_ i
 -- | IO Lifting functions
 
 ioSometimes :: MonadIO m => Sometimes (IO a) -> Sometimes (m a)
-ioSometimes = fmap ioSubfeature
+ioSometimes (Sometimes n xs) = Sometimes n $ fmap ioSubfeature xs
 
 ioAlways :: MonadIO m => Always (IO a) -> Always (m a)
-ioAlways (Always x)    = Always $ io x
-ioAlways (Option sf a) = Option (ioSubfeature sf) $ ioAlways a
+ioAlways (Always n x)   = Always n $ ioAlways' x
+
+ioAlways' :: MonadIO m => Always_ (IO a) -> Always_ (m a)
+ioAlways' (Always_ x)   = Always_ $ io x
+ioAlways' (Option sf a) = Option (ioSubfeature sf) $ ioAlways' a
 
 ioSubfeature :: MonadIO m => SubfeatureRoot (IO a) -> SubfeatureRoot (m a)
 ioSubfeature sf = sf { sfData = ioRoot $ sfData sf }
@@ -504,37 +515,39 @@ ioRoot (DBusRoot_ a t cl) = DBusRoot_ (io . a) t cl
 --------------------------------------------------------------------------------
 -- | Feature constructors
 
-sometimes1_ :: LogLevel -> String -> Root a -> Sometimes a
-sometimes1_ l n t = [Subfeature{ sfData = t, sfName = n, sfLevel = l }]
+sometimes1_ :: LogLevel -> String -> String -> Root a -> Sometimes a
+sometimes1_ l fn n t = Sometimes fn
+  [Subfeature{ sfData = t, sfName = n, sfLevel = l }]
 
-always1_ :: LogLevel -> String -> Root a -> a -> Always a
-always1_ l n t x =
-  Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always x)
+always1_ :: LogLevel -> String -> String -> Root a -> a -> Always a
+always1_ l fn n t x = Always fn
+  $ Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always_ x)
 
-sometimes1 :: String -> Root a -> Sometimes a
+sometimes1 :: String -> String -> Root a -> Sometimes a
 sometimes1 = sometimes1_ Error
 
-always1 :: String -> Root a -> a -> Always a
+always1 :: String -> String -> Root a -> a -> Always a
 always1 = always1_ Error
 
-sometimesIO :: String -> Tree_ IODependency_ -> a -> Sometimes a
-sometimesIO n t x = sometimes1 n $ IORoot_ x t
+sometimesIO :: String -> String -> Tree_ IODependency_ -> a -> Sometimes a
+sometimesIO fn n t x = sometimes1 fn n $ IORoot_ x t
 
-sometimesExe :: MonadIO m => String -> Bool -> FilePath -> Sometimes (m ())
-sometimesExe n sys path = sometimesExeArgs n sys path []
+sometimesExe :: MonadIO m => String -> String -> Bool -> FilePath -> Sometimes (m ())
+sometimesExe fn n sys path = sometimesExeArgs fn n sys path []
 
-sometimesExeArgs :: MonadIO m => String -> Bool -> FilePath -> [String] -> Sometimes (m ())
-sometimesExeArgs n sys path args =
-  sometimesIO n (Only_ (IOSystem_ $ Executable sys path)) $ spawnCmd path args
+sometimesExeArgs :: MonadIO m => String -> String -> Bool -> FilePath
+  -> [String] -> Sometimes (m ())
+sometimesExeArgs fn n sys path args =
+  sometimesIO fn n (Only_ (IOSystem_ $ Executable sys path)) $ spawnCmd path args
 
-sometimesDBus :: Maybe Client -> String -> Tree_ DBusDependency_
+sometimesDBus :: Maybe Client -> String -> String -> Tree_ DBusDependency_
   -> (Client -> a) -> Sometimes a
-sometimesDBus c n t x = sometimes1 n $ DBusRoot_ x t c
+sometimesDBus c fn n t x = sometimes1 fn n $ DBusRoot_ x t c
 
-sometimesEndpoint :: MonadIO m => String -> BusName -> ObjectPath -> InterfaceName
+sometimesEndpoint :: MonadIO m => String -> String -> BusName -> ObjectPath -> InterfaceName
   -> MemberName -> Maybe Client -> Sometimes (m ())
-sometimesEndpoint name busname path iface mem client =
-  sometimesDBus client name deps cmd
+sometimesEndpoint fn name busname path iface mem client =
+  sometimesDBus client fn name deps cmd
   where
     deps = Only_ $ Endpoint busname path iface $ Method_ mem
     cmd c = io $ void $ callMethod c busname path iface mem
@@ -734,18 +747,19 @@ newtype JSONUnquotable = UQ String
 
 data JSONMixed = JSON_UQ JSONUnquotable | JSON_Q JSONQuotable
 
-jsonAlways :: Maybe JSONUnquotable -> [JSONUnquotable] -> [JSONUnquotable]
-  -> JSONUnquotable
+jsonAlways :: JSONQuotable -> Maybe JSONUnquotable -> [JSONUnquotable]
+  -> [JSONUnquotable] -> JSONUnquotable
 jsonAlways = jsonFeature True
 
-jsonSometimes :: Maybe JSONUnquotable -> [JSONUnquotable] -> [JSONUnquotable]
-  -> JSONUnquotable
+jsonSometimes :: JSONQuotable -> Maybe JSONUnquotable -> [JSONUnquotable]
+  -> [JSONUnquotable] -> JSONUnquotable
 jsonSometimes = jsonFeature False
 
-jsonFeature :: Bool -> Maybe JSONUnquotable -> [JSONUnquotable]
+jsonFeature :: Bool -> JSONQuotable -> Maybe JSONUnquotable -> [JSONUnquotable]
   -> [JSONUnquotable] -> JSONUnquotable
-jsonFeature isalways success failed untested = jsonObject
+jsonFeature isalways name success failed untested = jsonObject
   [ ("type", JSON_Q $ Q $ if isalways then "always" else "sometimes")
+  , ("name", JSON_Q name)
   , ("success", JSON_UQ $ fromMaybe (UQ "null") success)
   , ("failed", JSON_UQ $ jsonArray $ fmap JSON_UQ failed)
   , ("untested", JSON_UQ $ jsonArray $ fmap JSON_UQ untested)
@@ -826,16 +840,16 @@ curly s = "{" ++ s ++ "}"
 --------------------------------------------------------------------------------
 -- | Other random formatting
 
-failedMsgs :: Bool -> [SubfeatureFail] -> IO [String]
-failedMsgs err = fmap concat . mapM (failedMsg err)
+failedMsgs :: Bool -> String -> [SubfeatureFail] -> IO [String]
+failedMsgs err fn = fmap concat . mapM (failedMsg err fn)
 
-failedMsg :: Bool -> SubfeatureFail -> IO [String]
-failedMsg err Subfeature { sfData = d, sfName = n } = do
-  mapM (fmtMsg err n) $ case d of (PostMissing e) -> [e]; (PostFail es) -> es
+failedMsg :: Bool -> String -> SubfeatureFail -> IO [String]
+failedMsg err fn Subfeature { sfData = d, sfName = n } = do
+  mapM (fmtMsg err fn n) $ case d of (PostMissing e) -> [e]; (PostFail es) -> es
 
-fmtMsg :: Bool -> String -> String -> IO String
-fmtMsg err n msg = do
+fmtMsg :: Bool -> String -> String -> String -> IO String
+fmtMsg err fn n msg = do
   let e = if err then "ERROR" else "WARNING"
   p <- getProgName
-  return $ unwords [bracket p, bracket e, bracket n, msg]
+  return $ unwords [bracket p, bracket e, bracket fn, bracket n, msg]
 

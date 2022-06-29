@@ -57,7 +57,7 @@ myDmenuNetworks = "networkmanager_dmenu"
 -- | Other internal functions
 
 spawnDmenuCmd :: String -> [String] -> SometimesX
-spawnDmenuCmd n = sometimesExeArgs n True myDmenuCmd
+spawnDmenuCmd n = sometimesExeArgs n "rofi preset" True myDmenuCmd
 
 themeArgs :: String -> [String]
 themeArgs hexColor =
@@ -72,24 +72,29 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: SometimesX
-runDevMenu = sometimesIO "device manager" (Only_ $ localExe myDmenuDevices) $ do
-  c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
-  spawnCmd myDmenuDevices
-    $ ["-c", c]
-    ++ "--" : themeArgs "#999933"
-    ++ myDmenuMatchingArgs
+runDevMenu = sometimesIO "device manager" "rofi devices" t x
+  where
+    t = Only_ $ localExe myDmenuDevices
+    x = do
+      c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
+      spawnCmd myDmenuDevices
+        $ ["-c", c]
+        ++ "--" : themeArgs "#999933"
+        ++ myDmenuMatchingArgs
 
 runBTMenu :: SometimesX
-runBTMenu = sometimesExeArgs "bluetooth selector" False myDmenuBluetooth
-  $ "-c":themeArgs "#0044bb"
+runBTMenu = sometimesExeArgs "bluetooth selector" "rofi bluetooth" False
+  myDmenuBluetooth $ "-c":themeArgs "#0044bb"
 
 runBwMenu :: SometimesX
-runBwMenu = sometimesIO "password manager" (Only_ $ localExe myDmenuPasswords) $
-  spawnCmd myDmenuPasswords $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
+runBwMenu = sometimesIO "password manager" "rofi bitwarden"
+  (Only_ $ localExe myDmenuPasswords) $ spawnCmd myDmenuPasswords
+  $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 runVPNMenu :: SometimesX
-runVPNMenu = sometimesIO "VPN selector" (Only_ $ localExe myDmenuVPN) $
-  spawnCmd myDmenuVPN $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
+runVPNMenu = sometimesIO "VPN selector" "rofi VPN"
+  (Only_ $ localExe myDmenuVPN) $ spawnCmd myDmenuVPN
+  $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
 runCmdMenu :: SometimesX
 runCmdMenu = spawnDmenuCmd "command menu" ["-show", "run"]
@@ -98,7 +103,7 @@ runAppMenu :: SometimesX
 runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 
 runClipMenu :: SometimesX
-runClipMenu = sometimesIO "clipboard manager" deps act
+runClipMenu = sometimesIO "clipboard manager" "rofi greenclip" deps act
   where
     act = spawnCmd myDmenuCmd args
     deps = toAnd (sysExe myDmenuCmd) (sysExe "greenclip")
@@ -111,18 +116,18 @@ runWinMenu :: SometimesX
 runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
 runNetMenu :: SometimesX
-runNetMenu =
-  sometimesExeArgs "network control menu" True myDmenuNetworks $ themeArgs "#ff3333"
+runNetMenu = sometimesExeArgs "network control menu" "rofi NetworkManager"
+  True myDmenuNetworks $ themeArgs "#ff3333"
 
 runAutorandrMenu :: SometimesX
-runAutorandrMenu =
-  sometimesExeArgs "autorandr menu" True myDmenuMonitors $ themeArgs "#ff0066"
+runAutorandrMenu = sometimesExeArgs "autorandr menu" "rofi autorandr"
+  True myDmenuMonitors $ themeArgs "#ff0066"
 
 --------------------------------------------------------------------------------
 -- | Shortcut menu
 
 runShowKeys :: Always ([((KeyMask, KeySym), NamedAction)] -> X ())
-runShowKeys = Option showKeysDMenu (Always fallback)
+runShowKeys = Always "keyboard menu" $ Option showKeysDMenu (Always_ fallback)
   where
     -- TODO this should technically depend on dunst
     fallback = const $ spawnNotify

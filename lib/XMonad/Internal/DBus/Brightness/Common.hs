@@ -88,7 +88,7 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
 brightnessExporter :: RealFrac b => [IODependency_] -> BrightnessConfig a b
   -> Maybe Client -> SometimesIO
 brightnessExporter deps bc@BrightnessConfig { bcName = n } client =
-  sometimesDBus client (n ++ " exporter") ds (exportBrightnessControls' bc)
+  sometimesDBus client n (n ++ " exporter") ds (exportBrightnessControls' bc)
   where
     ds = listToAnds (Bus xmonadBusName) $ fmap DBusIO deps
 
@@ -132,7 +132,7 @@ callBacklight :: Maybe Client -> BrightnessConfig a b -> String -> MemberName
 callBacklight client BrightnessConfig { bcPath = p
                                       , bcInterface = i
                                       , bcName = n } controlName m =
-  sometimesEndpoint (unwords [n, controlName]) xmonadBusName p i m client
+  sometimesEndpoint n (unwords [n, controlName]) xmonadBusName p i m client
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)

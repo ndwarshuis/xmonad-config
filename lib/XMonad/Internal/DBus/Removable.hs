@@ -83,6 +83,6 @@ listenDevices client = do
 
 runRemovableMon :: Maybe Client -> SometimesIO
 runRemovableMon cl =
-  sometimesDBus cl "removeable device monitor" deps listenDevices
+  sometimesDBus cl "removeable device monitor" "dbus monitor" deps listenDevices
   where
     deps = toAnd addedDep removedDep

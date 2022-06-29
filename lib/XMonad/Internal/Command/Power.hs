@@ -49,7 +49,7 @@ myOptimusManager = "optimus-manager"
 -- | Core commands
 
 runScreenLock :: SometimesX
-runScreenLock = sometimesExe "screen locker" True myScreenlock
+runScreenLock = sometimesExe "screen locker" "i3lock script" True myScreenlock
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -104,8 +104,8 @@ runOptimusPrompt' = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: SometimesX
-runOptimusPrompt = sometimesIO "graphics switcher" (Only_ $ localExe myOptimusManager)
-  runOptimusPrompt'
+runOptimusPrompt = sometimesIO "graphics switcher" "optimus manager"
+  (Only_ $ localExe myOptimusManager) runOptimusPrompt'
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt
@@ -134,7 +134,7 @@ instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
 
 runPowerPrompt :: AlwaysX
-runPowerPrompt = always1 "power prompt" withLock powerPromptNoLock
+runPowerPrompt = always1 "power prompt" "lock-enabled prompt" withLock powerPromptNoLock
   where
     withLock =  IORoot powerPrompt (Only $ IOSometimes runScreenLock id)
 

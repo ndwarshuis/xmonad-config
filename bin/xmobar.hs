@@ -273,6 +273,10 @@ vpnPresent = do
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
 
+xmobarDBus :: String -> DBusDependency_ -> CmdSpec -> Maybe Client -> BarFeature
+xmobarDBus n dep cmd cl = sometimesDBus cl n "xmobar dbus interface"
+  (Only_ dep) $ const cmd
+
 rightPlugins :: Maybe Client -> Maybe Client -> IO [Maybe CmdSpec]
 rightPlugins sysClient sesClient = mapM evalFeature
   [ Left getWireless
@@ -284,53 +288,50 @@ rightPlugins sysClient sesClient = mapM evalFeature
   , Left $ getBl sesClient
   , Left $ getCk sesClient
   , Left $ getSs sesClient
-  , Right $ Always lockCmd
-  , Right $ Always dateCmd
+  , always' "lock indicator" lockCmd
+  , always' "date indicator" dateCmd
   ]
+  where
+    always' n = Right . Always n . Always_
 
 getWireless :: BarFeature
-getWireless = sometimes1 "wireless status indicator" $ IORoot wirelessCmd
+getWireless = sometimes1 "wireless status indicator" "sysfs path"
+  $ IORoot wirelessCmd
   $ Only $ readInterface "get wifi interface" isWireless
 
 getEthernet :: Maybe Client -> BarFeature
-getEthernet client = sometimes1 "ethernet status indicator" $
-  DBusRoot (const . ethernetCmd) tree client
+getEthernet client = sometimes1 "ethernet status indicator" "sysfs path"
+  $ DBusRoot (const . ethernetCmd) tree client
   where
     tree = And1 (Only readEth) (Only_ devDep)
     readEth = readInterface "read ethernet interface" isEthernet
 
 getBattery :: BarFeature
-getBattery = sometimesIO "battery level indicator"
+getBattery = sometimesIO "battery level indicator" "sysfs path"
   (Only_ $ sysTest "Test if battery is present" hasBattery)
   batteryCmd
 
 getVPN :: Maybe Client -> BarFeature
 getVPN client = sometimesDBus client "VPN status indicator"
-  (toAnd vpnDep test) (const vpnCmd)
+  "xmobar dbus interface" (toAnd vpnDep test) (const vpnCmd)
   where
     test = DBusIO $ sysTest "Use nmcli to test if VPN is present" vpnPresent
 
 getBt :: Maybe Client -> BarFeature
-getBt client = sometimesDBus client "bluetooth status indicator"
-  (Only_ btDep)
-  (const btCmd)
+getBt = xmobarDBus "bluetooth status indicator" btDep btCmd
 
 getAlsa :: BarFeature
-getAlsa = sometimesIO "volume level indicator" (Only_ $ sysExe "alsactl") alsaCmd
+getAlsa = sometimesIO "volume level indicator" "alsactl"
+  (Only_ $ sysExe "alsactl") alsaCmd
 
 getBl :: Maybe Client -> BarFeature
-getBl client = sometimesDBus client "Intel backlight indicator"
-  (Only_ intelBacklightSignalDep)
-  (const blCmd)
+getBl = xmobarDBus "Intel backlight indicator" intelBacklightSignalDep blCmd
 
 getCk :: Maybe Client -> BarFeature
-getCk client = sometimesDBus client "Clevo keyboard indicator"
-  (Only_ clevoKeyboardSignalDep)
-  (const ckCmd)
+getCk = xmobarDBus "Clevo keyboard indicator" clevoKeyboardSignalDep ckCmd
 
 getSs :: Maybe Client -> BarFeature
-getSs client = sometimesDBus client "screensaver indicator"
-  (Only_ ssSignalDep) $ const ssCmd
+getSs = xmobarDBus "screensaver indicator" ssSignalDep ssCmd
 
 getAllCommands :: [Maybe CmdSpec] -> IO BarRegions
 getAllCommands right = do
