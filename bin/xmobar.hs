@@ -135,7 +135,6 @@ batteryCmd =  CmdSpec
     , "--normal", T.fgColor
     , "--high", T.fgColor
     , "--"
-    , "-a", notify
     , "-P"
     , "-o" , fontify "\xf0e7"
     , "-O" , fontify "\xf1e6"
@@ -144,14 +143,6 @@ batteryCmd =  CmdSpec
   }
   where
     fontify = fontifyText IconSmall
-    -- TODO format this with standardized notification library from xmonad.internal
-    notify = fmtCmd "notify-send"
-      [ "-u"
-      , "critical"
-      , "-i"
-      , "'dialog-information-symbolic'"
-      , "'low battery'"
-      ]
 
 vpnCmd :: CmdSpec
 vpnCmd = CmdSpec
