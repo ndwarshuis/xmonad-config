@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GADTs         #-}
+{-# LANGUAGE TupleSections #-}
 
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
@@ -29,6 +30,15 @@ module XMonad.Internal.Dependency
   , DBusMember(..)
   , UnitType(..)
   , Result
+
+  -- dumping
+  , dumpFeature
+  , dumpAlways
+  , dumpSometimes
+  , jsonArray
+  , JSONQuotable(..)
+  , JSONUnquotable(..)
+  , JSONMixed(..)
 
   -- testing
   , evalFeature
@@ -66,11 +76,9 @@ module XMonad.Internal.Dependency
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
 
--- import           Data.Aeson
 import           Data.Bifunctor
-import           Data.List               (find)
+import           Data.List
 import           Data.Maybe
--- import qualified Data.Text               as T
 
 import           DBus
 import           DBus.Client
@@ -123,13 +131,33 @@ evalAlways a = do
 --------------------------------------------------------------------------------
 -- | Feature status
 
+-- | Dump the status of a Feature
+dumpFeature :: Feature a -> IO JSONUnquotable
+dumpFeature = either dumpSometimes dumpAlways
+
 -- | Dump the status of an Always to stdout
--- dumpAlways :: MonadIO m => Always a -> m ()
--- dumpAlways = undefined
+dumpAlways :: Always a -> IO JSONUnquotable
+dumpAlways = go []
+  where
+    go failed (Option o os) = do
+      (s, r) <- dumpSubfeatureRoot o
+      if r
+        then return $ jsonAlways (Just s) failed $ untested [] os
+        else go (s:failed) os
+    go failed (Always _) = return $ jsonAlways (Just (UQ "true")) failed []
+    untested acc (Always _)    = acc
+    untested acc (Option o os) = untested (dataSubfeatureRoot o:acc) os
 
 -- | Dump the status of a Sometimes to stdout
--- dumpSometimes :: MonadIO m => Sometimes a -> m ()
--- dumpSometimes = undefined
+dumpSometimes :: Sometimes a -> IO JSONUnquotable
+dumpSometimes = go []
+  where
+    go failed [] = return $ jsonSometimes Nothing failed []
+    go failed (x:xs) = do
+      (s, r) <- dumpSubfeatureRoot x
+      if r
+        then return $ jsonSometimes (Just s) failed $ fmap dataSubfeatureRoot xs
+        else go (s:failed) xs
 
 --------------------------------------------------------------------------------
 -- | Wrapper types
@@ -200,12 +228,6 @@ data Tree_ d =
 data IODependency p = IORead String (IO (Result p))
   | forall a. IOAlways (Always a) (a -> p)
   | forall a. IOSometimes (Sometimes a) (a -> p)
-
--- | A dependency pertaining to the DBus
--- data DBusDependency p =
---   -- Bus BusName
---   -- | Endpoint BusName ObjectPath InterfaceName DBusMember
---   DBusIO (IODependency p)
 
 -- | A dependency pertaining to the DBus
 data DBusDependency_ = Bus BusName
@@ -343,6 +365,10 @@ testTree test_ test = go
 
 testIODependency :: IODependency p -> IO (Result p)
 testIODependency (IORead _ t)      = t
+-- TODO this is a bit odd because this is a dependency that will always
+-- succeed, which kinda makes this pointless. The only reason I would want this
+-- is if I want to have a built-in logic to "choose" a payload to use in
+-- building a higher-level feature
 testIODependency (IOAlways a f)    = Right . fmap f <$> evalAlwaysMsg a
 testIODependency (IOSometimes x f) = second (fmap f) <$> evalSometimesMsg x
 
@@ -363,12 +389,15 @@ testIODependency_ :: IODependency_ -> IO Result_
 testIODependency_ (IOSystem_ s) = maybe (Right []) (Left . (:[])) <$> testSysDependency s
 testIODependency_ (IOSometimes_ x) = second (\(PostPass _ ws) -> ws) <$> evalSometimesMsg x
 
+--------------------------------------------------------------------------------
+-- | System Dependency Testing
+
 testSysDependency :: SystemDependency -> IO (Maybe String)
 testSysDependency (IOTest _ t) = t
 testSysDependency (Executable sys bin) = maybe (Just msg) (const Nothing)
   <$> findExecutable bin
   where
-    msg = unwords [e, "executable", quote bin, "not found"]
+    msg = unwords [e, "executable", singleQuote bin, "not found"]
     e = if sys then "system" else "local"
 testSysDependency (Systemd t n) = do
   (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
@@ -377,8 +406,6 @@ testSysDependency (Systemd t n) = do
     _           -> Just $ "systemd " ++ unitType t ++ " unit '" ++ n ++ "' not found"
   where
     cmd = fmtCmd "systemctl" $ ["--user" | t == UserUnit] ++ ["status", n]
-    unitType SystemUnit = "system"
-    unitType UserUnit   = "user"
 testSysDependency (AccessiblePath p r w) = permMsg <$> getPermissionsSafe p
   where
     testPerm False _ _  = Nothing
@@ -392,14 +419,28 @@ testSysDependency (AccessiblePath p r w) = permMsg <$> getPermissionsSafe p
         (_, Just False)          -> Just "file not writable"
         _                        -> Nothing
 
+
+unitType :: UnitType -> String
+unitType SystemUnit = "system"
+unitType UserUnit   = "user"
+
+--------------------------------------------------------------------------------
+-- | DBus Dependency Testing
+
+introspectInterface :: InterfaceName
+introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
+
+introspectMethod :: MemberName
+introspectMethod = memberName_ "Introspect"
+
 testDBusDependency_ :: Client -> DBusDependency_ -> IO Result_
 testDBusDependency_ client (Bus bus) = do
   ret <- callMethod client queryBus queryPath queryIface queryMem
   return $ case ret of
-        Left e    -> smryFail e
+        Left e    -> Left [e]
         Right b -> let ns = bodyGetNames b in
           if bus' `elem` ns then Right []
-          else smryFail $ unwords ["name", singleQuote bus', "not found on dbus"]
+          else Left [unwords ["name", singleQuote bus', "not found on dbus"]]
   where
     bus' = formatBusName bus
     queryBus = busName_ "org.freedesktop.DBus"
@@ -412,14 +453,14 @@ testDBusDependency_ client (Bus bus) = do
 testDBusDependency_ client (Endpoint busname objpath iface mem) = do
   ret <- callMethod client busname objpath introspectInterface introspectMethod
   return $ case ret of
-        Left e     -> smryFail e
+        Left e     -> Left [e]
         Right body -> procBody body
   where
     procBody body = let res = findMem =<< I.parseXML objpath =<< fromVariant
                           =<< listToMaybe body in
       case res of
         Just True -> Right []
-        _         -> smryFail $ fmtMsg' mem
+        _         -> Left [fmtMsg' mem]
     findMem = fmap (matchMem mem)
       . find (\i -> I.interfaceName i == iface)
       . I.objectInterfaces
@@ -442,7 +483,26 @@ testDBusDependency_ client (Endpoint busname objpath iface mem) = do
 testDBusDependency_ _ (DBusIO i) = testIODependency_ i
 
 --------------------------------------------------------------------------------
--- | Constructor functions
+-- | IO Lifting functions
+
+ioSometimes :: MonadIO m => Sometimes (IO a) -> Sometimes (m a)
+ioSometimes = fmap ioSubfeature
+
+ioAlways :: MonadIO m => Always (IO a) -> Always (m a)
+ioAlways (Always x)    = Always $ io x
+ioAlways (Option sf a) = Option (ioSubfeature sf) $ ioAlways a
+
+ioSubfeature :: MonadIO m => SubfeatureRoot (IO a) -> SubfeatureRoot (m a)
+ioSubfeature sf = sf { sfData = ioRoot $ sfData sf }
+
+ioRoot :: MonadIO m => Root (IO a) -> Root (m a)
+ioRoot (IORoot a t)       = IORoot (io . a) t
+ioRoot (IORoot_ a t)      = IORoot_ (io a) t
+ioRoot (DBusRoot a t cl)  = DBusRoot (\p c -> io $ a p c) t cl
+ioRoot (DBusRoot_ a t cl) = DBusRoot_ (io . a) t cl
+
+--------------------------------------------------------------------------------
+-- | Feature constructors
 
 sometimes1_ :: LogLevel -> String -> Root a -> Sometimes a
 sometimes1_ l n t = [Subfeature{ sfData = t, sfName = n, sfLevel = l }]
@@ -460,33 +520,27 @@ always1 = always1_ Error
 sometimesIO :: String -> Tree_ IODependency_ -> a -> Sometimes a
 sometimesIO n t x = sometimes1 n $ IORoot_ x t
 
+sometimesExe :: MonadIO m => String -> Bool -> FilePath -> Sometimes (m ())
+sometimesExe n sys path = sometimesExeArgs n sys path []
+
+sometimesExeArgs :: MonadIO m => String -> Bool -> FilePath -> [String] -> Sometimes (m ())
+sometimesExeArgs n sys path args =
+  sometimesIO n (Only_ (IOSystem_ $ Executable sys path)) $ spawnCmd path args
+
 sometimesDBus :: Maybe Client -> String -> Tree_ DBusDependency_
   -> (Client -> a) -> Sometimes a
 sometimesDBus c n t x = sometimes1 n $ DBusRoot_ x t c
 
+sometimesEndpoint :: MonadIO m => String -> BusName -> ObjectPath -> InterfaceName
+  -> MemberName -> Maybe Client -> Sometimes (m ())
+sometimesEndpoint name busname path iface mem client =
+  sometimesDBus client name deps cmd
+  where
+    deps = Only_ $ Endpoint busname path iface $ Method_ mem
+    cmd c = io $ void $ callMethod c busname path iface mem
+
 --------------------------------------------------------------------------------
--- | IO Lifting functions
-
-ioSometimes :: MonadIO m => Sometimes (IO a) -> Sometimes (m a)
-ioSometimes = fmap ioSubfeature
-
-ioAlways :: MonadIO m => Always (IO a) -> Always (m a)
-ioAlways (Always x)    = Always $ io x
-ioAlways (Option sf a) = Option (ioSubfeature sf) $ ioAlways a
-
-ioSubfeature :: MonadIO m => SubfeatureRoot (IO a) -> SubfeatureRoot (m a)
-ioSubfeature sf = sf { sfData = ioRoot $ sfData sf }
-
--- data Msg = Msg LogLevel String String
-
-ioRoot :: MonadIO m => Root (IO a) -> Root (m a)
-ioRoot (IORoot a t)       = IORoot (io . a) t
-ioRoot (IORoot_ a t)      = IORoot_ (io a) t
-ioRoot (DBusRoot a t cl)  = DBusRoot (\p c -> io $ a p c) t cl
-ioRoot (DBusRoot_ a t cl) = DBusRoot_ (io . a) t cl
-
--- --------------------------------------------------------------------------------
--- | Dependency Tree
+-- | Dependency Tree Constructors
 
 listToAnds :: d -> [d] -> Tree_ d
 listToAnds i = foldr (And_ . Only_) (Only_ i)
@@ -494,18 +548,8 @@ listToAnds i = foldr (And_ . Only_) (Only_ i)
 toAnd :: d -> d -> Tree_ d
 toAnd a b = And_ (Only_ a) (Only_ b)
 
-smryFail :: String -> Either [String] a
-smryFail msg = Left [msg]
-
 --------------------------------------------------------------------------------
--- | IO Dependency
-
-sometimesExe :: MonadIO m => String -> Bool -> FilePath -> Sometimes (m ())
-sometimesExe n sys path = sometimesExeArgs n sys path []
-
-sometimesExeArgs :: MonadIO m => String -> Bool -> FilePath -> [String] -> Sometimes (m ())
-sometimesExeArgs n sys path args =
-  sometimesIO n (Only_ (IOSystem_ $ Executable sys path)) $ spawnCmd path args
+-- | IO Dependency Constructors
 
 exe :: Bool -> String -> IODependency_
 exe b = IOSystem_ . Executable b
@@ -538,49 +582,249 @@ sysTest :: String -> IO (Maybe String) -> IODependency_
 sysTest n = IOSystem_ . IOTest n
 
 --------------------------------------------------------------------------------
--- | DBus Dependency Result
-
-introspectInterface :: InterfaceName
-introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
-
-introspectMethod :: MemberName
-introspectMethod = memberName_ "Introspect"
-
-sometimesEndpoint :: MonadIO m => String -> BusName -> ObjectPath -> InterfaceName
-  -> MemberName -> Maybe Client -> Sometimes (m ())
-sometimesEndpoint name busname path iface mem client =
-  sometimesDBus client name deps cmd
-  where
-    deps = Only_ $ Endpoint busname path iface $ Method_ mem
-    cmd c = io $ void $ callMethod c busname path iface mem
-
---------------------------------------------------------------------------------
--- | Dependency Testing
---
--- Here we test all dependencies and keep the tree structure so we can print it
--- for diagnostic purposes. This obviously has overlap with feature evaluation
--- since we need to resolve dependencies to build each feature.
-
---------------------------------------------------------------------------------
 -- | Printing
 
--- printMsgs :: LogLevel -> [Msg] -> IO ()
--- printMsgs lvl ms = do
---   pn <- getProgName
---   mapM_ (printMsg pn lvl) ms
+dumpSubfeatureRoot :: SubfeatureRoot a -> IO (JSONUnquotable, Bool)
+dumpSubfeatureRoot Subfeature { sfData = r, sfName = n } =
+  first (jsonSubfeature $ Q n) <$> dumpRoot r
 
--- printMsg :: String -> LogLevel -> Msg -> IO ()
--- printMsg pname lvl (Msg ml mn msg)
---   | lvl > ml = putStrLn $ unwords [bracket pname, bracket mn, msg]
---   | otherwise = skip
---   where
---     bracket s = "[" ++ s ++ "]"
+dumpRoot :: Root a -> IO (JSONUnquotable, Bool)
+dumpRoot (IORoot _ t) = first jsonIORoot <$>
+  dumpTree testIODependency testIODependency_ dataIODependency dataIODependency_ t
+dumpRoot (IORoot_ _ t) = first jsonIORoot <$>
+  dumpTree_ testIODependency_ dataIODependency_ t
+dumpRoot (DBusRoot _ t (Just cl)) = first jsonDBusRoot <$>
+  dumpTree testIODependency (testDBusDependency_ cl) dataIODependency dataDBusDependency t
+dumpRoot (DBusRoot_ _ t (Just cl)) = first jsonDBusRoot <$>
+  dumpTree_ (testDBusDependency_ cl) dataDBusDependency t
+-- TODO somehow return a message here that these failed
+dumpRoot  (DBusRoot _ t Nothing) =
+  return (jsonDBusRoot $ dataTree dataIODependency dataDBusDependency t, False)
+dumpRoot  (DBusRoot_ _ t Nothing) =
+  return (jsonDBusRoot $ dataTree_ dataDBusDependency t, False)
+
+dumpTree :: (d p -> IO (Result p)) -> (d_ -> IO Result_)
+  -> (d p -> DependencyData) -> (d_ -> DependencyData) -> Tree d d_ p
+  -> IO (JSONUnquotable, Bool)
+dumpTree test test_ dd dd_ = go
+  where
+    go (And12 _ a b) = doAnd go go data' a b
+    go (And1 a b)    = doAnd go dump_' (dataTree_ dd_) a b
+    go (And2 a b)    = doAnd dump_' go data' a b
+    go (Or a b)      = do
+      (sa, ra) <- go a
+      let j = jsonOr sa
+      if ra then return (j $ data' b, ra) else first j <$> go b
+    go (Only d)      = do
+      r <- fromResult <$> test d
+      let (x, y) = dd d
+      return (jsonLeaf (Just r) x y, fst r)
+    dump_' = dumpTree_ test_ dd_
+    data' = dataTree dd dd_
+    doAnd fa fb fb_ a b = do
+      (sa, ra) <- fa a
+      let j = jsonAnd sa
+      if ra then first j <$> fb b else return (j $ fb_ b, ra)
+
+dumpTree_ :: (d_ -> IO Result_) -> (d_ -> DependencyData) -> Tree_ d_
+  -> IO (JSONUnquotable, Bool)
+dumpTree_ test_ dd_ = go
+  where
+    go (And_ a b) = do
+      (sa, ra) <- go a
+      let j = jsonAnd sa
+      if ra then first j <$> go b else return (j $ dataTree_ dd_ b, ra)
+    go (Or_ a b)  = do
+      (sa, ra) <- go a
+      let j = jsonAnd sa
+      if ra then return (j $ dataTree_ dd_ b, ra) else first j <$> go b
+    go (Only_ d)  = do
+      r <- fromResult_ <$> test_ d
+      let (x, y) = dd_ d
+      return (jsonLeaf (Just r) x y, fst r)
+
+--------------------------------------------------------------------------------
+-- | Dependency data for JSON
+
+type DependencyData = (JSONQuotable, [(String, JSONMixed)])
+
+dataSubfeatureRoot :: SubfeatureRoot a -> JSONUnquotable
+dataSubfeatureRoot Subfeature { sfData = r, sfName = n } =
+  jsonSubfeature (Q n) $ dataRoot r
+
+dataRoot :: Root a -> JSONUnquotable
+dataRoot (IORoot _ t)      = dataTree  dataIODependency dataIODependency_ t
+dataRoot (IORoot_ _ t)     = dataTree_ dataIODependency_ t
+dataRoot (DBusRoot _ t _)  = dataTree dataIODependency dataDBusDependency t
+dataRoot (DBusRoot_ _ t _) = dataTree_ dataDBusDependency t
+
+dataTree :: (d p -> DependencyData) -> (d_ -> DependencyData) -> Tree d d_ p -> JSONUnquotable
+dataTree f f_ = go
+  where
+    go (And12 _ a b) = jsonAnd (go a) (go b)
+    go (And1 a b)    = jsonAnd (go a) (dataTree_ f_ b)
+    go (And2 a b)    = jsonAnd (dataTree_ f_ a) (go b)
+    go (Or a b)      = jsonOr (go a) (go b)
+    go (Only d)      = uncurry jsonLeafUntested $ f d
+
+dataTree_ :: (d_ -> DependencyData) -> Tree_ d_ -> JSONUnquotable
+dataTree_ f_ = go
+  where
+    go (And_ a b) = jsonAnd (go a) (go b)
+    go (Or_ a b)  = jsonOr (go a) (go b)
+    go (Only_ d)  = uncurry jsonLeafUntested $ f_ d
+
+dataIODependency :: IODependency p -> DependencyData
+dataIODependency d = case d of
+  (IORead n _)      -> (Q "ioread", [("desc", JSON_Q $ Q n)])
+  -- TODO make this actually useful (I actually need to name my features)
+  (IOSometimes _ _) -> (Q "sometimes", [])
+  (IOAlways _ _)    -> (Q "always", [])
+
+dataIODependency_ :: IODependency_ -> DependencyData
+dataIODependency_ d = case d of
+  (IOSystem_ s)    -> dataSysDependency s
+  (IOSometimes_ _) -> (Q "sometimes", [])
+
+dataSysDependency :: SystemDependency -> DependencyData
+dataSysDependency d = do
+  case d of
+    (Executable sys path) -> (Q "executable", [ ("system", JSON_UQ $ jsonBool sys)
+                                            , ("path", JSON_Q $ Q path)
+                                            ])
+    (IOTest desc _) -> (Q "iotest", [("desc", JSON_Q $ Q desc)])
+    (AccessiblePath p r w) -> (Q "path", [ ("path", JSON_Q $ Q p)
+                                         , ("readable", JSON_UQ $ jsonBool r)
+                                         , ("writable", JSON_UQ $ jsonBool w)
+                                         ])
+    (Systemd t n) -> (Q "systemd", [ ("unittype", JSON_Q $ Q $ unitType t)
+                                   , ("unit", JSON_Q $ Q n)])
+
+dataDBusDependency :: DBusDependency_ -> DependencyData
+dataDBusDependency d =
+  case d of
+    (DBusIO i)         -> dataIODependency_ i
+    (Bus b)            -> (Q "bus", [("busname", JSON_Q $ Q $ formatBusName b)])
+    (Endpoint b o i m) -> let (mt, mn) = memberData m
+      in (Q "endpoint", [ ("busname", JSON_Q $ Q $ formatBusName b)
+                        , ("objectpath", JSON_Q $ Q $ formatObjectPath o)
+                        , ("interface", JSON_Q $ Q $ formatInterfaceName i)
+                        , ("membertype", JSON_Q $ Q mt)
+                        , ("membername", JSON_Q $ Q mn)
+                        ])
+  where
+    memberData (Method_ n)   = ("method", formatMemberName n)
+    memberData (Signal_ n)   = ("signal", formatMemberName n)
+    memberData (Property_ n) = ("property", n)
+
+fromResult :: Result a -> (Bool, [JSONQuotable])
+fromResult = second (fmap Q) . either (False,) (\(PostPass _ ws) -> (True, ws))
+
+fromResult_ :: Result_ -> (Bool, [JSONQuotable])
+fromResult_ = second (fmap Q) . either (False,) (True,)
+
+--------------------------------------------------------------------------------
+-- | JSON formatting
+--
+-- I could use Aeson...but I don't feel like it (too many intermediate types)
+
+newtype JSONQuotable = Q String
+
+newtype JSONUnquotable = UQ String
+
+data JSONMixed = JSON_UQ JSONUnquotable | JSON_Q JSONQuotable
+
+jsonAlways :: Maybe JSONUnquotable -> [JSONUnquotable] -> [JSONUnquotable]
+  -> JSONUnquotable
+jsonAlways = jsonFeature True
+
+jsonSometimes :: Maybe JSONUnquotable -> [JSONUnquotable] -> [JSONUnquotable]
+  -> JSONUnquotable
+jsonSometimes = jsonFeature False
+
+jsonFeature :: Bool -> Maybe JSONUnquotable -> [JSONUnquotable]
+  -> [JSONUnquotable] -> JSONUnquotable
+jsonFeature isalways success failed untested = jsonObject
+  [ ("type", JSON_Q $ Q $ if isalways then "always" else "sometimes")
+  , ("success", JSON_UQ $ fromMaybe (UQ "null") success)
+  , ("failed", JSON_UQ $ jsonArray $ fmap JSON_UQ failed)
+  , ("untested", JSON_UQ $ jsonArray $ fmap JSON_UQ untested)
+  ]
+
+jsonSubfeature :: JSONQuotable -> JSONUnquotable -> JSONUnquotable
+jsonSubfeature n r = jsonObject
+  [ ("name", JSON_Q n)
+  , ("root", JSON_UQ r)
+  ]
+
+jsonIORoot :: JSONUnquotable -> JSONUnquotable
+jsonIORoot = jsonRoot True
+
+jsonDBusRoot :: JSONUnquotable -> JSONUnquotable
+jsonDBusRoot = jsonRoot False
+
+jsonRoot :: Bool -> JSONUnquotable -> JSONUnquotable
+jsonRoot isIO tree = jsonObject
+  [ ("type", JSON_Q $ Q $ if isIO then "io" else "dbus")
+  , ("tree", JSON_UQ tree)
+  ]
+
+jsonLeafUntested :: JSONQuotable -> [(String, JSONMixed)] -> JSONUnquotable
+jsonLeafUntested = jsonLeaf Nothing
+
+jsonLeaf :: Maybe (Bool, [JSONQuotable]) -> JSONQuotable -> [(String, JSONMixed)]
+  -> JSONUnquotable
+jsonLeaf status deptype depdata = jsonObject
+  [ ("type", JSON_Q deptype)
+  , ("status", jsonMaybe (JSON_UQ . uncurry jsonStatus) status)
+  , ("data", JSON_UQ $ jsonObject depdata)
+  ]
+
+jsonStatus :: Bool -> [JSONQuotable] -> JSONUnquotable
+jsonStatus present messages = jsonObject
+  [ ("present", JSON_UQ $ jsonBool present)
+  , ("messages", JSON_UQ $ jsonArray $ fmap JSON_Q messages)
+  ]
+
+jsonAnd :: JSONUnquotable -> JSONUnquotable -> JSONUnquotable
+jsonAnd = jsonBranch True
+
+jsonOr :: JSONUnquotable -> JSONUnquotable -> JSONUnquotable
+jsonOr = jsonBranch False
+
+jsonBranch :: Bool -> JSONUnquotable -> JSONUnquotable -> JSONUnquotable
+jsonBranch isAnd l r = jsonObject
+  [ ("test", JSON_Q $ Q $ if isAnd then "and" else "or")
+  , ("left", JSON_UQ l)
+  , ("right",JSON_UQ r)
+  ]
+
+jsonMaybe :: (a -> JSONMixed) -> Maybe a -> JSONMixed
+jsonMaybe = maybe (JSON_UQ $ UQ "null")
+
+jsonBool :: Bool -> JSONUnquotable
+jsonBool True  = UQ "true"
+jsonBool False = UQ "false"
+
+jsonArray :: [JSONMixed] -> JSONUnquotable
+jsonArray = UQ . bracket . intercalate "," . fmap quoteMaybe
+
+jsonObject :: [(String, JSONMixed)] -> JSONUnquotable
+jsonObject = UQ . curly . intercalate ","
+  . fmap (\(k, v) -> doubleQuote k ++ ":" ++ quoteMaybe v)
+
+quoteMaybe :: JSONMixed -> String
+quoteMaybe (JSON_Q (Q s))   = doubleQuote s
+quoteMaybe (JSON_UQ (UQ s)) = s
 
 bracket :: String -> String
 bracket s = "[" ++ s ++ "]"
 
-quote :: String -> String
-quote s = "'" ++ s ++ "'"
+curly :: String -> String
+curly s = "{" ++ s ++ "}"
+
+--------------------------------------------------------------------------------
+-- | Other random formatting
 
 failedMsgs :: Bool -> [SubfeatureFail] -> IO [String]
 failedMsgs err = fmap concat . mapM (failedMsg err)
@@ -594,3 +838,4 @@ fmtMsg err n msg = do
   let e = if err then "ERROR" else "WARNING"
   p <- getProgName
   return $ unwords [bracket p, bracket e, bracket n, msg]
+

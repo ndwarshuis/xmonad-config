@@ -119,32 +119,27 @@ run = do
     forkIO_ = void . forkIO
 
 printDeps :: IO ()
-printDeps = skip
-  -- (i, x) <- allFeatures
-  -- mapM_ printDep $ concatMap extractFeatures i ++ concatMap extractFeatures x
-  -- where
-  --   extractFeatures (Feature f _)    = dtDeps $ ftrDepTree f
-  --   extractFeatures (Always _) = []
-  --   dtDeps (GenTree _ ds)    = ds
-  --   dtDeps (DBusTree _ _ ds) = ds
-  --   printDep (FullDep d) = putStrLn . depName d
+printDeps = do
+  ses <- getDBusClient False
+  sys <- getDBusClient True
+  let db = DBusState ses sys
+  (i, f) <- allFeatures db
+  is <- mapM dumpSometimes i
+  fs <- mapM dumpFeature f
+  let (UQ u) = jsonArray $ fmap JSON_UQ $ is ++ fs
+  putStrLn u
+  forM_ ses disconnect
+  forM_ sys disconnect
 
--- allFeatures :: IO ([FeatureIO], [FeatureX])
--- allFeatures = do
---   ses <- getDBusClient False
---   sys <- getDBusClient True
---   let db = DBusState ses sys
---   lockRes <- evalFeature runScreenLock
---   let lock = whenSatisfied lockRes
---   let bfs = concatMap (fmap kbMaybeAction . kgBindings)
---             $ externalBindings ts db lock
---   let dbus = fmap (\f -> f ses) dbusExporters
---   let others =  [runRemovableMon sys, runPowermon]
---   forM_ ses disconnect
---   forM_ sys disconnect
---   return (dbus ++ others, bfs)
---   where
---     ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
+allFeatures :: DBusState -> IO ([SometimesIO], [FeatureX])
+allFeatures db = do
+  let bfs = concatMap (fmap kbMaybeAction . kgBindings)
+            $ externalBindings ts db
+  let dbus = fmap (\f -> f $ dbSessionClient db) dbusExporters
+  let others =  [runRemovableMon $ dbSystemClient db, runPowermon]
+  return (dbus ++ others, Left runScreenLock:bfs)
+  where
+    ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
 
 usage :: IO ()
 usage = putStrLn $ intercalate "\n"
@@ -538,13 +533,13 @@ data KeyGroup a = KeyGroup
   , kgBindings :: [KeyBinding a]
   }
 
-evalExternal :: [KeyGroup (FeatureX)] -> IO [KeyGroup MaybeX]
+evalExternal :: [KeyGroup FeatureX] -> IO [KeyGroup MaybeX]
 evalExternal = mapM go
   where
     go k@KeyGroup { kgBindings = bs } =
       (\bs' -> k { kgBindings = bs' }) <$> mapM evalKeyBinding bs
 
-evalKeyBinding :: KeyBinding (FeatureX) -> IO (KeyBinding MaybeX)
+evalKeyBinding :: KeyBinding FeatureX -> IO (KeyBinding MaybeX)
 evalKeyBinding k@KeyBinding { kbMaybeAction = a } =
   (\f -> k { kbMaybeAction = f }) <$> evalFeature a
 
