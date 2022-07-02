@@ -1,6 +1,8 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE GADTs         #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
@@ -220,7 +222,8 @@ data Root a = forall p. IORoot (p -> a) (Tree IODependency IODependency_ p)
 
 -- | The dependency tree with rules to merge results
 data Tree d d_ p =
-  And12 (p -> p -> p) (Tree d d_ p) (Tree d d_ p)
+  forall x y. And12 (x -> y -> p) (Tree d d_ x) (Tree d d_ y)
+  -- And12 (p -> p -> p) (Tree d d_ p) (Tree d d_ p)
   | And1 (Tree d d_ p) (Tree_ d_)
   | And2 (Tree_ d_) (Tree d d_ p)
   | Or (Tree d d_ p) (Tree d d_ p)
@@ -343,7 +346,9 @@ testRoot r = do
     (DBusRoot_ a t (Just cl)) -> go_ (a cl) (testDBusDependency_ cl) t
     _                         -> return $ Left $ PostMissing "client not available"
   where
-    go a f_ f t = bimap PostFail (fmap a) <$> testTree f_ f t
+    -- rank N polymorphism is apparently undecidable...gross
+    go a f_ (f :: forall q. d q -> IO (Result q)) t =
+      bimap PostFail (fmap a) <$> testTree f_ f t
     go_ a f_ t = bimap PostFail (PostPass a) <$> testTree_ f_ t
 
 --------------------------------------------------------------------------------
@@ -351,10 +356,11 @@ testRoot r = do
 
 type Result p = Either [String] (PostPass p)
 
-testTree :: (d_ -> IO Result_) -> (d p -> IO (Result p)) -> Tree d d_ p
-  -> IO (Either [String] (PostPass p))
+testTree :: forall d d_ p. (d_ -> IO Result_) -> (forall q. d q -> IO (Result q))
+  -> Tree d d_ p -> IO (Either [String] (PostPass p))
 testTree test_ test = go
   where
+    go :: forall q. Tree d d_ q -> IO (Either [String] (PostPass q))
     go (And12 f a b) = do
       ra <- go a
       liftRight (\pa -> (and2nd f pa =<<) <$> go b) ra
@@ -616,11 +622,12 @@ dumpRoot  (DBusRoot _ t Nothing) =
 dumpRoot  (DBusRoot_ _ t Nothing) =
   return (jsonDBusRoot $ dataTree_ dataDBusDependency t, False)
 
-dumpTree :: (d p -> IO (Result p)) -> (d_ -> IO Result_)
-  -> (d p -> DependencyData) -> (d_ -> DependencyData) -> Tree d d_ p
-  -> IO (JSONUnquotable, Bool)
+dumpTree :: forall d d_ p. (forall q. d q -> IO (Result q))
+  -> (d_ -> IO Result_) -> (forall q. d q -> DependencyData)
+  -> (d_ -> DependencyData) -> Tree d d_ p -> IO (JSONUnquotable, Bool)
 dumpTree test test_ dd dd_ = go
   where
+    go :: forall q. Tree d d_ q -> IO (JSONUnquotable, Bool)
     go (And12 _ a b) = doAnd go go data' a b
     go (And1 a b)    = doAnd go dump_' (dataTree_ dd_) a b
     go (And2 a b)    = doAnd dump_' go data' a b
@@ -632,8 +639,9 @@ dumpTree test test_ dd dd_ = go
       r <- fromResult <$> test d
       let (x, y) = dd d
       return (jsonLeaf (Just r) x y, fst r)
-    dump_' = dumpTree_ test_ dd_
+    data' :: forall q. Tree d d_ q -> JSONUnquotable
     data' = dataTree dd dd_
+    dump_' = dumpTree_ test_ dd_
     doAnd fa fb fb_ a b = do
       (sa, ra) <- fa a
       let j = jsonAnd sa
@@ -671,9 +679,11 @@ dataRoot (IORoot_ _ t)     = dataTree_ dataIODependency_ t
 dataRoot (DBusRoot _ t _)  = dataTree dataIODependency dataDBusDependency t
 dataRoot (DBusRoot_ _ t _) = dataTree_ dataDBusDependency t
 
-dataTree :: (d p -> DependencyData) -> (d_ -> DependencyData) -> Tree d d_ p -> JSONUnquotable
+dataTree :: forall d d_ p. (forall q. d q -> DependencyData)
+  -> (d_ -> DependencyData) -> Tree d d_ p -> JSONUnquotable
 dataTree f f_ = go
   where
+    go :: forall q. Tree d d_ q -> JSONUnquotable
     go (And12 _ a b) = jsonAnd (go a) (go b)
     go (And1 a b)    = jsonAnd (go a) (dataTree_ f_ b)
     go (And2 a b)    = jsonAnd (dataTree_ f_ a) (go b)
