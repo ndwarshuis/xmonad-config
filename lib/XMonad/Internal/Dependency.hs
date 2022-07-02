@@ -12,6 +12,8 @@ module XMonad.Internal.Dependency
   ( Feature
   , Always(..)
   , Always_(..)
+  , FallbackRoot(..)
+  , FallbackStack(..)
   , Sometimes(..)
   , Sometimes_
   , AlwaysX
@@ -185,7 +187,16 @@ type Feature a = Either (Sometimes a) (Always a)
 data Always a = Always String (Always_ a)
 
 -- | Feature that is guaranteed to work (inner data)
-data Always_ a = Option (SubfeatureRoot a) (Always_ a) | Always_ a
+data Always_ a = Option (SubfeatureRoot a) (Always_ a) | Always_ (FallbackRoot a)
+
+-- | Root of a fallback action for an always
+-- This may either be a lone action or a function that depends on the results
+-- from other Always features.
+data FallbackRoot a = FallbackAlone a | forall p. FallbackTree (p -> a) (FallbackStack p)
+
+-- | Always features that are used as a payload for a fallback action
+data FallbackStack p = FallbackBottom (Always p)
+  | forall x y. FallbackStack (x -> y -> p) (Always x) (FallbackStack y)
 
 -- | Feature that might not be present
 -- This is like an Always except it doesn't fall back on a guaranteed monadic
@@ -223,7 +234,6 @@ data Root a = forall p. IORoot (p -> a) (Tree IODependency IODependency_ p)
 -- | The dependency tree with rules to merge results
 data Tree d d_ p =
   forall x y. And12 (x -> y -> p) (Tree d d_ x) (Tree d d_ y)
-  -- And12 (p -> p -> p) (Tree d d_ p) (Tree d d_ p)
   | And1 (Tree d d_ p) (Tree_ d_)
   | And2 (Tree_ d_) (Tree d d_ p)
   | Or (Tree d d_ p) (Tree d d_ p)
@@ -319,7 +329,18 @@ testAlways = go []
       case r of
         (Left l)     -> go (l:failed) next
         (Right pass) -> return $ Primary pass failed next
-    go failed (Always_ a) = return $ Fallback a failed
+    go failed (Always_ ar) = (`Fallback` failed) <$> evalFallbackRoot ar
+
+evalFallbackRoot :: FallbackRoot a -> IO a
+evalFallbackRoot (FallbackAlone a)  = return a
+evalFallbackRoot (FallbackTree a s) = a <$> evalFallbackStack s
+
+evalFallbackStack :: FallbackStack p -> IO p
+evalFallbackStack (FallbackBottom a) = evalAlways a
+evalFallbackStack (FallbackStack f a as) = do
+  ps <- evalFallbackStack as
+  p <- evalAlways a
+  return $ f p ps
 
 testSometimes :: Sometimes_ a -> IO (PostSometimes a)
 testSometimes = go (PostSometimes Nothing [])
@@ -506,8 +527,12 @@ ioAlways :: MonadIO m => Always (IO a) -> Always (m a)
 ioAlways (Always n x)   = Always n $ ioAlways' x
 
 ioAlways' :: MonadIO m => Always_ (IO a) -> Always_ (m a)
-ioAlways' (Always_ x)   = Always_ $ io x
+ioAlways' (Always_ ar)  = Always_ $ ioFallbackRoot ar
 ioAlways' (Option sf a) = Option (ioSubfeature sf) $ ioAlways' a
+
+ioFallbackRoot :: MonadIO m => FallbackRoot (IO a) -> FallbackRoot (m a)
+ioFallbackRoot (FallbackAlone a)  = FallbackAlone $ io a
+ioFallbackRoot (FallbackTree a s) = FallbackTree (io . a) s
 
 ioSubfeature :: MonadIO m => SubfeatureRoot (IO a) -> SubfeatureRoot (m a)
 ioSubfeature sf = sf { sfData = ioRoot $ sfData sf }
@@ -527,7 +552,7 @@ sometimes1_ l fn n t = Sometimes fn
 
 always1_ :: LogLevel -> String -> String -> Root a -> a -> Always a
 always1_ l fn n t x = Always fn
-  $ Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always_ x)
+  $ Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always_ $ FallbackAlone x)
 
 sometimes1 :: String -> String -> Root a -> Sometimes a
 sometimes1 = sometimes1_ Error

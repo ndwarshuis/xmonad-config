@@ -283,7 +283,7 @@ rightPlugins sysClient sesClient = mapM evalFeature
   , always' "date indicator" dateCmd
   ]
   where
-    always' n = Right . Always n . Always_
+    always' n = Right . Always n . Always_ . FallbackAlone
 
 getWireless :: BarFeature
 getWireless = sometimes1 "wireless status indicator" "sysfs path"

@@ -127,7 +127,8 @@ runAutorandrMenu = sometimesExeArgs "autorandr menu" "rofi autorandr"
 -- | Shortcut menu
 
 runShowKeys :: Always ([((KeyMask, KeySym), NamedAction)] -> X ())
-runShowKeys = Always "keyboard menu" $ Option showKeysDMenu (Always_ fallback)
+runShowKeys = Always "keyboard menu" $ Option showKeysDMenu $ Always_
+  $ FallbackAlone fallback
   where
     -- TODO this should technically depend on dunst
     fallback = const $ spawnNotify
