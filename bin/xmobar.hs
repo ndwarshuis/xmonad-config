@@ -22,9 +22,9 @@ import           System.Directory
 import           System.Exit
 import           System.IO
 import           System.IO.Error
-import           System.Process
-    ( readProcessWithExitCode
-    )
+-- import           System.Process
+--     ( readProcessWithExitCode
+--     )
 
 import           Xmobar.Plugins.Bluetooth
 import           Xmobar.Plugins.ClevoKeyboard
@@ -33,6 +33,7 @@ import           Xmobar.Plugins.IntelBacklight
 import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
 
+import           System.Posix.Signals
 import           XMonad.Core
     ( cfgDir
     , getDirectories
@@ -43,6 +44,10 @@ import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
 import           XMonad.Internal.Dependency
+import           XMonad.Internal.Process
+    ( proc'
+    , readCreateProcessWithExitCode'
+    )
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                          as T
 import           Xmobar
@@ -55,6 +60,9 @@ main = do
   ff <- evalFonts
   cs <- getAllCommands =<< rightPlugins sysClient sesClient
   d <- cfgDir <$> getDirectories
+  -- this is needed to prevent waitForProcess error when forking in plugins (eg
+  -- alsacmd)
+  _ <- installHandler sigCHLD Default Nothing
   -- this is needed to see any printed messages
   hFlush stdout
   mapM_ (maybe skip disconnect) [sysClient, sesClient]
@@ -255,7 +263,8 @@ readInterface n f = IORead n go
           return $ Right $ PostPass x $ fmap ("ignoring extra interface: "++) xs
 
 vpnPresent :: IO (Maybe String)
-vpnPresent = go <$> tryIOError (readProcessWithExitCode "nmcli" args "")
+vpnPresent =
+  go <$> tryIOError (readCreateProcessWithExitCode' (proc' "nmcli" args) "")
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
     go (Right (ExitSuccess, out, _))   = if "vpn" `elem` lines out then Nothing
