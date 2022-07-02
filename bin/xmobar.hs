@@ -363,7 +363,6 @@ data BarMetaFont = BarMetaFont
   , bfFontData :: T.FontData
   }
 
--- font data ~ (offset, fontification string)
 fontString :: (BarFont -> BarMetaFont) -> BarFont -> String
 fontString f bf = b d
   where
@@ -378,15 +377,6 @@ firstFont = minBound
 
 restFonts :: [BarFont]
 restFonts = enumFrom $ succ minBound
-
--- allFonts :: [BarFont]
--- allFonts = enumFrom minBound
-
--- allFontOffsets :: [Int]
--- allFontOffsets = fontOffset <$> allFonts
-
--- allFontStrings :: [String]
--- allFontStrings = fontString <$> allFonts
 
 barFont :: Always T.FontBuilder
 barFont = T.fontFeature "XMobar Text Font" "DejaVu Sans Mono"
@@ -411,20 +401,6 @@ fontData barBuilder nerdBuilder bf = case bf of
   where
     nerd o s = BarMetaFont o nerdBuilder
       $ T.defFontData { T.pixelsize = Just s, T.size = Nothing }
-
--- barFont :: Always T.FontBuilder
--- barFont = T.fmtFontXFT T.font
---   { T.family = "DejaVu Sans Mono"
---   , T.size = Just 11
---   , T.weight = Just T.Bold
---   }
-
--- nerdFont :: Int -> String
--- nerdFont size = T.fmtFontXFT T.font
---   { T.family = "Symbols Nerd Font"
---   , T.size = Nothing
---   , T.pixelsize = Just size
---   }
 
 fontifyText :: BarFont -> String -> String
 fontifyText fnt txt = concat ["<fn=", show $ fromEnum fnt, ">", txt, "</fn>"]
