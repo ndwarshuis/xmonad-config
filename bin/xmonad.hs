@@ -92,6 +92,7 @@ run = do
            { tsChildPIDs = [p]
            , tsChildHandles = [h]
            }
+  fb <- evalAlways T.defFont
   ext <- evalExternal $ externalBindings ts db
   sk <- evalAlways runShowKeys
   ha <- evalAlways runHandleACPI
@@ -103,7 +104,7 @@ run = do
              $ docks
              $ def { terminal = myTerm
                    , modMask = myModMask
-                   , layoutHook = myLayouts
+                   , layoutHook = myLayouts fb
                    , manageHook = myManageHook
                    , handleEventHook = myEventHook ha
                    , startupHook = myStartupHook
@@ -262,12 +263,12 @@ allDWs = [ xsaneDynamicWorkspace
 --------------------------------------------------------------------------------
 -- | Layout configuration
 
-myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
+myLayouts fb = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
   $ onWorkspace (dwTag gimpDynamicWorkspace) gimpLayout
   $ mkToggle (single HIDE)
   $ tall ||| fulltab ||| full
   where
-    addTopBar = noFrillsDeco shrinkText T.tabbedTheme
+    addTopBar = noFrillsDeco shrinkText $ T.tabbedTheme fb
     tall = renamed [Replace "Tall"]
       $ avoidStruts
       $ addTopBar
@@ -276,7 +277,7 @@ myLayouts = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
     fulltab = renamed [Replace "Tabbed"]
       $ avoidStruts
       $ noBorders
-      $ tabbedAlways shrinkText T.tabbedTheme
+      $ tabbedAlways shrinkText $ T.tabbedTheme fb
     full = renamed [Replace "Full"]
       $ noBorders Full
     vmLayout = noBorders Full
@@ -610,7 +611,7 @@ externalBindings ts db =
     , KeyBinding "M-S-M1-," "keyboard min" $ ck bctlMin
     , KeyBinding "M-S-M1-." "keyboard max" $ ck bctlMax
     , KeyBinding "M-<End>" "power menu" $ Right runPowerPrompt
-    , KeyBinding "M-<Home>" "quit xmonad" quitf
+    , KeyBinding "M-<Home>" "quit xmonad" $ Left runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" $ Left runScreenLock
     -- M-<F1> reserved for showing the keymap
     , KeyBinding "M-<F2>" "restart xmonad" restartf
@@ -630,7 +631,6 @@ externalBindings ts db =
     ib = Left . brightessControls intelBacklightControls
     ck = Left . brightessControls clevoKeyboardControls
     ftrAlways n = Right . Always n . Always_ . FallbackAlone
-    quitf = ftrAlways "quit function" runQuitPrompt
     restartf = ftrAlways "restart function" (runCleanup ts db >> runRestart)
     recompilef = ftrAlways "recompile function" runRecompile
 

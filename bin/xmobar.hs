@@ -52,20 +52,20 @@ main :: IO ()
 main = do
   sysClient <- getDBusClient True
   sesClient <- getDBusClient False
+  ff <- evalFonts
   cs <- getAllCommands =<< rightPlugins sysClient sesClient
   d <- cfgDir <$> getDirectories
   -- this is needed to see any printed messages
   hFlush stdout
   mapM_ (maybe skip disconnect) [sysClient, sesClient]
-  xmobar $ config cs d
+  xmobar $ config ff cs d
 
-config :: BarRegions -> String -> Config
-config br confDir = defaultConfig
-  -- TODO head makes me feel icky
-  { font = head allFontStrings
-  , additionalFonts = drop 1 allFontStrings
-  , textOffset = head allFontOffsets
-  , textOffsets = drop 1 allFontOffsets
+config :: (BarFont -> BarMetaFont) -> BarRegions -> String -> Config
+config ff br confDir = defaultConfig
+  { font = fontString ff firstFont
+  , additionalFonts = fontString ff <$> restFonts
+  , textOffset = fontOffset ff firstFont
+  , textOffsets = fontOffset ff <$> restFonts
   , bgColor = T.bgColor
   , fgColor = T.fgColor
   , position = BottomSize C 100 24
@@ -255,14 +255,14 @@ readInterface n f = IORead n go
           return $ Right $ PostPass x $ fmap ("ignoring extra interface: "++) xs
 
 vpnPresent :: IO (Maybe String)
-vpnPresent = do
-  res <- tryIOError $ readProcessWithExitCode "nmcli" args ""
-  -- TODO provide some error messages
-  return $ case res of
-    (Right (ExitSuccess, out, _)) -> if "vpn" `elem` lines out then Nothing else Just "vpn not found"
-    _                             -> Just "puke"
+vpnPresent = go <$> tryIOError (readProcessWithExitCode "nmcli" args "")
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
+    go (Right (ExitSuccess, out, _))   = if "vpn" `elem` lines out then Nothing
+                                         else Just "vpn not found"
+    go (Right (ExitFailure c, _, err)) = Just $ "vpn search exited with code "
+                                         ++ show c ++ ": " ++ err
+    go (Left e)                        = Just $ show e
 
 xmobarDBus :: String -> DBusDependency_ -> CmdSpec -> Maybe Client -> BarFeature
 xmobarDBus n dep cmd cl = sometimesDBus cl n "xmobar dbus interface"
@@ -298,7 +298,7 @@ getEthernet client = sometimes1 "ethernet status indicator" "sysfs path"
     readEth = readInterface "read ethernet interface" isEthernet
 
 getBattery :: BarFeature
-getBattery = sometimesIO "battery level indicator" "sysfs path"
+getBattery = sometimesIO_ "battery level indicator" "sysfs path"
   (Only_ $ sysTest "Test if battery is present" hasBattery)
   batteryCmd
 
@@ -312,7 +312,7 @@ getBt :: Maybe Client -> BarFeature
 getBt = xmobarDBus "bluetooth status indicator" btDep btCmd
 
 getAlsa :: BarFeature
-getAlsa = sometimesIO "volume level indicator" "alsactl"
+getAlsa = sometimesIO_ "volume level indicator" "alsactl"
   (Only_ $ sysExe "alsactl") alsaCmd
 
 getBl :: Maybe Client -> BarFeature
@@ -341,51 +341,83 @@ getAllCommands right = do
 --------------------------------------------------------------------------------
 -- | fonts
 
-data Font = Text
+data BarFont = Text
   | IconSmall
   | IconMedium
   | IconLarge
   | IconXLarge
   deriving (Eq, Enum, Bounded, Show)
 
+data BarMetaFont = BarMetaFont
+  { bfOffset   :: Int
+  , bfBuilder  :: T.FontBuilder
+  , bfFontData :: T.FontData
+  }
+
 -- font data ~ (offset, fontification string)
-fontData :: Font -> (Int, String)
-fontData Text       = (16, barFont)
-fontData IconSmall  = (16, nerdFont 13)
-fontData IconMedium = (17, nerdFont 15)
-fontData IconLarge  = (17, nerdFont 18)
-fontData IconXLarge = (18, nerdFont 20)
+fontString :: (BarFont -> BarMetaFont) -> BarFont -> String
+fontString f bf = b d
+  where
+    b = bfBuilder $ f bf
+    d = bfFontData $ f bf
 
-fontString :: Font -> String
-fontString = snd . fontData
+fontOffset :: (BarFont -> BarMetaFont) -> BarFont -> Int
+fontOffset f = bfOffset . f
 
-fontOffset :: Font -> Int
-fontOffset = fst . fontData
+firstFont :: BarFont
+firstFont = minBound
 
-allFonts :: [Font]
-allFonts = enumFrom minBound
+restFonts :: [BarFont]
+restFonts = enumFrom $ succ minBound
 
-allFontOffsets :: [Int]
-allFontOffsets = fontOffset <$> allFonts
+-- allFonts :: [BarFont]
+-- allFonts = enumFrom minBound
 
-allFontStrings :: [String]
-allFontStrings = fontString <$> allFonts
+-- allFontOffsets :: [Int]
+-- allFontOffsets = fontOffset <$> allFonts
 
-barFont :: String
-barFont = T.fmtFontXFT T.font
-  { T.family = "DejaVu Sans Mono"
-  , T.size = Just 11
-  , T.weight = Just T.Bold
-  }
+-- allFontStrings :: [String]
+-- allFontStrings = fontString <$> allFonts
 
-nerdFont :: Int -> String
-nerdFont size = T.fmtFontXFT T.font
-  { T.family = "Symbols Nerd Font"
-  , T.size = Nothing
-  , T.pixelsize = Just size
-  }
+barFont :: Always T.FontBuilder
+barFont = T.fontFeature "XMobar Text Font" "DejaVu Sans Mono"
 
-fontifyText :: Font -> String -> String
+nerdFont :: Always T.FontBuilder
+nerdFont = T.fontFeature "XMobar Icon Font" "Symbols Nerd Font"
+
+evalFonts :: IO (BarFont -> BarMetaFont)
+evalFonts = do
+  bf <- evalAlways barFont
+  nf <- evalAlways nerdFont
+  return $ fontData bf nf
+
+fontData :: T.FontBuilder -> T.FontBuilder -> BarFont -> BarMetaFont
+fontData barBuilder nerdBuilder bf = case bf of
+  Text       -> BarMetaFont 16 barBuilder
+                $ T.defFontData { T.weight = Just T.Bold, T.size = Just 11 }
+  IconSmall  -> nerd 16 13
+  IconMedium -> nerd 17 15
+  IconLarge  -> nerd 17 18
+  IconXLarge -> nerd 18 20
+  where
+    nerd o s = BarMetaFont o nerdBuilder
+      $ T.defFontData { T.pixelsize = Just s, T.size = Nothing }
+
+-- barFont :: Always T.FontBuilder
+-- barFont = T.fmtFontXFT T.font
+--   { T.family = "DejaVu Sans Mono"
+--   , T.size = Just 11
+--   , T.weight = Just T.Bold
+--   }
+
+-- nerdFont :: Int -> String
+-- nerdFont size = T.fmtFontXFT T.font
+--   { T.family = "Symbols Nerd Font"
+--   , T.size = Nothing
+--   , T.pixelsize = Just size
+--   }
+
+fontifyText :: BarFont -> String -> String
 fontifyText fnt txt = concat ["<fn=", show $ fromEnum fnt, ">", txt, "</fn>"]
 
 --------------------------------------------------------------------------------

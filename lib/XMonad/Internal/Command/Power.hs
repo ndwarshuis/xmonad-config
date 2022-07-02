@@ -12,8 +12,8 @@ module XMonad.Internal.Command.Power
   , runSuspendPrompt
   , runQuitPrompt
   , hasBattery
-
-
+  , suspendPrompt
+  , quitPrompt
   , powerPrompt
   ) where
 
@@ -45,11 +45,14 @@ myScreenlock = "screenlock"
 myOptimusManager :: String
 myOptimusManager = "optimus-manager"
 
+myPrimeOffload :: String
+myPrimeOffload = "prime-offload"
+
 --------------------------------------------------------------------------------
 -- | Core commands
 
 runScreenLock :: SometimesX
-runScreenLock = sometimesExe "screen locker" "i3lock script" True myScreenlock
+runScreenLock = sometimesExe "screen locker" "i3lock script" False myScreenlock
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -64,14 +67,27 @@ runReboot :: X ()
 runReboot = spawn "systemctl reboot"
 
 --------------------------------------------------------------------------------
--- | Confirm prompt wrappers
+-- | Confirmation prompts
+
+confirmPrompt' :: String -> X () -> T.FontBuilder -> X ()
+confirmPrompt' s x fb = confirmPrompt (T.promptTheme fb) s x
+
+suspendPrompt :: T.FontBuilder -> X ()
+suspendPrompt = confirmPrompt' "suspend?" runSuspend
+
+quitPrompt :: T.FontBuilder -> X ()
+quitPrompt = confirmPrompt' "quit?" $ io exitSuccess
+
+sometimesPrompt :: String -> (T.FontBuilder -> X ()) -> SometimesX
+sometimesPrompt n = sometimesIO n (n ++ " command")
+  $ Only $ IOAlways T.defFont id
 
 -- TODO doesn't this need to also lock the screen?
-runSuspendPrompt :: X ()
-runSuspendPrompt = confirmPrompt T.promptTheme "suspend?" runSuspend
+runSuspendPrompt :: SometimesX
+runSuspendPrompt = sometimesPrompt "suspend prompt" suspendPrompt
 
-runQuitPrompt :: X ()
-runQuitPrompt = confirmPrompt T.promptTheme "quit?" $ io exitSuccess
+runQuitPrompt :: SometimesX
+runQuitPrompt = sometimesPrompt "quit prompt" quitPrompt
 
 --------------------------------------------------------------------------------
 -- | Nvidia Optimus
@@ -91,21 +107,25 @@ hasBattery = do
     readType p = fromRight [] <$> tryIOError (readFile $ syspath </> p </> "type")
     syspath = "/sys/class/power_supply"
 
-runOptimusPrompt' :: X ()
-runOptimusPrompt' = do
+runOptimusPrompt' :: T.FontBuilder -> X ()
+runOptimusPrompt' fb = do
   nvidiaOn <- io isUsingNvidia
   switch $ if nvidiaOn then "integrated" else "nvidia"
   where
-    switch mode = confirmPrompt T.promptTheme (prompt mode) (cmd mode)
+    switch mode = confirmPrompt' (prompt mode) (cmd mode) fb
     prompt mode = "gpu switch to " ++ mode ++ "?"
     cmd mode = spawn $
-      "prime-offload"
+      myPrimeOffload
       #!&& unwords [myOptimusManager, "--switch", mode, "--no-confirm"]
       #!&& "killall xmonad"
 
 runOptimusPrompt :: SometimesX
-runOptimusPrompt = sometimesIO "graphics switcher" "optimus manager"
-  (Only_ $ localExe myOptimusManager) runOptimusPrompt'
+runOptimusPrompt = Sometimes "graphics switcher" [s]
+  where
+    s = Subfeature { sfData = r, sfName = "optimus manager", sfLevel = Error }
+    r = IORoot runOptimusPrompt' t
+    t = And1 (Only $ IOAlways T.defFont id)
+      $ And_ (Only_ $ sysExe myOptimusManager) (Only_ $ sysExe myPrimeOffload)
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt
@@ -134,18 +154,21 @@ instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
 
 runPowerPrompt :: AlwaysX
-runPowerPrompt = always1 "power prompt" "lock-enabled prompt" withLock powerPromptNoLock
+runPowerPrompt = Always "power prompt" $ Option sf fallback
   where
-    withLock =  IORoot powerPrompt (Only $ IOSometimes runScreenLock id)
+    sf = Subfeature withLock "lock-enabled prompt" Error
+    withLock = IORoot (uncurry powerPrompt) tree
+    tree = And12 (,) (Only $ IOSometimes runScreenLock id) (Only $ IOAlways T.defFont id)
+    fallback = Always_ $ FallbackTree powerPromptNoLock $ FallbackBottom T.defFont
 
-powerPromptNoLock :: X ()
+powerPromptNoLock :: T.FontBuilder -> X ()
 powerPromptNoLock = powerPrompt skip
 
-powerPrompt :: X () -> X ()
-powerPrompt lock = mkXPrompt PowerPrompt theme comp executeMaybeAction
+powerPrompt :: X () -> T.FontBuilder -> X ()
+powerPrompt lock fb = mkXPrompt PowerPrompt theme comp executeMaybeAction
   where
     comp = mkComplFunFromList theme []
-    theme = T.promptTheme { promptKeymap = keymap }
+    theme = (T.promptTheme fb) { promptKeymap = keymap }
     keymap = M.fromList
       $ ((controlMask, xK_g), quit) :
       map (first $ (,) 0)

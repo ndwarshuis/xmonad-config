@@ -27,6 +27,7 @@ import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
+import           XMonad.Internal.Theme                    (FontBuilder, defFont)
 
 --------------------------------------------------------------------------------
 -- | Data structure to hold the ACPI events I care about
@@ -90,17 +91,17 @@ listenACPI = do
 acpiPath :: FilePath
 acpiPath = "/var/run/acpid.socket"
 
-socketDep :: Tree_ IODependency_
+socketDep :: IOTree_
 socketDep = Only_ $ pathR acpiPath
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)
-handleACPI :: X () -> String -> X ()
-handleACPI lock tag = do
+handleACPI :: FontBuilder -> X () -> String -> X ()
+handleACPI fb lock tag = do
   let acpiTag = toEnum <$> readMaybe tag :: Maybe ACPIEvent
   forM_ acpiTag $ \case
-    Power -> powerPrompt lock
-    Sleep -> runSuspendPrompt
+    Power -> powerPrompt lock fb
+    Sleep -> suspendPrompt fb
     LidClose -> do
       status <- io isDischarging
       -- only run suspend if battery exists and is discharging
@@ -113,9 +114,12 @@ handleACPI lock tag = do
 -- | Spawn a new thread that will listen for ACPI events on the acpid socket
 -- and send ClientMessage events when it receives them
 runPowermon :: SometimesIO
-runPowermon = sometimesIO "ACPI event monitor" "acpid" socketDep listenACPI
+runPowermon = sometimesIO_ "ACPI event monitor" "acpid" socketDep listenACPI
 
 runHandleACPI :: Always (String -> X ())
-runHandleACPI = always1 "ACPI event handler" "acpid" withLock $ handleACPI skip
+runHandleACPI = Always "ACPI event handler" $ Option sf fallback
   where
-    withLock = IORoot handleACPI (Only $ IOSometimes runScreenLock id)
+    sf = Subfeature withLock "acpid prompt" Error
+    withLock = IORoot (uncurry handleACPI)
+      $ And12 (,) (Only $ IOAlways defFont id) (Only $ IOSometimes runScreenLock id)
+    fallback = Always_ $ FallbackTree (`handleACPI` skip) $ FallbackBottom defFont

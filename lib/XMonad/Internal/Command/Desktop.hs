@@ -95,7 +95,7 @@ runTerm :: SometimesX
 runTerm = sometimesExe "terminal" "urxvt" True myTerm
 
 runTMux :: SometimesX
-runTMux = sometimesIO "terminal multiplexer" "tmux" deps act
+runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
   where
     deps = listToAnds (sysExe myTerm) $ fmap sysExe ["tmux", "bash"]
     act = spawn
@@ -106,7 +106,7 @@ runTMux = sometimesIO "terminal multiplexer" "tmux" deps act
     msg = "could not connect to tmux session"
 
 runCalc :: SometimesX
-runCalc = sometimesIO "calculator" "R" deps act
+runCalc = sometimesIO_ "calculator" "R" deps act
   where
     deps = toAnd (sysExe myTerm) (sysExe "R")
     act = spawnCmd myTerm ["-e", "R"]
@@ -155,7 +155,7 @@ playSound file = do
 
 featureSound :: String -> FilePath -> X () -> X () -> SometimesX
 featureSound n file pre post =
-  sometimesIO ("volume " ++ n ++ " control") "paplay" (Only_ $ sysExe "paplay")
+  sometimesIO_ ("volume " ++ n ++ " control") "paplay" (Only_ $ sysExe "paplay")
   $ pre >> playSound file >> post
 
 runVolumeDown :: SometimesX
@@ -194,7 +194,7 @@ runNotificationContext =
 
 runToggleBluetooth :: SometimesX
 runToggleBluetooth =
-  sometimesIO "bluetooth toggle" "bluetoothctl" (Only_ $ sysExe myBluetooth)
+  sometimesIO_ "bluetooth toggle" "bluetoothctl" (Only_ $ sysExe myBluetooth)
   $ spawn
   $ myBluetooth ++ " show | grep -q \"Powered: no\""
   #!&& "a=on"
@@ -203,7 +203,7 @@ runToggleBluetooth =
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
 
 runToggleEthernet :: SometimesX
-runToggleEthernet = sometimesIO "ethernet toggle" "nmcli" (Only_ $ sysExe "nmcli")
+runToggleEthernet = sometimesIO_ "ethernet toggle" "nmcli" (Only_ $ sysExe "nmcli")
   $ spawn
   $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
   #!&& "a=connect"
@@ -212,7 +212,7 @@ runToggleEthernet = sometimesIO "ethernet toggle" "nmcli" (Only_ $ sysExe "nmcli
   #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
 runStartISyncTimer :: SometimesX
-runStartISyncTimer = sometimesIO "isync timer" "mbsync timer"
+runStartISyncTimer = sometimesIO_ "isync timer" "mbsync timer"
   (Only_ $ sysdUser "mbsync.timer")
   $ spawn
   $ "systemctl --user start mbsync.timer"
@@ -220,7 +220,7 @@ runStartISyncTimer = sometimesIO "isync timer" "mbsync timer"
   #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
 
 runStartISyncService :: SometimesX
-runStartISyncService = sometimesIO "isync" "mbsync service"
+runStartISyncService = sometimesIO_ "isync" "mbsync service"
   (Only_ $ sysdUser "mbsync.service")
   $ spawn
   $ "systemctl --user start mbsync.service"
@@ -266,7 +266,7 @@ getCaptureDir = do
     fallback = (</> ".local/share") <$> getHomeDirectory
 
 runFlameshot :: String -> String -> SometimesX
-runFlameshot n mode = sometimesIO n "flameshot" (Only_ $ sysExe myCapture)
+runFlameshot n mode = sometimesIO_ n "flameshot" (Only_ $ sysExe myCapture)
   $ spawnCmd myCapture [mode]
 
 -- TODO this will steal focus from the current window (and puts it
@@ -283,7 +283,7 @@ runScreenCapture :: SometimesX
 runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: SometimesX
-runCaptureBrowser = sometimesIO "screen capture browser" "feh"
+runCaptureBrowser = sometimesIO_ "screen capture browser" "feh"
   (Only_ $ sysExe myImageBrowser) $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

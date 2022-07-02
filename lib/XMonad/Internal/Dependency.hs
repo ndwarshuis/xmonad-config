@@ -29,6 +29,10 @@ module XMonad.Internal.Dependency
   , Root(..)
   , Tree(..)
   , Tree_(..)
+  , IOTree
+  , IOTree_
+  , DBusTree
+  , DBusTree_
   , IODependency(..)
   , IODependency_(..)
   , SystemDependency(..)
@@ -61,6 +65,7 @@ module XMonad.Internal.Dependency
   , always1
   , sometimes1
   , sometimesIO
+  , sometimesIO_
   , sometimesDBus
   , sometimesExe
   , sometimesExeArgs
@@ -69,6 +74,7 @@ module XMonad.Internal.Dependency
   -- dependency construction
   , sysExe
   , localExe
+  , fontFam
   , sysdSystem
   , sysdUser
   , listToAnds
@@ -187,12 +193,14 @@ type Feature a = Either (Sometimes a) (Always a)
 data Always a = Always String (Always_ a)
 
 -- | Feature that is guaranteed to work (inner data)
-data Always_ a = Option (SubfeatureRoot a) (Always_ a) | Always_ (FallbackRoot a)
+data Always_ a = Option (SubfeatureRoot a) (Always_ a)
+  | Always_ (FallbackRoot a)
 
 -- | Root of a fallback action for an always
 -- This may either be a lone action or a function that depends on the results
 -- from other Always features.
-data FallbackRoot a = FallbackAlone a | forall p. FallbackTree (p -> a) (FallbackStack p)
+data FallbackRoot a = FallbackAlone a
+  | forall p. FallbackTree (p -> a) (FallbackStack p)
 
 -- | Always features that are used as a payload for a fallback action
 data FallbackStack p = FallbackBottom (Always p)
@@ -225,13 +233,12 @@ data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord)
 -- | An action and its dependencies
 -- May be a plain old monad or be DBus-dependent, in which case a client is
 -- needed
-data Root a = forall p. IORoot (p -> a) (Tree IODependency IODependency_ p)
-  | IORoot_ a (Tree_ IODependency_)
-  | forall p. DBusRoot (p -> Client -> a)
-    (Tree IODependency DBusDependency_ p) (Maybe Client)
-  | DBusRoot_ (Client -> a) (Tree_ DBusDependency_) (Maybe Client)
+data Root a = forall p. IORoot (p -> a) (IOTree p)
+  | IORoot_ a IOTree_
+  | forall p. DBusRoot (p -> Client -> a) (DBusTree p) (Maybe Client)
+  | DBusRoot_ (Client -> a) DBusTree_ (Maybe Client)
 
--- | The dependency tree with rules to merge results
+-- | The dependency tree with rule to merge results when needed
 data Tree d d_ p =
   forall x y. And12 (x -> y -> p) (Tree d d_ x) (Tree d d_ y)
   | And1 (Tree d d_ p) (Tree_ d_)
@@ -240,10 +247,13 @@ data Tree d d_ p =
   | Only (d p)
 
 -- | A dependency tree without functions to merge results
-data Tree_ d =
-  And_ (Tree_ d) (Tree_ d)
-  | Or_ (Tree_ d) (Tree_ d)
-  | Only_ d
+data Tree_ d = And_ (Tree_ d) (Tree_ d) | Or_ (Tree_ d) (Tree_ d) | Only_ d
+
+-- | Shorthand tree types for lazy typers
+type IOTree p = Tree IODependency IODependency_ p
+type DBusTree p = Tree IODependency DBusDependency_ p
+type IOTree_ = Tree_ IODependency_
+type DBusTree_ = Tree_ DBusDependency_
 
 -- | A dependency that only requires IO to evaluate
 data IODependency p = IORead String (IO (Result p))
@@ -260,6 +270,7 @@ data IODependency_ = IOSystem_ SystemDependency
   | forall a. IOSometimes_ (Sometimes a)
 
 data SystemDependency = Executable Bool FilePath
+  | FontFamily String
   | AccessiblePath FilePath Bool Bool
   | IOTest String (IO (Maybe String))
   | Systemd UnitType String
@@ -434,12 +445,13 @@ testSysDependency (Executable sys bin) = maybe (Just msg) (const Nothing)
   where
     msg = unwords [e, "executable", singleQuote bin, "not found"]
     e = if sys then "system" else "local"
-testSysDependency (Systemd t n) = do
-  (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
-  return $ case rc of
-    ExitSuccess -> Nothing
-    _           -> Just $ "systemd " ++ unitType t ++ " unit '" ++ n ++ "' not found"
+testSysDependency (FontFamily fam) = shellTest cmd msg
   where
+    msg = unwords ["font family", singleQuote fam, "not found"]
+    cmd = fmtCmd "fc-list" ["-q", singleQuote fam]
+testSysDependency (Systemd t n) = shellTest cmd msg
+  where
+    msg = unwords ["systemd", unitType t, "unit", singleQuote n, "not found"]
     cmd = fmtCmd "systemctl" $ ["--user" | t == UserUnit] ++ ["status", n]
 testSysDependency (AccessiblePath p r w) = permMsg <$> getPermissionsSafe p
   where
@@ -454,6 +466,13 @@ testSysDependency (AccessiblePath p r w) = permMsg <$> getPermissionsSafe p
         (_, Just False)          -> Just "file not writable"
         _                        -> Nothing
 
+
+shellTest :: String -> String -> IO (Maybe String)
+shellTest cmd msg = do
+  (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
+  return $ case rc of
+    ExitSuccess -> Nothing
+    _           -> Just msg
 
 unitType :: UnitType -> String
 unitType SystemUnit = "system"
@@ -560,8 +579,11 @@ sometimes1 = sometimes1_ Error
 always1 :: String -> String -> Root a -> a -> Always a
 always1 = always1_ Error
 
-sometimesIO :: String -> String -> Tree_ IODependency_ -> a -> Sometimes a
-sometimesIO fn n t x = sometimes1 fn n $ IORoot_ x t
+sometimesIO_ :: String -> String -> IOTree_ -> a -> Sometimes a
+sometimesIO_ fn n t x = sometimes1 fn n $ IORoot_ x t
+
+sometimesIO :: String -> String -> IOTree p -> (p -> a) -> Sometimes a
+sometimesIO fn n t x = sometimes1 fn n $ IORoot x t
 
 sometimesExe :: MonadIO m => String -> String -> Bool -> FilePath -> Sometimes (m ())
 sometimesExe fn n sys path = sometimesExeArgs fn n sys path []
@@ -569,7 +591,7 @@ sometimesExe fn n sys path = sometimesExeArgs fn n sys path []
 sometimesExeArgs :: MonadIO m => String -> String -> Bool -> FilePath
   -> [String] -> Sometimes (m ())
 sometimesExeArgs fn n sys path args =
-  sometimesIO fn n (Only_ (IOSystem_ $ Executable sys path)) $ spawnCmd path args
+  sometimesIO_ fn n (Only_ (IOSystem_ $ Executable sys path)) $ spawnCmd path args
 
 sometimesDBus :: Maybe Client -> String -> String -> Tree_ DBusDependency_
   -> (Client -> a) -> Sometimes a
@@ -597,6 +619,9 @@ toAnd a b = And_ (Only_ a) (Only_ b)
 
 exe :: Bool -> String -> IODependency_
 exe b = IOSystem_ . Executable b
+
+fontFam :: String -> IODependency_
+fontFam = IOSystem_ . FontFamily
 
 sysExe :: String -> IODependency_
 sysExe = exe True
@@ -723,11 +748,11 @@ dataTree_ f_ = go
     go (Only_ d)  = uncurry jsonLeafUntested $ f_ d
 
 dataIODependency :: IODependency p -> DependencyData
-dataIODependency d = case d of
-  (IORead n _)      -> (Q "ioread", [("desc", JSON_Q $ Q n)])
+dataIODependency d = first Q $ case d of
+  (IORead n _)      -> ("ioread", [("desc", JSON_Q $ Q n)])
   -- TODO make this actually useful (I actually need to name my features)
-  (IOSometimes _ _) -> (Q "sometimes", [])
-  (IOAlways _ _)    -> (Q "always", [])
+  (IOSometimes _ _) -> ("sometimes", [])
+  (IOAlways _ _)    -> ("always", [])
 
 dataIODependency_ :: IODependency_ -> DependencyData
 dataIODependency_ d = case d of
@@ -735,18 +760,19 @@ dataIODependency_ d = case d of
   (IOSometimes_ _) -> (Q "sometimes", [])
 
 dataSysDependency :: SystemDependency -> DependencyData
-dataSysDependency d = do
+dataSysDependency d = first Q $
   case d of
-    (Executable sys path) -> (Q "executable", [ ("system", JSON_UQ $ jsonBool sys)
+    (Executable sys path) -> ("executable", [ ("system", JSON_UQ $ jsonBool sys)
                                             , ("path", JSON_Q $ Q path)
                                             ])
-    (IOTest desc _) -> (Q "iotest", [("desc", JSON_Q $ Q desc)])
-    (AccessiblePath p r w) -> (Q "path", [ ("path", JSON_Q $ Q p)
-                                         , ("readable", JSON_UQ $ jsonBool r)
-                                         , ("writable", JSON_UQ $ jsonBool w)
-                                         ])
-    (Systemd t n) -> (Q "systemd", [ ("unittype", JSON_Q $ Q $ unitType t)
-                                   , ("unit", JSON_Q $ Q n)])
+    (IOTest desc _) -> ("iotest", [("desc", JSON_Q $ Q desc)])
+    (FontFamily fam) -> ("font", [("family", JSON_Q $ Q fam)])
+    (AccessiblePath p r w) -> ("path", [ ("path", JSON_Q $ Q p)
+                                       , ("readable", JSON_UQ $ jsonBool r)
+                                       , ("writable", JSON_UQ $ jsonBool w)
+                                       ])
+    (Systemd t n) -> ("systemd", [ ("unittype", JSON_Q $ Q $ unitType t)
+                                 , ("unit", JSON_Q $ Q n)])
 
 dataDBusDependency :: DBusDependency_ -> DependencyData
 dataDBusDependency d =

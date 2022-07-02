@@ -72,7 +72,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 -- | Exported Commands
 
 runDevMenu :: SometimesX
-runDevMenu = sometimesIO "device manager" "rofi devices" t x
+runDevMenu = sometimesIO_ "device manager" "rofi devices" t x
   where
     t = Only_ $ localExe myDmenuDevices
     x = do
@@ -87,12 +87,12 @@ runBTMenu = sometimesExeArgs "bluetooth selector" "rofi bluetooth" False
   myDmenuBluetooth $ "-c":themeArgs "#0044bb"
 
 runBwMenu :: SometimesX
-runBwMenu = sometimesIO "password manager" "rofi bitwarden"
+runBwMenu = sometimesIO_ "password manager" "rofi bitwarden"
   (Only_ $ localExe myDmenuPasswords) $ spawnCmd myDmenuPasswords
   $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 runVPNMenu :: SometimesX
-runVPNMenu = sometimesIO "VPN selector" "rofi VPN"
+runVPNMenu = sometimesIO_ "VPN selector" "rofi VPN"
   (Only_ $ localExe myDmenuVPN) $ spawnCmd myDmenuVPN
   $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
 
@@ -103,7 +103,7 @@ runAppMenu :: SometimesX
 runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 
 runClipMenu :: SometimesX
-runClipMenu = sometimesIO "clipboard manager" "rofi greenclip" deps act
+runClipMenu = sometimesIO_ "clipboard manager" "rofi greenclip" deps act
   where
     act = spawnCmd myDmenuCmd args
     deps = toAnd (sysExe myDmenuCmd) (sysExe "greenclip")
