@@ -74,7 +74,6 @@ module XMonad.Internal.Dependency
   -- dependency construction
   , sysExe
   , localExe
-  , fontFam
   , sysdSystem
   , sysdUser
   , listToAnds
@@ -83,6 +82,9 @@ module XMonad.Internal.Dependency
   , pathRW
   , pathW
   , sysTest
+
+  -- misc
+  , shellTest
   ) where
 
 import           Control.Monad.IO.Class
@@ -255,9 +257,15 @@ type DBusTree p = Tree IODependency DBusDependency_ p
 type IOTree_ = Tree_ IODependency_
 type DBusTree_ = Tree_ DBusDependency_
 
--- | A dependency that only requires IO to evaluate
-data IODependency p = IORead String (IO (Result p))
+-- | A dependency that only requires IO to evaluate (with payload)
+data IODependency p =
+  -- an IO action that yields a payload
+  IORead String (IO (Result p))
+  -- always yields a payload
+  | IOConst p
+  -- an always that yields a payload
   | forall a. IOAlways (Always a) (a -> p)
+  -- a sometimes that yields a payload
   | forall a. IOSometimes (Sometimes a) (a -> p)
 
 -- | A dependency pertaining to the DBus
@@ -269,8 +277,10 @@ data DBusDependency_ = Bus BusName
 data IODependency_ = IOSystem_ SystemDependency
   | forall a. IOSometimes_ (Sometimes a)
 
-data SystemDependency = Executable Bool FilePath
-  | FontFamily String
+-- | A system component to an IODependency
+-- This name is dumb, but most constructors should be obvious
+data SystemDependency =
+  Executable Bool FilePath
   | AccessiblePath FilePath Bool Bool
   | IOTest String (IO (Maybe String))
   | Systemd UnitType String
@@ -411,6 +421,7 @@ testTree test_ test = go
 
 testIODependency :: IODependency p -> IO (Result p)
 testIODependency (IORead _ t)      = t
+testIODependency (IOConst c)       = return $ Right $ PostPass c []
 -- TODO this is a bit odd because this is a dependency that will always
 -- succeed, which kinda makes this pointless. The only reason I would want this
 -- is if I want to have a built-in logic to "choose" a payload to use in
@@ -445,10 +456,6 @@ testSysDependency (Executable sys bin) = maybe (Just msg) (const Nothing)
   where
     msg = unwords [e, "executable", singleQuote bin, "not found"]
     e = if sys then "system" else "local"
-testSysDependency (FontFamily fam) = shellTest cmd msg
-  where
-    msg = unwords ["font family", singleQuote fam, "not found"]
-    cmd = fmtCmd "fc-list" ["-q", singleQuote fam]
 testSysDependency (Systemd t n) = shellTest cmd msg
   where
     msg = unwords ["systemd", unitType t, "unit", singleQuote n, "not found"]
@@ -620,9 +627,6 @@ toAnd a b = And_ (Only_ a) (Only_ b)
 exe :: Bool -> String -> IODependency_
 exe b = IOSystem_ . Executable b
 
-fontFam :: String -> IODependency_
-fontFam = IOSystem_ . FontFamily
-
 sysExe :: String -> IODependency_
 sysExe = exe True
 
@@ -749,10 +753,10 @@ dataTree_ f_ = go
 
 dataIODependency :: IODependency p -> DependencyData
 dataIODependency d = first Q $ case d of
-  (IORead n _)      -> ("ioread", [("desc", JSON_Q $ Q n)])
-  -- TODO make this actually useful (I actually need to name my features)
-  (IOSometimes _ _) -> ("sometimes", [])
-  (IOAlways _ _)    -> ("always", [])
+  (IORead n _)                    -> ("ioread", [("desc", JSON_Q $ Q n)])
+  (IOConst _)                     -> ("const", [])
+  (IOSometimes (Sometimes n _) _) -> ("sometimes", [("name", JSON_Q $ Q n)])
+  (IOAlways (Always n _) _)       -> ("always", [("name", JSON_Q $ Q n)])
 
 dataIODependency_ :: IODependency_ -> DependencyData
 dataIODependency_ d = case d of
@@ -766,7 +770,6 @@ dataSysDependency d = first Q $
                                             , ("path", JSON_Q $ Q path)
                                             ])
     (IOTest desc _) -> ("iotest", [("desc", JSON_Q $ Q desc)])
-    (FontFamily fam) -> ("font", [("family", JSON_Q $ Q fam)])
     (AccessiblePath p r w) -> ("path", [ ("path", JSON_Q $ Q p)
                                        , ("readable", JSON_UQ $ jsonBool r)
                                        , ("writable", JSON_UQ $ jsonBool w)

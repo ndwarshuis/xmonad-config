@@ -5,16 +5,19 @@
 
 module XMonad.Internal.DBus.Control
   ( Client
-  , startXMonadService
+  , DBusState(..)
+  , connectDBus
+  , connectDBusX
+  , disconnectDBus
+  , disconnectDBusX
   , getDBusClient
   , withDBusClient
   , withDBusClient_
-  , stopXMonadService
   , disconnect
   , dbusExporters
   ) where
 
-import           Control.Monad                                  (forM_, void)
+import           Control.Monad
 
 import           DBus
 import           DBus.Client
@@ -26,17 +29,42 @@ import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
 import           XMonad.Internal.Dependency
 
-startXMonadService :: IO (Maybe Client)
-startXMonadService = do
-  client <- getDBusClient False
-  forM_ client requestXMonadName
-  mapM_ (\f -> executeSometimes $ f client) dbusExporters
-  return client
+-- | Current connections to the DBus (session and system buses)
+data DBusState = DBusState
+    { dbSesClient :: Maybe Client
+    , dbSysClient :: Maybe Client
+    }
 
-stopXMonadService :: Client -> IO ()
-stopXMonadService client = do
-  void $ releaseName client xmonadBusName
-  disconnect client
+-- | Connect to the DBus
+connectDBus :: IO DBusState
+connectDBus = do
+  ses <- getDBusClient False
+  sys <- getDBusClient True
+  return DBusState { dbSesClient = ses, dbSysClient = sys }
+
+-- | Disconnect from the DBus
+disconnectDBus :: DBusState -> IO ()
+disconnectDBus db = forM_ (dbSysClient db) disconnect
+
+-- | Connect to the DBus and request the XMonad name
+connectDBusX :: IO DBusState
+connectDBusX = do
+  db <- connectDBus
+  forM_ (dbSesClient db) requestXMonadName
+  return db
+
+-- | Disconnect from DBus and release the XMonad name
+disconnectDBusX :: DBusState -> IO ()
+disconnectDBusX db = do
+  forM_ (dbSesClient db) releaseXMonadName
+  disconnectDBus db
+
+-- | All exporter features to be assigned to the DBus
+dbusExporters :: [Maybe Client -> SometimesIO]
+dbusExporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
+
+releaseXMonadName :: Client -> IO ()
+releaseXMonadName cl = void $ releaseName cl xmonadBusName
 
 requestXMonadName :: Client -> IO ()
 requestXMonadName client = do
@@ -51,5 +79,5 @@ requestXMonadName client = do
   where
     xn = "'" ++ formatBusName xmonadBusName ++ "'"
 
-dbusExporters :: [Maybe Client -> SometimesIO]
-dbusExporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
+-- executeExporters :: Maybe Client -> IO ()
+-- executeExporters cl = mapM_ (\f -> executeSometimes $ f cl) dbusExporters

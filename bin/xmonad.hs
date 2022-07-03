@@ -8,10 +8,6 @@ module Main (main) where
 
 import           Control.Concurrent
 import           Control.Monad
-    ( forM_
-    , unless
-    , void
-    )
 
 import           Data.List
     ( intercalate
@@ -85,70 +81,110 @@ parse _          = usage
 
 run :: IO ()
 run = do
-  db <- connectXDBus
-  (h, p) <- spawnPipe "xmobar"
-  ps <- catMaybes <$> mapM executeSometimes [ runNetAppDaemon
-                                            , runFlameshotDaemon
-                                            , runNotificationDaemon
-                                            , runBwDaemon
-                                            , runClipManager
-                                            , runAutolock
-                                            ]
-  void $ executeSometimes $ runRemovableMon $ dbSystemClient db
-  dws <- allDWs
-  forkIO_ $ void $ executeSometimes runPowermon
-  forkIO_ $ runWorkspaceMon dws
-  let ts = ThreadState
-           { tsChildPIDs = p:ps
-           , tsChildHandles = [h]
-           }
-  fb <- evalAlways T.defFont
-  ext <- evalExternal $ externalBindings ts db
-  sk <- evalAlways runShowKeys
-  ha <- evalAlways runHandleACPI
-  -- IDK why this is necessary; nothing prior to this line will print if missing
-  hFlush stdout
+  conf <- evalConf =<< connectDBusX
   ds <- getDirectories
-  let conf = ewmh
-             $ addKeymap dws sk (filterExternal ext)
-             $ docks
-             $ def { terminal = myTerm
-                   , modMask = myModMask
-                   , layoutHook = myLayouts fb
-                   , manageHook = myManageHook dws
-                   , handleEventHook = myEventHook ha
-                   , startupHook = myStartupHook
-                   , workspaces = myWorkspaces
-                   , logHook = myLoghook h
-                   , clickJustFocuses = False
-                   , focusFollowsMouse = False
-                   , normalBorderColor = T.bordersColor
-                   , focusedBorderColor = T.selectedBordersColor
-                   }
+  -- IDK why this is necessary; nothing prior to this will print if missing
+  hFlush stdout
   launch conf ds
+
+data FeatureSet = FeatureSet
+  { fsKeys          :: ThreadState -> DBusState -> [KeyGroup FeatureX]
+  , fsDBusExporters :: [Maybe Client -> SometimesIO]
+  , fsPowerMon      :: SometimesIO
+  , fsRemovableMon  :: Maybe Client -> SometimesIO
+  , fsDaemons       :: [Sometimes (IO ProcessHandle)]
+  , fsACPIHandler   :: Always (String -> X ())
+  , fsTabbedTheme   :: Always Theme
+  , fsDynWorkspaces :: [Sometimes DynWorkspace]
+  , fsShowKeys      :: Always ([((KeyMask, KeySym), NamedAction)] -> X ())
+  }
+
+features :: FeatureSet
+features = FeatureSet
+  { fsKeys = externalBindings
+  , fsDBusExporters = dbusExporters
+  , fsPowerMon = runPowermon
+  , fsRemovableMon = runRemovableMon
+  , fsACPIHandler = runHandleACPI
+  , fsDynWorkspaces = allDWs'
+  , fsTabbedTheme = T.tabbedFeature
+  , fsShowKeys = runShowKeys
+  , fsDaemons = [ runNetAppDaemon
+                , runFlameshotDaemon
+                  -- TODO the problem with launching
+                  -- dunst here is that the history
+                  -- will get nuked on each restart
+                , runNotificationDaemon
+                , runBwDaemon
+                  -- TODO does this have a lag when
+                  -- spawned within the WM?
+                , runClipManager
+                , runAutolock
+                ]
+  }
+
+evalConf db = do
+  -- start DBus interfaces first since many features after this test these
+  -- interfaces as dependencies
+  startDBusInterfaces
+  (xmobarHandle, ts) <- startChildDaemons
+  startRemovableMon
+  startPowerMon
+  dws <- startDynWorkspaces
+  tt <- evalAlways $ fsTabbedTheme features
+  -- fb <- evalAlways $ fsFontBuilder features
+  kbs <- filterExternal <$> evalExternal (fsKeys features ts db)
+  sk <- evalAlways $ fsShowKeys features
+  ha <- evalAlways $ fsACPIHandler features
+  return $ ewmh
+    $ addKeymap dws sk kbs
+    $ docks
+    $ def { terminal = myTerm
+          , modMask = myModMask
+          , layoutHook = myLayouts tt
+          , manageHook = myManageHook dws
+          , handleEventHook = myEventHook ha
+          , startupHook = myStartupHook
+          , workspaces = myWorkspaces
+          , logHook = myLoghook xmobarHandle
+          , clickJustFocuses = False
+          , focusFollowsMouse = False
+          , normalBorderColor = T.bordersColor
+          , focusedBorderColor = T.selectedBordersColor
+          }
   where
     forkIO_ = void . forkIO
+    startDBusInterfaces = mapM_ (\f -> executeSometimes $ f $ dbSesClient db)
+      $ fsDBusExporters features
+    startChildDaemons = do
+      (h, p) <- spawnPipe "xmobar"
+      ps <- catMaybes <$> mapM executeSometimes (fsDaemons features)
+      return (h, ThreadState (p:ps) [h])
+    startRemovableMon = void $ executeSometimes $ fsRemovableMon features
+                        $ dbSysClient db
+    startPowerMon = forkIO_ $ void $ executeSometimes $ fsPowerMon features
+    startDynWorkspaces = do
+      dws <- catMaybes <$> mapM evalSometimes (fsDynWorkspaces features)
+      forkIO_ $ runWorkspaceMon dws
+      return dws
 
 printDeps :: IO ()
 printDeps = do
-  ses <- getDBusClient False
-  sys <- getDBusClient True
-  let db = DBusState ses sys
+  db <- connectDBus
   (i, f, d) <- allFeatures db
   is <- mapM dumpSometimes i
   fs <- mapM dumpFeature f
   ds <- mapM dumpSometimes d
   let (UQ u) = jsonArray $ fmap JSON_UQ $ is ++ fs ++ ds
   putStrLn u
-  forM_ ses disconnect
-  forM_ sys disconnect
+  disconnectDBus db
 
 allFeatures :: DBusState -> IO ([SometimesIO], [FeatureX], [Sometimes DynWorkspace])
 allFeatures db = do
   let bfs = concatMap (fmap kbMaybeAction . kgBindings)
             $ externalBindings ts db
-  let dbus = fmap (\f -> f $ dbSessionClient db) dbusExporters
-  let others = [runRemovableMon $ dbSystemClient db, runPowermon]
+  let dbus = fmap (\f -> f $ dbSesClient db) dbusExporters
+  let others = [runRemovableMon $ dbSysClient db, runPowermon]
   return (dbus ++ others, Left runScreenLock:bfs, allDWs')
   where
     ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
@@ -159,25 +195,8 @@ usage = putStrLn $ intercalate "\n"
   , "xmonad --deps: print dependencies"
   ]
 
-connectXDBus :: IO DBusState
-connectXDBus = connectDBus_ startXMonadService
-
-connectDBus_ :: IO (Maybe Client) -> IO DBusState
-connectDBus_ getSes = do
-  ses <- getSes
-  sys <- getDBusClient True
-  return DBusState
-    { dbSessionClient = ses
-    , dbSystemClient = sys
-    }
-
 --------------------------------------------------------------------------------
 -- | Concurrency configuration
-
-data DBusState = DBusState
-    { dbSessionClient :: Maybe Client
-    , dbSystemClient  :: Maybe Client
-    }
 
 data ThreadState = ThreadState
     { tsChildPIDs    :: [ProcessHandle]
@@ -188,8 +207,7 @@ data ThreadState = ThreadState
 runCleanup :: ThreadState -> DBusState -> X ()
 runCleanup ts db = io $ do
   mapM_ killHandle $ tsChildPIDs ts
-  forM_ (dbSessionClient db) stopXMonadService
-  forM_ (dbSystemClient db) disconnect
+  disconnectDBusX db
 
 --------------------------------------------------------------------------------
 -- | Startuphook configuration
@@ -300,21 +318,18 @@ allDWs' = [xsaneDynamicWorkspace
           , f5vpnDynamicWorkspace
           ]
 
-allDWs :: IO [DynWorkspace]
-allDWs = catMaybes <$> mapM evalSometimes allDWs'
-
 --------------------------------------------------------------------------------
 -- | Layout configuration
 
 -- NOTE this will have all available layouts, even those that may be for
 -- features that failed. Trying to dynamically take out a layout seems to
 -- make a new type :/
-myLayouts fb = onWorkspace vmTag vmLayout
+myLayouts tt = onWorkspace vmTag vmLayout
   $ onWorkspace gimpTag gimpLayout
   $ mkToggle (single HIDE)
   $ tall ||| fulltab ||| full
   where
-    addTopBar = noFrillsDeco shrinkText $ T.tabbedTheme fb
+    addTopBar = noFrillsDeco shrinkText tt
     tall = renamed [Replace "Tall"]
       $ avoidStruts
       $ addTopBar
@@ -323,7 +338,7 @@ myLayouts fb = onWorkspace vmTag vmLayout
     fulltab = renamed [Replace "Tabbed"]
       $ avoidStruts
       $ noBorders
-      $ tabbedAlways shrinkText $ T.tabbedTheme fb
+      $ tabbedAlways shrinkText tt
     full = renamed [Replace "Full"]
       $ noBorders Full
     vmLayout = noBorders Full
@@ -656,7 +671,7 @@ externalBindings ts db =
     , KeyBinding "M-S-," "keyboard down" $ ck bctlDec
     , KeyBinding "M-S-M1-," "keyboard min" $ ck bctlMin
     , KeyBinding "M-S-M1-." "keyboard max" $ ck bctlMax
-    , KeyBinding "M-<End>" "power menu" $ Right runPowerPrompt
+    , KeyBinding "M-<End>" "power menu" $ Left runPowerPrompt
     , KeyBinding "M-<Home>" "quit xmonad" $ Left runQuitPrompt
     , KeyBinding "M-<Delete>" "lock screen" $ Left runScreenLock
     -- M-<F1> reserved for showing the keymap
@@ -672,7 +687,7 @@ externalBindings ts db =
     ]
   ]
   where
-    cl = dbSessionClient db
+    cl = dbSesClient db
     brightessControls ctl getter = (ioSometimes . getter . ctl) cl
     ib = Left . brightessControls intelBacklightControls
     ck = Left . brightessControls clevoKeyboardControls

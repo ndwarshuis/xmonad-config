@@ -27,7 +27,10 @@ import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
-import           XMonad.Internal.Theme                    (FontBuilder, defFont)
+import           XMonad.Internal.Theme
+    ( FontBuilder
+    , defFontTree
+    )
 
 --------------------------------------------------------------------------------
 -- | Data structure to hold the ACPI events I care about
@@ -120,6 +123,6 @@ runHandleACPI :: Always (String -> X ())
 runHandleACPI = Always "ACPI event handler" $ Option sf fallback
   where
     sf = Subfeature withLock "acpid prompt" Error
-    withLock = IORoot (uncurry handleACPI)
-      $ And12 (,) (Only $ IOAlways defFont id) (Only $ IOSometimes runScreenLock id)
-    fallback = Always_ $ FallbackTree (`handleACPI` skip) $ FallbackBottom defFont
+    withLock = IORoot (uncurry handleACPI) $ And12 (,) defFontTree $ Only
+               $ IOSometimes runScreenLock id
+    fallback = Always_ $ FallbackAlone $ const skip
