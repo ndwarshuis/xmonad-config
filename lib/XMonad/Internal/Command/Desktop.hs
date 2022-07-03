@@ -3,6 +3,9 @@
 
 module XMonad.Internal.Command.Desktop
   ( myTerm
+  , playSound
+
+  -- commands
   , runTerm
   , runTMux
   , runCalc
@@ -30,7 +33,11 @@ module XMonad.Internal.Command.Desktop
   , runNotificationCloseAll
   , runNotificationHistory
   , runNotificationContext
-  , playSound
+
+  -- daemons
+  , runNetAppDaemon
+  , runFlameshotDaemon
+  , runNotificationDaemon
   ) where
 
 import           Control.Monad              (void)
@@ -78,6 +85,9 @@ myImageBrowser = "feh"
 
 myNotificationCtrl :: String
 myNotificationCtrl = "dunstctl"
+
+myNotificationDaemon :: String
+myNotificationDaemon = "dunst"
 
 --------------------------------------------------------------------------------
 -- | Misc constants
@@ -170,9 +180,18 @@ runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return
 --------------------------------------------------------------------------------
 -- | Notification control
 
+runNotificationDaemon :: Sometimes (IO ProcessHandle)
+runNotificationDaemon = sometimesIO_ "notification daemon" "dunst" tree cmd
+  where
+    tree = Only_ $ sysExe myNotificationDaemon
+    cmd = snd <$> spawnPipe myNotificationDaemon
+
 runNotificationCmd :: String -> FilePath -> SometimesX
-runNotificationCmd n cmd =
-  sometimesExeArgs (n ++ " control") "dunst" True myNotificationCtrl [cmd]
+runNotificationCmd n arg = sometimesIO_ (n ++ " control") "dunstctl" tree cmd
+  where
+    tree = And_ (Only_ $ IOSometimes_ runNotificationDaemon)
+      (Only_ $ sysExe myNotificationCtrl)
+    cmd = spawnCmd myNotificationCtrl [arg]
 
 runNotificationClose :: SometimesX
 runNotificationClose = runNotificationCmd "close notification" "close"
@@ -191,6 +210,13 @@ runNotificationContext =
 
 --------------------------------------------------------------------------------
 -- | System commands
+
+-- this is required for some vpn's to work properly with network-manager
+runNetAppDaemon :: Sometimes (IO ProcessHandle)
+runNetAppDaemon = sometimesIO_ "network applet" "NM-applet" tree cmd
+  where
+    tree = Only_ $ localExe "nm-applet"
+    cmd = snd <$> spawnPipe "nm-applet"
 
 runToggleBluetooth :: SometimesX
 runToggleBluetooth =
@@ -265,9 +291,15 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
+runFlameshotDaemon :: Sometimes (IO ProcessHandle)
+runFlameshotDaemon = sometimesIO_ "screen capture daemon" "flameshot" tree cmd
+  where
+    tree = Only_ $ sysExe myCapture
+    cmd = snd <$> (spawnPipe' $ (shell myCapture) { std_err = NoStream })
+
 runFlameshot :: String -> String -> SometimesX
-runFlameshot n mode = sometimesIO_ n "flameshot" (Only_ $ sysExe myCapture)
-  $ spawnCmd myCapture [mode]
+runFlameshot n mode = sometimesIO_ n myCapture
+  (Only_ $ IOSometimes_ runFlameshotDaemon) $ spawnCmd myCapture [mode]
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix

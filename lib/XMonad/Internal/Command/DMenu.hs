@@ -13,6 +13,10 @@ module XMonad.Internal.Command.DMenu
   , runBTMenu
   , runShowKeys
   , runAutorandrMenu
+
+  -- daemons
+  , runBwDaemon
+  , runClipManager
   ) where
 
 import           Control.Monad.Reader
@@ -53,6 +57,9 @@ myDmenuMonitors = "rofi-autorandr"
 myDmenuNetworks :: String
 myDmenuNetworks = "networkmanager_dmenu"
 
+myClipboardManager :: String
+myClipboardManager = "greenclip"
+
 --------------------------------------------------------------------------------
 -- | Other internal functions
 
@@ -86,10 +93,6 @@ runBTMenu :: SometimesX
 runBTMenu = sometimesExeArgs "bluetooth selector" "rofi bluetooth" False
   myDmenuBluetooth $ "-c":themeArgs "#0044bb"
 
-runBwMenu :: SometimesX
-runBwMenu = sometimesIO_ "password manager" "rofi bitwarden"
-  (Only_ $ localExe myDmenuPasswords) $ spawnCmd myDmenuPasswords
-  $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 runVPNMenu :: SometimesX
 runVPNMenu = sometimesIO_ "VPN selector" "rofi VPN"
@@ -102,16 +105,6 @@ runCmdMenu = spawnDmenuCmd "command menu" ["-show", "run"]
 runAppMenu :: SometimesX
 runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 
-runClipMenu :: SometimesX
-runClipMenu = sometimesIO_ "clipboard manager" "rofi greenclip" deps act
-  where
-    act = spawnCmd myDmenuCmd args
-    deps = toAnd (sysExe myDmenuCmd) (sysExe "greenclip")
-    args = [ "-modi", "\"clipboard:greenclip print\""
-           , "-show", "clipboard"
-           , "-run-command", "'{cmd}'"
-           ] ++ themeArgs "#00c44e"
-
 runWinMenu :: SometimesX
 runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
@@ -122,6 +115,39 @@ runNetMenu = sometimesExeArgs "network control menu" "rofi NetworkManager"
 runAutorandrMenu :: SometimesX
 runAutorandrMenu = sometimesExeArgs "autorandr menu" "rofi autorandr"
   True myDmenuMonitors $ themeArgs "#ff0066"
+
+--------------------------------------------------------------------------------
+-- | Password manager
+
+runBwDaemon :: Sometimes (IO ProcessHandle)
+runBwDaemon = sometimesIO_ "password manager daemon" "rofi bitwarden" tree cmd
+  where
+    tree = Only_ $ localExe myDmenuPasswords
+    cmd = snd <$> spawnPipeArgs "rofi-bw" ["-d", "3600"]
+
+runBwMenu :: SometimesX
+runBwMenu = sometimesIO_ "password manager" "rofi bitwarden"
+  (Only_ $ IOSometimes_ runBwDaemon) $ spawnCmd myDmenuPasswords
+  $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
+
+--------------------------------------------------------------------------------
+-- | Clipboard
+
+runClipManager :: Sometimes (IO ProcessHandle)
+runClipManager = sometimesIO_ "clipboard daemon" "greenclip" tree cmd
+  where
+    tree = Only_ $ sysExe myClipboardManager
+    cmd = snd <$> spawnPipeArgs "greenclip" ["daemon"]
+
+runClipMenu :: SometimesX
+runClipMenu = sometimesIO_ "clipboard manager" "rofi greenclip" tree act
+  where
+    act = spawnCmd myDmenuCmd args
+    tree = toAnd (sysExe myDmenuCmd) $ IOSometimes_ runClipManager
+    args = [ "-modi", "\"clipboard:greenclip print\""
+           , "-show", "clipboard"
+           , "-run-command", "'{cmd}'"
+           ] ++ themeArgs "#00c44e"
 
 --------------------------------------------------------------------------------
 -- | Shortcut menu

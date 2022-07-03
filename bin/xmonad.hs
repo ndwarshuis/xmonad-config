@@ -87,12 +87,19 @@ run :: IO ()
 run = do
   db <- connectXDBus
   (h, p) <- spawnPipe "xmobar"
+  ps <- catMaybes <$> mapM executeSometimes [ runNetAppDaemon
+                                            , runFlameshotDaemon
+                                            , runNotificationDaemon
+                                            , runBwDaemon
+                                            , runClipManager
+                                            , runAutolock
+                                            ]
   void $ executeSometimes $ runRemovableMon $ dbSystemClient db
   dws <- allDWs
   forkIO_ $ void $ executeSometimes runPowermon
   forkIO_ $ runWorkspaceMon dws
   let ts = ThreadState
-           { tsChildPIDs = [p]
+           { tsChildPIDs = p:ps
            , tsChildHandles = [h]
            }
   fb <- evalAlways T.defFont

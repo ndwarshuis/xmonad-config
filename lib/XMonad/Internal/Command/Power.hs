@@ -2,6 +2,7 @@
 -- | Commands for controlling power
 
 module XMonad.Internal.Command.Power
+  -- commands
   ( runHibernate
   , runOptimusPrompt
   , runPowerOff
@@ -11,6 +12,11 @@ module XMonad.Internal.Command.Power
   , runSuspend
   , runSuspendPrompt
   , runQuitPrompt
+
+  -- daemons
+  , runAutolock
+
+  -- functions
   , hasBattery
   , suspendPrompt
   , quitPrompt
@@ -28,9 +34,11 @@ import           System.Directory
 import           System.Exit
 import           System.FilePath.Posix
 import           System.IO.Error
+import           System.Process              (ProcessHandle)
 
 import           XMonad.Core
 import           XMonad.Internal.Dependency
+import           XMonad.Internal.Process     (spawnPipeArgs)
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme       as T
 import           XMonad.Prompt
@@ -65,6 +73,15 @@ runHibernate = spawn "systemctl hibernate"
 
 runReboot :: X ()
 runReboot = spawn "systemctl reboot"
+
+--------------------------------------------------------------------------------
+-- | Autolock
+
+runAutolock :: Sometimes (IO ProcessHandle)
+runAutolock = sometimesIO_ "automatic screen lock" "xss-lock" tree cmd
+  where
+    tree = And_ (Only_ $ sysExe "xss-lock") (Only_ $ IOSometimes_ runScreenLock)
+    cmd = snd <$> spawnPipeArgs "xss-lock" ["--ignore-sleep", "screenlock"]
 
 --------------------------------------------------------------------------------
 -- | Confirmation prompts

@@ -4,7 +4,9 @@
 module XMonad.Internal.Process
   ( waitUntilExit
   , killHandle
+  , spawnPipe'
   , spawnPipe
+  , spawnPipeArgs
   , createProcess'
   , readCreateProcessWithExitCode'
   , proc'
@@ -76,9 +78,15 @@ spawn = io . void . createProcess' . shell'
 spawnAt :: MonadIO m => FilePath -> String -> m ()
 spawnAt fp cmd = io $ void $ createProcess' $ (shell' cmd) { cwd = Just fp }
 
-spawnPipe :: String -> IO (Handle, ProcessHandle)
-spawnPipe cmd = do
+spawnPipe' :: CreateProcess -> IO (Handle, ProcessHandle)
+spawnPipe' cp = do
   -- ASSUME creating a pipe will always succeed in making a Just Handle
-  (Just h, _, _, p) <- createProcess' $ (shell cmd) { std_in = CreatePipe }
+  (Just h, _, _, p) <- createProcess' $ cp { std_in = CreatePipe }
   hSetBuffering h LineBuffering
   return (h, p)
+
+spawnPipe :: String -> IO (Handle, ProcessHandle)
+spawnPipe = spawnPipe' . shell
+
+spawnPipeArgs :: FilePath -> [String] -> IO (Handle, ProcessHandle)
+spawnPipeArgs cmd = spawnPipe' . proc cmd
