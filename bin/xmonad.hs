@@ -127,21 +127,22 @@ printDeps = do
   ses <- getDBusClient False
   sys <- getDBusClient True
   let db = DBusState ses sys
-  (i, f) <- allFeatures db
+  (i, f, d) <- allFeatures db
   is <- mapM dumpSometimes i
   fs <- mapM dumpFeature f
-  let (UQ u) = jsonArray $ fmap JSON_UQ $ is ++ fs
+  ds <- mapM dumpSometimes d
+  let (UQ u) = jsonArray $ fmap JSON_UQ $ is ++ fs ++ ds
   putStrLn u
   forM_ ses disconnect
   forM_ sys disconnect
 
-allFeatures :: DBusState -> IO ([SometimesIO], [FeatureX])
+allFeatures :: DBusState -> IO ([SometimesIO], [FeatureX], [Sometimes DynWorkspace])
 allFeatures db = do
   let bfs = concatMap (fmap kbMaybeAction . kgBindings)
             $ externalBindings ts db
   let dbus = fmap (\f -> f $ dbSessionClient db) dbusExporters
-  let others =  [runRemovableMon $ dbSystemClient db, runPowermon]
-  return (dbus ++ others, Left runScreenLock:bfs)
+  let others = [runRemovableMon $ dbSystemClient db, runPowermon]
+  return (dbus ++ others, Left runScreenLock:bfs, allDWs')
   where
     ts = ThreadState { tsChildPIDs = [], tsChildHandles = [] }
 
@@ -285,12 +286,15 @@ f5vpnDynamicWorkspace = sometimesIO_ "F5 VPN workspace" "f5vpn" tree dw
          }
     c = "F5 VPN"
 
+allDWs' :: [Sometimes DynWorkspace]
+allDWs' = [xsaneDynamicWorkspace
+          , vmDynamicWorkspace
+          , gimpDynamicWorkspace
+          , f5vpnDynamicWorkspace
+          ]
+
 allDWs :: IO [DynWorkspace]
-allDWs = catMaybes <$> mapM evalSometimes [ xsaneDynamicWorkspace
-                                          , vmDynamicWorkspace
-                                          , gimpDynamicWorkspace
-                                          , f5vpnDynamicWorkspace
-                                          ]
+allDWs = catMaybes <$> mapM evalSometimes allDWs'
 
 --------------------------------------------------------------------------------
 -- | Layout configuration
