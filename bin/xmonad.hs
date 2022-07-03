@@ -27,7 +27,9 @@ import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
 
 import           System.Environment
+import           System.Exit
 import           System.IO
+import           System.IO.Error
 import           System.Process
 
 import           XMonad
@@ -86,8 +88,9 @@ run = do
   db <- connectXDBus
   (h, p) <- spawnPipe "xmobar"
   void $ executeSometimes $ runRemovableMon $ dbSystemClient db
+  dws <- allDWs
   forkIO_ $ void $ executeSometimes runPowermon
-  forkIO_ $ runWorkspaceMon allDWs
+  forkIO_ $ runWorkspaceMon dws
   let ts = ThreadState
            { tsChildPIDs = [p]
            , tsChildHandles = [h]
@@ -100,12 +103,12 @@ run = do
   hFlush stdout
   ds <- getDirectories
   let conf = ewmh
-             $ addKeymap sk (filterExternal ext)
+             $ addKeymap dws sk (filterExternal ext)
              $ docks
              $ def { terminal = myTerm
                    , modMask = myModMask
                    , layoutHook = myLayouts fb
-                   , manageHook = myManageHook
+                   , manageHook = myManageHook dws
                    , handleEventHook = myEventHook ha
                    , startupHook = myStartupHook
                    , workspaces = myWorkspaces
@@ -194,77 +197,109 @@ myStartupHook = setDefaultCursor xC_left_ptr
 myWorkspaces :: [WorkspaceId]
 myWorkspaces = map show [1..10 :: Int]
 
-gimpDynamicWorkspace :: DynWorkspace
-gimpDynamicWorkspace = DynWorkspace
-  { dwName = "Gimp"
-  , dwTag = t
-  , dwClass = c
-  , dwHook =
-    [ matchGimpRole "gimp-image-window" -?> appendViewShift t
-    , matchGimpRole "gimp-dock" -?> doF W.swapDown
-    , matchGimpRole "gimp-toolbox" -?> doF W.swapDown
-    , className =? c -?> appendViewShift t
-    ]
-  , dwKey = 'g'
-  , dwCmd = Just $ spawnCmd "gimp-2.10" []
-  }
+gimpTag :: String
+gimpTag = "GIMP"
+
+vmTag :: String
+vmTag = "VM"
+
+xsaneTag :: String
+xsaneTag = "XSANE"
+
+f5Tag :: String
+f5Tag = "F5VPN"
+
+gimpDynamicWorkspace :: Sometimes DynWorkspace
+gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
   where
+    tree = Only_ $ sysExe "gimp"
+    dw = DynWorkspace
+         { dwName = "Gimp"
+         , dwTag = gimpTag
+         , dwClass = c
+         , dwHook =
+           [ matchGimpRole "gimp-image-window" -?> appendViewShift gimpTag
+           , matchGimpRole "gimp-dock" -?> doF W.swapDown
+           , matchGimpRole "gimp-toolbox" -?> doF W.swapDown
+           , className =? c -?> appendViewShift gimpTag
+           ]
+         , dwKey = 'g'
+         , dwCmd = Just $ spawnCmd "gimp-2.10" []
+         }
     matchGimpRole role = isPrefixOf role <$> stringProperty "WM_WINDOW_ROLE"
       <&&> className =? c
-    t = "GIMP"
     c = "Gimp-2.10" -- TODO I don't feel like changing the version long term
 
-wmDynamicWorkspace :: DynWorkspace
-wmDynamicWorkspace = DynWorkspace
-  { dwName = "Windows VirtualBox"
-  , dwTag = t
-  , dwClass = c
-  , dwHook = [ className =? c -?> appendViewShift t ]
-  , dwKey = 'v'
-  , dwCmd = Just $ spawnCmd "vbox-start" ["win8raw"]
-  }
+vmDynamicWorkspace :: Sometimes DynWorkspace
+vmDynamicWorkspace = sometimes1 "virtualbox workspace" "windows 8 VM" root
   where
-    t = "VM"
+    root = IORoot_ dw $ And_ (Only_ $ sysExe "VBoxManage")
+      $ Only_ $ sysTest name $ vmExists vm
+    name = unwords ["test if", vm, "exists"]
     c = "VirtualBoxVM"
+    vm = "win8raw"
+    dw = DynWorkspace
+         { dwName = "Windows VirtualBox"
+         , dwTag = vmTag
+         , dwClass = c
+         , dwHook = [ className =? c -?> appendViewShift vmTag ]
+         , dwKey = 'v'
+         , dwCmd = Just $ spawnCmd "vbox-start" [vm]
+         }
 
-xsaneDynamicWorkspace :: DynWorkspace
-xsaneDynamicWorkspace = DynWorkspace
-  { dwName = "XSane"
-  , dwTag = t
-  , dwClass = c
-  , dwHook = [ className =? c -?> appendViewShift t >> doFloat ]
-  , dwKey = 'x'
-  , dwCmd = Just $ spawnCmd "xsane" []
-  }
+-- TODO this shell command is hilariously slow and kills my fast startup time
+vmExists :: String -> IO (Maybe String)
+vmExists vm =
+  go <$> tryIOError (readCreateProcessWithExitCode' pr "")
   where
-    t = "XSANE"
+    pr = proc' "VBoxManage" ["showvminfo", vm]
+    go (Right (ExitSuccess, _, _))   = Nothing
+    go (Right (ExitFailure _, _, _)) = Just $ "VM not found: " ++ vm
+    go (Left e)                      = Just $ show e
+
+xsaneDynamicWorkspace :: Sometimes DynWorkspace
+xsaneDynamicWorkspace = sometimesIO_ "scanner workspace" "xsane" tree dw
+  where
+    tree = Only_ $ sysExe "xsane"
+    dw = DynWorkspace
+         { dwName = "XSane"
+         , dwTag = xsaneTag
+         , dwClass = c
+         , dwHook = [ className =? c -?> appendViewShift xsaneTag >> doFloat ]
+         , dwKey = 'x'
+         , dwCmd = Just $ spawnCmd "xsane" []
+         }
     c = "Xsane"
 
-f5vpnDynamicWorkspace :: DynWorkspace
-f5vpnDynamicWorkspace = DynWorkspace
-  { dwName = "F5Vpn"
-  , dwTag = t
-  , dwClass = c
-  , dwHook = [ className =? c -?> appendShift t ]
-  , dwKey = 'i'
-  , dwCmd = Just skip
-  }
+f5vpnDynamicWorkspace :: Sometimes DynWorkspace
+f5vpnDynamicWorkspace = sometimesIO_ "F5 VPN workspace" "f5vpn" tree dw
   where
-    t = "F5VPN"
+    tree = Only_ $ sysExe "f5vpn"
+    dw = DynWorkspace
+         { dwName = "F5Vpn"
+         , dwTag = f5Tag
+         , dwClass = c
+         , dwHook = [ className =? c -?> appendShift f5Tag ]
+         , dwKey = 'i'
+         , dwCmd = Just skip
+         }
     c = "F5 VPN"
 
-allDWs :: [DynWorkspace]
-allDWs = [ xsaneDynamicWorkspace
-         , wmDynamicWorkspace
-         , gimpDynamicWorkspace
-         , f5vpnDynamicWorkspace
-         ]
+allDWs :: IO [DynWorkspace]
+allDWs = catMaybes <$> mapM evalSometimes [ xsaneDynamicWorkspace
+                                          , vmDynamicWorkspace
+                                          , gimpDynamicWorkspace
+                                          , f5vpnDynamicWorkspace
+                                          ]
 
 --------------------------------------------------------------------------------
 -- | Layout configuration
 
-myLayouts fb = onWorkspace (dwTag wmDynamicWorkspace) vmLayout
-  $ onWorkspace (dwTag gimpDynamicWorkspace) gimpLayout
+-- NOTE this will have all available layouts, even those that may be for
+-- features that failed. Trying to dynamically take out a layout seems to
+-- make a new type :/
+myLayouts fb = onWorkspace vmTag vmLayout
+  $ onWorkspace gimpTag gimpLayout
   $ mkToggle (single HIDE)
   $ tall ||| fulltab ||| full
   where
@@ -412,11 +447,11 @@ compareXCoord s0 s1 = compare x0 x1
 --------------------------------------------------------------------------------
 -- | Managehook configuration
 
-myManageHook :: ManageHook
-myManageHook = manageApps <+> manageHook def
+myManageHook :: [DynWorkspace] -> ManageHook
+myManageHook dws = manageApps dws <+> manageHook def
 
-manageApps :: ManageHook
-manageApps = composeOne $ concatMap dwHook allDWs ++
+manageApps :: [DynWorkspace] -> ManageHook
+manageApps dws = composeOne $ concatMap dwHook dws ++
   [ isDialog -?> doCenterFloat
   -- the seafile applet
   , className =? "Seafile Client" -?> doFloat
@@ -458,13 +493,13 @@ xMsgEventHook _ _ = return (All True)
 myModMask :: KeyMask
 myModMask = mod4Mask
 
-addKeymap :: ([((KeyMask, KeySym), NamedAction)] -> X ())
+addKeymap :: [DynWorkspace] -> ([((KeyMask, KeySym), NamedAction)] -> X ())
   -> [KeyGroup (X ())] -> XConfig l -> XConfig l
-addKeymap showKeys external = addDescrKeys' ((myModMask, xK_F1), showKeys)
-  (\c -> concatMap (mkNamedSubmap c) $ internalBindings c ++ external)
+addKeymap dws showKeys external = addDescrKeys' ((myModMask, xK_F1), showKeys)
+  (\c -> concatMap (mkNamedSubmap c) $ internalBindings dws c ++ external)
 
-internalBindings :: XConfig Layout -> [KeyGroup (X ())]
-internalBindings c =
+internalBindings :: [DynWorkspace] -> XConfig Layout -> [KeyGroup (X ())]
+internalBindings dws c =
   [ KeyGroup "Window Layouts"
     [ KeyBinding "M-j" "focus down" $ windows W.focusDown
     , KeyBinding "M-k" "focus up" $ windows W.focusUp
@@ -501,7 +536,7 @@ internalBindings c =
 
   , KeyGroup "Dynamic Workspaces"
     [ KeyBinding ("M-C-" ++ [k]) ("launch/switch to " ++ n) cmd
-    |  DynWorkspace { dwTag = t, dwKey = k, dwCmd = a, dwName = n } <- allDWs,
+    |  DynWorkspace { dwTag = t, dwKey = k, dwCmd = a, dwName = n } <- dws,
        let cmd = case a of
              Just a' -> spawnOrSwitch t a'
              Nothing -> windows $ W.view t
