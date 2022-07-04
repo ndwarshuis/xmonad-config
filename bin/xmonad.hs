@@ -7,6 +7,7 @@
 module Main (main) where
 
 import           Control.Concurrent
+import           Control.Concurrent.Lifted                      (fork)
 import           Control.Monad
 
 import           Data.List
@@ -76,12 +77,13 @@ main = getArgs >>= parse
 
 parse :: [String] -> IO ()
 parse []         = run
-parse ["--deps"] = printDeps
+parse ["--deps"] = withCache printDeps
 parse _          = usage
 
 run :: IO ()
 run = do
-  conf <- evalConf =<< connectDBusX
+  db <- connectDBusX
+  conf <- withCache $ evalConf db
   ds <- getDirectories
   -- IDK why this is necessary; nothing prior to this will print if missing
   hFlush stdout
@@ -157,29 +159,29 @@ evalConf db = do
     startDBusInterfaces = mapM_ (\f -> executeSometimes $ f $ dbSesClient db)
       $ fsDBusExporters features
     startChildDaemons = do
-      (h, p) <- spawnPipe "xmobar"
+      (h, p) <- io $ spawnPipe "xmobar"
       ps <- catMaybes <$> mapM executeSometimes (fsDaemons features)
       return (h, ThreadState (p:ps) [h])
     startRemovableMon = void $ executeSometimes $ fsRemovableMon features
                         $ dbSysClient db
-    startPowerMon = forkIO_ $ void $ executeSometimes $ fsPowerMon features
+    startPowerMon = void $ fork $ void $ executeSometimes $ fsPowerMon features
     startDynWorkspaces = do
       dws <- catMaybes <$> mapM evalSometimes (fsDynWorkspaces features)
-      forkIO_ $ runWorkspaceMon dws
+      io $ forkIO_ $ runWorkspaceMon dws
       return dws
 
-printDeps :: IO ()
+printDeps :: FIO ()
 printDeps = do
-  db <- connectDBus
+  db <- io connectDBus
   (i, f, d) <- allFeatures db
   is <- mapM dumpSometimes i
   fs <- mapM dumpFeature f
   ds <- mapM dumpSometimes d
   let (UQ u) = jsonArray $ fmap JSON_UQ $ is ++ fs ++ ds
-  putStrLn u
-  disconnectDBus db
+  io $ putStrLn u
+  io $ disconnectDBus db
 
-allFeatures :: DBusState -> IO ([SometimesIO], [FeatureX], [Sometimes DynWorkspace])
+allFeatures :: DBusState -> FIO ([SometimesIO], [FeatureX], [Sometimes DynWorkspace])
 allFeatures db = do
   let bfs = concatMap (fmap kbMaybeAction . kgBindings)
             $ externalBindings ts db
@@ -260,7 +262,7 @@ vmDynamicWorkspace :: Sometimes DynWorkspace
 vmDynamicWorkspace = sometimes1 "virtualbox workspace" "windows 8 VM" root
   where
     root = IORoot_ dw $ And_ (Only_ $ sysExe "VBoxManage")
-      $ Only_ $ sysTest name $ vmExists vm
+      $ Only_ $ IOTest_ name $ vmExists vm
     name = unwords ["test if", vm, "exists"]
     c = "VirtualBoxVM"
     vm = "win8raw"
@@ -595,13 +597,13 @@ data KeyGroup a = KeyGroup
   , kgBindings :: [KeyBinding a]
   }
 
-evalExternal :: [KeyGroup FeatureX] -> IO [KeyGroup MaybeX]
+evalExternal :: [KeyGroup FeatureX] -> FIO [KeyGroup MaybeX]
 evalExternal = mapM go
   where
     go k@KeyGroup { kgBindings = bs } =
       (\bs' -> k { kgBindings = bs' }) <$> mapM evalKeyBinding bs
 
-evalKeyBinding :: KeyBinding FeatureX -> IO (KeyBinding MaybeX)
+evalKeyBinding :: KeyBinding FeatureX -> FIO (KeyBinding MaybeX)
 evalKeyBinding k@KeyBinding { kbMaybeAction = a } =
   (\f -> k { kbMaybeAction = f }) <$> evalFeature a
 

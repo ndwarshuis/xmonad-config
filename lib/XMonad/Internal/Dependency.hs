@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -51,6 +52,8 @@ module XMonad.Internal.Dependency
   , JSONMixed(..)
 
   -- testing
+  , FIO
+  , withCache
   , evalFeature
   , executeSometimes
   , executeAlways
@@ -81,7 +84,7 @@ module XMonad.Internal.Dependency
   , pathR
   , pathRW
   , pathW
-  , sysTest
+  -- , sysTest
   , voidResult
   , voidRead
 
@@ -91,10 +94,15 @@ module XMonad.Internal.Dependency
 
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
+import           Control.Monad.State
 
 import           Data.Bifunctor
+import qualified Data.HashMap.Strict     as H
+import           Data.Hashable
 import           Data.List
 import           Data.Maybe
+
+import           GHC.Generics            (Generic)
 
 import           DBus
 import           DBus.Client
@@ -116,29 +124,34 @@ import           XMonad.Internal.Shell
 -- Here we attempt to build and return the monadic actions encoded by each
 -- feature.
 
+-- | Run feature evaluation(s) with the cache
+-- Currently there is no easy way to not use this (oh well)
+withCache :: FIO a -> IO a
+withCache x = evalStateT x emptyCache
+
 -- | Execute an Always immediately
-executeAlways :: MonadIO m => Always (m a) -> m a
-executeAlways = join . evalAlways
+executeAlways :: Always (IO a) -> FIO a
+executeAlways = io <=< evalAlways
 
 -- | Execute a Sometimes immediately (or do nothing if failure)
-executeSometimes :: MonadIO m => Sometimes (m a) -> m (Maybe a)
-executeSometimes a = maybe (return Nothing) (fmap Just) =<< evalSometimes a
+executeSometimes :: Sometimes (IO a) -> FIO (Maybe a)
+executeSometimes a = maybe (return Nothing) (io . fmap Just) =<< evalSometimes a
 
 -- | Possibly return the action of an Always/Sometimes
-evalFeature :: MonadIO m => Feature a -> m (Maybe a)
+evalFeature :: Feature a -> FIO (Maybe a)
 evalFeature (Right a) = Just <$> evalAlways a
 evalFeature (Left s)  = evalSometimes s
 
 -- | Possibly return the action of a Sometimes
-evalSometimes :: MonadIO m => Sometimes a -> m (Maybe a)
-evalSometimes x = io $ either goFail goPass =<< evalSometimesMsg x
+evalSometimes :: Sometimes a -> FIO (Maybe a)
+evalSometimes x = either goFail goPass =<< evalSometimesMsg x
   where
     goPass (PostPass a ws) = putErrors ws >> return (Just a)
     goFail es = putErrors es >> return Nothing
-    putErrors = mapM_ putStrLn
+    putErrors = io . mapM_ putStrLn
 
 -- | Return the action of an Always
-evalAlways :: MonadIO m => Always a -> m a
+evalAlways :: Always a -> FIO a
 evalAlways a = do
   (PostPass x ws) <- evalAlwaysMsg a
   io $ mapM_ putStrLn ws
@@ -148,11 +161,11 @@ evalAlways a = do
 -- | Feature status
 
 -- | Dump the status of a Feature
-dumpFeature :: Feature a -> IO JSONUnquotable
+dumpFeature :: Feature a -> FIO JSONUnquotable
 dumpFeature = either dumpSometimes dumpAlways
 
 -- | Dump the status of an Always to stdout
-dumpAlways :: Always a -> IO JSONUnquotable
+dumpAlways :: Always a -> FIO JSONUnquotable
 dumpAlways (Always n x) = go [] x
   where
     go failed (Option o os) = do
@@ -165,7 +178,7 @@ dumpAlways (Always n x) = go [] x
     untested acc (Option o os) = untested (dataSubfeatureRoot o:acc) os
 
 -- | Dump the status of a Sometimes to stdout
-dumpSometimes :: Sometimes a -> IO JSONUnquotable
+dumpSometimes :: Sometimes a -> FIO JSONUnquotable
 dumpSometimes (Sometimes n a) = go [] a
   where
     go failed [] = return $ jsonSometimes (Q n) Nothing failed []
@@ -277,18 +290,29 @@ data DBusDependency_ = Bus BusName
 
 -- | A dependency that only requires IO to evaluate (no payload)
 data IODependency_ = IOSystem_ SystemDependency
+  | IOTest_ String (IO (Maybe String))
   | forall a. IOSometimes_ (Sometimes a)
+
+-- instance Eq IODependency_ where
+--   (==) (IOSystem_ s0) (IOSystem_ s1)     = s0 == s1
+--   (==) (IOTest_ _ _) (IOTest_ _ _)       = False
+--   (==) (IOSometimes_ _) (IOSometimes_ _) = False
+--   (==) _ _                               = False
 
 -- | A system component to an IODependency
 -- This name is dumb, but most constructors should be obvious
 data SystemDependency =
   Executable Bool FilePath
   | AccessiblePath FilePath Bool Bool
-  | IOTest String (IO (Maybe String))
   | Systemd UnitType String
+  deriving (Eq, Show, Generic)
+
+instance Hashable SystemDependency
 
 -- | The type of a systemd service
-data UnitType = SystemUnit | UserUnit deriving (Eq, Show)
+data UnitType = SystemUnit | UserUnit deriving (Eq, Show, Generic)
+
+instance Hashable UnitType
 
 -- | Wrapper type to describe and endpoint
 data DBusMember = Method_ MemberName
@@ -328,23 +352,51 @@ addMsgs (PostPass a ms) ms' = PostPass a $ ms ++ ms'
 data PostFail = PostFail [String] | PostMissing String
 
 --------------------------------------------------------------------------------
+-- | Evaluation cache
+--
+-- Setting up trees like this usually entails having some repeated dependencies.
+-- Testing the same dependency multiple times is stupid, so cache the results.
+-- Note this is basically memorization, except that the results are IO-dependent
+-- and this may technically change with each invocation. The assumption here is
+-- that each repeated test without caching would be run in such close succession
+-- that the results will always be the same.
+
+type FIO a = StateT Cache IO a
+
+newtype Cache = Cache
+  { cSys  :: H.HashMap SystemDependency Result_
+  -- , cIO   :: forall p. H.HashMap (IODependency p) (Result p)
+  -- , cIO_  :: H.HashMap IODependency_ Result_
+  -- , cDBus :: H.HashMap DBusDependency_ Result_
+  }
+
+emptyCache :: Cache
+emptyCache = Cache H.empty
+
+memoizeSys :: (SystemDependency -> IO Result_) -> SystemDependency -> FIO Result_
+memoizeSys f d = do
+  m <- gets cSys
+  let r = H.lookup d m
+  maybe (io $ f d) return r
+
+--------------------------------------------------------------------------------
 -- | Testing pipeline
 
-evalSometimesMsg :: MonadIO m => Sometimes a -> m (Result a)
-evalSometimesMsg (Sometimes n xs) = io $ do
+evalSometimesMsg :: Sometimes a -> FIO (Result a)
+evalSometimesMsg (Sometimes n xs) = do
   PostSometimes { psSuccess = s, psFailed = fs } <- testSometimes xs
   case s of
-    (Just (Subfeature { sfData = p })) -> Right . addMsgs p <$> failedMsgs False n fs
-    _                                  -> Left <$> failedMsgs True n fs
+    (Just (Subfeature { sfData = p })) -> Right . addMsgs p <$> failedMsgsIO False n fs
+    _                                  -> Left <$> failedMsgsIO True n fs
 
-evalAlwaysMsg :: MonadIO m => Always a -> m (PostPass a)
-evalAlwaysMsg (Always n x) = io $ do
+evalAlwaysMsg :: Always a -> FIO (PostPass a)
+evalAlwaysMsg (Always n x) = do
   r <- testAlways x
   case r of
-    (Primary (Subfeature { sfData = p }) fs _) -> addMsgs p <$> failedMsgs False n fs
-    (Fallback act fs) -> PostPass act <$> failedMsgs False n fs
+    (Primary (Subfeature { sfData = p }) fs _) -> addMsgs p <$> failedMsgsIO False n fs
+    (Fallback act fs) -> PostPass act <$> failedMsgsIO False n fs
 
-testAlways :: Always_ a -> IO (PostAlways a)
+testAlways :: Always_ a -> FIO (PostAlways a)
 testAlways = go []
   where
     go failed (Option fd next) = do
@@ -354,18 +406,18 @@ testAlways = go []
         (Right pass) -> return $ Primary pass failed next
     go failed (Always_ ar) = (`Fallback` failed) <$> evalFallbackRoot ar
 
-evalFallbackRoot :: FallbackRoot a -> IO a
+evalFallbackRoot :: FallbackRoot a -> FIO a
 evalFallbackRoot (FallbackAlone a)  = return a
 evalFallbackRoot (FallbackTree a s) = a <$> evalFallbackStack s
 
-evalFallbackStack :: FallbackStack p -> IO p
+evalFallbackStack :: FallbackStack p -> FIO p
 evalFallbackStack (FallbackBottom a) = evalAlways a
 evalFallbackStack (FallbackStack f a as) = do
   ps <- evalFallbackStack as
   p <- evalAlways a
   return $ f p ps
 
-testSometimes :: Sometimes_ a -> IO (PostSometimes a)
+testSometimes :: Sometimes_ a -> FIO (PostSometimes a)
 testSometimes = go (PostSometimes Nothing [])
   where
     go ts [] = return ts
@@ -375,13 +427,13 @@ testSometimes = go (PostSometimes Nothing [])
         (Left l)     -> go (ts { psFailed = l:psFailed ts }) xs
         (Right pass) -> return $ ts { psSuccess = Just pass }
 
-testSubfeature :: SubfeatureRoot a -> IO (Either SubfeatureFail (SubfeaturePass a))
+testSubfeature :: SubfeatureRoot a -> FIO (Either SubfeatureFail (SubfeaturePass a))
 testSubfeature sf@Subfeature{ sfData = t } = do
   t' <- testRoot t
   -- monomorphism restriction :(
   return $ bimap (\n -> sf { sfData = n }) (\n -> sf { sfData = n }) t'
 
-testRoot :: Root a -> IO (Either PostFail (PostPass a))
+testRoot :: Root a -> FIO (Either PostFail (PostPass a))
 testRoot r = do
   case r of
     (IORoot a t)              -> go a testIODependency_ testIODependency t
@@ -391,7 +443,7 @@ testRoot r = do
     _                         -> return $ Left $ PostMissing "client not available"
   where
     -- rank N polymorphism is apparently undecidable...gross
-    go a f_ (f :: forall q. d q -> IO (Result q)) t =
+    go a f_ (f :: forall q. d q -> FIO (Result q)) t =
       bimap PostFail (fmap a) <$> testTree f_ f t
     go_ a f_ t = bimap PostFail (PostPass a) <$> testTree_ f_ t
 
@@ -400,11 +452,11 @@ testRoot r = do
 
 type Result p = Either [String] (PostPass p)
 
-testTree :: forall d d_ p. (d_ -> IO Result_) -> (forall q. d q -> IO (Result q))
-  -> Tree d d_ p -> IO (Either [String] (PostPass p))
+testTree :: forall d d_ p. (d_ -> FIO Result_) -> (forall q. d q -> FIO (Result q))
+  -> Tree d d_ p -> FIO (Either [String] (PostPass p))
 testTree test_ test = go
   where
-    go :: forall q. Tree d d_ q -> IO (Either [String] (PostPass q))
+    go :: forall q. Tree d d_ q -> FIO (Either [String] (PostPass q))
     go (And12 f a b) = do
       ra <- go a
       liftRight (\pa -> (and2nd f pa =<<) <$> go b) ra
@@ -421,8 +473,8 @@ testTree test_ test = go
     and2nd f (PostPass pa wa) (PostPass pb wb) = Right $ PostPass (f pa pb) $ wa ++ wb
     liftRight = either (return . Left)
 
-testIODependency :: IODependency p -> IO (Result p)
-testIODependency (IORead _ t)      = t
+testIODependency :: IODependency p -> FIO (Result p)
+testIODependency (IORead _ t)      = io t
 testIODependency (IOConst c)       = return $ Right $ PostPass c []
 -- TODO this is a bit odd because this is a dependency that will always
 -- succeed, which kinda makes this pointless. The only reason I would want this
@@ -436,7 +488,7 @@ testIODependency (IOSometimes x f) = second (fmap f) <$> evalSometimesMsg x
 
 type Result_ = Either [String] [String]
 
-testTree_ :: (d -> IO Result_) -> Tree_ d -> IO (Either [String] [String])
+testTree_ :: (d -> FIO Result_) -> Tree_ d -> FIO (Either [String] [String])
 testTree_ test = go
   where
     go (And_ a b) = either (return . Left) (`test2nd` b) =<< go a
@@ -444,15 +496,15 @@ testTree_ test = go
     go (Only_ a)  = test a
     test2nd ws = fmap ((Right . (ws ++)) =<<) . go
 
-testIODependency_ :: IODependency_ -> IO Result_
-testIODependency_ (IOSystem_ s) = maybe (Right []) (Left . (:[])) <$> testSysDependency s
+testIODependency_ :: IODependency_ -> FIO Result_
+testIODependency_ (IOSystem_ s) = memoizeSys (fmap readResult_ . testSysDependency) s
+testIODependency_ (IOTest_ _ t) = io $ readResult_ <$> t
 testIODependency_ (IOSometimes_ x) = second (\(PostPass _ ws) -> ws) <$> evalSometimesMsg x
 
 --------------------------------------------------------------------------------
 -- | System Dependency Testing
 
 testSysDependency :: SystemDependency -> IO (Maybe String)
-testSysDependency (IOTest _ t) = t
 testSysDependency (Executable sys bin) = maybe (Just msg) (const Nothing)
   <$> findExecutable bin
   where
@@ -496,8 +548,8 @@ introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
 introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
-testDBusDependency_ :: Client -> DBusDependency_ -> IO Result_
-testDBusDependency_ client (Bus bus) = do
+testDBusDependency_ :: Client -> DBusDependency_ -> FIO Result_
+testDBusDependency_ client (Bus bus) = io $ do
   ret <- callMethod client queryBus queryPath queryIface queryMem
   return $ case ret of
         Left e    -> Left [e]
@@ -513,7 +565,7 @@ testDBusDependency_ client (Bus bus) = do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-testDBusDependency_ client (Endpoint busname objpath iface mem) = do
+testDBusDependency_ client (Endpoint busname objpath iface mem) = io $ do
   ret <- callMethod client busname objpath introspectInterface introspectMethod
   return $ case ret of
         Left e     -> Left [e]
@@ -632,6 +684,10 @@ voidRead (Left [])    = Just "unspecified error"
 voidRead (Left (e:_)) = Just e
 voidRead (Right _)    = Nothing
 
+readResult_ :: Maybe String -> Result_
+readResult_ (Just w) = Left [w]
+readResult_ _        = Right []
+
 --------------------------------------------------------------------------------
 -- | IO Dependency Constructors
 
@@ -662,17 +718,17 @@ sysdUser = sysd UserUnit
 sysdSystem :: String -> IODependency_
 sysdSystem = sysd SystemUnit
 
-sysTest :: String -> IO (Maybe String) -> IODependency_
-sysTest n = IOSystem_ . IOTest n
+-- sysTest :: String -> IO (Maybe String) -> IODependency_
+-- sysTest n = IOSystem_ . IOTest n
 
 --------------------------------------------------------------------------------
 -- | Printing
 
-dumpSubfeatureRoot :: SubfeatureRoot a -> IO (JSONUnquotable, Bool)
+dumpSubfeatureRoot :: SubfeatureRoot a -> FIO (JSONUnquotable, Bool)
 dumpSubfeatureRoot Subfeature { sfData = r, sfName = n } =
   first (jsonSubfeature $ Q n) <$> dumpRoot r
 
-dumpRoot :: Root a -> IO (JSONUnquotable, Bool)
+dumpRoot :: Root a -> FIO (JSONUnquotable, Bool)
 dumpRoot (IORoot _ t) = first jsonIORoot <$>
   dumpTree testIODependency testIODependency_ dataIODependency dataIODependency_ t
 dumpRoot (IORoot_ _ t) = first jsonIORoot <$>
@@ -687,12 +743,12 @@ dumpRoot  (DBusRoot _ t Nothing) =
 dumpRoot  (DBusRoot_ _ t Nothing) =
   return (jsonDBusRoot $ dataTree_ dataDBusDependency t, False)
 
-dumpTree :: forall d d_ p. (forall q. d q -> IO (Result q))
-  -> (d_ -> IO Result_) -> (forall q. d q -> DependencyData)
-  -> (d_ -> DependencyData) -> Tree d d_ p -> IO (JSONUnquotable, Bool)
+dumpTree :: forall d d_ p. (forall q. d q -> FIO (Result q))
+  -> (d_ -> FIO Result_) -> (forall q. d q -> DependencyData)
+  -> (d_ -> DependencyData) -> Tree d d_ p -> FIO (JSONUnquotable, Bool)
 dumpTree test test_ dd dd_ = go
   where
-    go :: forall q. Tree d d_ q -> IO (JSONUnquotable, Bool)
+    go :: forall q. Tree d d_ q -> FIO (JSONUnquotable, Bool)
     go (And12 _ a b) = doAnd go go data' a b
     go (And1 a b)    = doAnd go dump_' (dataTree_ dd_) a b
     go (And2 a b)    = doAnd dump_' go data' a b
@@ -712,8 +768,8 @@ dumpTree test test_ dd dd_ = go
       let j = jsonAnd sa
       if ra then first j <$> fb b else return (j $ fb_ b, ra)
 
-dumpTree_ :: (d_ -> IO Result_) -> (d_ -> DependencyData) -> Tree_ d_
-  -> IO (JSONUnquotable, Bool)
+dumpTree_ :: (d_ -> FIO Result_) -> (d_ -> DependencyData) -> Tree_ d_
+  -> FIO (JSONUnquotable, Bool)
 dumpTree_ test_ dd_ = go
   where
     go (And_ a b) = do
@@ -773,6 +829,7 @@ dataIODependency_ :: IODependency_ -> DependencyData
 dataIODependency_ d = case d of
   (IOSystem_ s)    -> dataSysDependency s
   (IOSometimes_ _) -> (Q "sometimes", [])
+  (IOTest_ desc _) -> (Q "iotest", [("desc", JSON_Q $ Q desc)])
 
 dataSysDependency :: SystemDependency -> DependencyData
 dataSysDependency d = first Q $
@@ -780,7 +837,6 @@ dataSysDependency d = first Q $
     (Executable sys path) -> ("executable", [ ("system", JSON_UQ $ jsonBool sys)
                                             , ("path", JSON_Q $ Q path)
                                             ])
-    (IOTest desc _) -> ("iotest", [("desc", JSON_Q $ Q desc)])
     (AccessiblePath p r w) -> ("path", [ ("path", JSON_Q $ Q p)
                                        , ("readable", JSON_UQ $ jsonBool r)
                                        , ("writable", JSON_UQ $ jsonBool w)
@@ -914,6 +970,9 @@ curly s = "{" ++ s ++ "}"
 
 --------------------------------------------------------------------------------
 -- | Other random formatting
+
+failedMsgsIO :: Bool -> String -> [SubfeatureFail] -> FIO [String]
+failedMsgsIO err fn = io . failedMsgs err fn
 
 failedMsgs :: Bool -> String -> [SubfeatureFail] -> IO [String]
 failedMsgs err fn = fmap concat . mapM (failedMsg err fn)

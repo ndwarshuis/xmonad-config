@@ -33,6 +33,7 @@ import           System.Posix.Signals
 import           XMonad.Core
     ( cfgDir
     , getDirectories
+    , io
     )
 import           XMonad.Hooks.DynamicLog                        (wrap)
 import           XMonad.Internal.Command.Power                  (hasBattery)
@@ -55,7 +56,7 @@ import           Xmobar.Plugins.Common
 main :: IO ()
 main = do
   db <- connectDBus
-  c <- evalConfig db
+  c <- withCache $ evalConfig db
   disconnectDBus db
   -- this is needed to prevent waitForProcess error when forking in plugins (eg
   -- alsacmd)
@@ -64,12 +65,12 @@ main = do
   hFlush stdout
   xmobar c
 
-evalConfig :: DBusState -> IO Config
+evalConfig :: DBusState -> FIO Config
 evalConfig db = do
-  cs <- getAllCommands =<< rightPlugins db
+  cs <- getAllCommands <$> rightPlugins db
   bf <- getTextFont
   (ifs, ios) <- getIconFonts
-  d <- cfgDir <$> getDirectories
+  d <- io $ cfgDir <$> getDirectories
   return $ config bf ifs ios cs d
 
 --------------------------------------------------------------------------------
@@ -151,21 +152,18 @@ config bf ifs ios br confDir = defaultConfig
 -- some commands depend on the presence of interfaces that can only be
 -- determined at runtime; define these checks here
 
-getAllCommands :: [Maybe CmdSpec] -> IO BarRegions
-getAllCommands right = do
-  let left =
-        [ CmdSpec
-          { csAlias = "UnsafeStdinReader"
-          , csRunnable = Run UnsafeStdinReader
-          }
-        ]
-  return $ BarRegions
-    { brLeft = left
-    , brCenter = []
-    , brRight = catMaybes right
-    }
+getAllCommands :: [Maybe CmdSpec] -> BarRegions
+getAllCommands right = BarRegions
+  { brLeft = [ CmdSpec
+               { csAlias = "UnsafeStdinReader"
+               , csRunnable = Run UnsafeStdinReader
+               }
+             ]
+  , brCenter = []
+  , brRight = catMaybes right
+  }
 
-rightPlugins :: DBusState -> IO [Maybe CmdSpec]
+rightPlugins :: DBusState -> FIO [Maybe CmdSpec]
 rightPlugins DBusState { dbSesClient = ses, dbSysClient = sys }
   = mapM evalFeature
   [ Left getWireless
@@ -201,13 +199,13 @@ getBattery :: BarFeature
 getBattery = iconIO_ "battery level indicator" root tree
   where
     root useIcon = IORoot_ (batteryCmd useIcon)
-    tree = Only_ $ sysTest "Test if battery is present" hasBattery
+    tree = Only_ $ IOTest_ "Test if battery is present" hasBattery
 
 getVPN :: Maybe Client -> BarFeature
 getVPN cl = iconDBus_ "VPN status indicator" root $ toAnd vpnDep test
   where
     root useIcon tree = DBusRoot_ (const $ vpnCmd useIcon) tree cl
-    test = DBusIO $ sysTest "Use nmcli to test if VPN is present" vpnPresent
+    test = DBusIO $ IOTest_ "Use nmcli to test if VPN is present" vpnPresent
 
 getBt :: Maybe Client -> BarFeature
 getBt = xmobarDBus "bluetooth status indicator" btDep btCmd
@@ -451,7 +449,7 @@ vpnPresent =
 -- ASSUME there is only one text font for this entire configuration. This
 -- will correspond to the first font/offset parameters in the config record.
 
-getTextFont :: IO String
+getTextFont :: FIO String
 getTextFont = do
   fb <- evalAlways textFont
   return $ fb textFontData
@@ -459,7 +457,7 @@ getTextFont = do
 --------------------------------------------------------------------------------
 -- | icon fonts
 
-getIconFonts :: IO ([String], [Int])
+getIconFonts :: FIO ([String], [Int])
 getIconFonts = do
   fb <- evalSometimes iconFont
   return $ maybe ([], []) apply fb

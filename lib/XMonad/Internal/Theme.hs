@@ -158,7 +158,7 @@ fontDependency fam =
   IORead (unwords ["test if font", singleQuote fam, "exists"]) $ testFont fam
 
 fontDependency_ :: String -> IODependency_
-fontDependency_ fam = sysTest n $ voidRead <$> testFont fam
+fontDependency_ fam = IOTest_ n $ voidRead <$> testFont fam
   where
     n = unwords ["test if font", singleQuote fam, "exists"]
 
