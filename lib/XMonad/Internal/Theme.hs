@@ -21,11 +21,13 @@ module XMonad.Internal.Theme
   , FontData(..)
   , FontBuilder
   , buildFont
+  , fontTree
+  , fontDependency
+  , fontDependency_
   , defFontData
   , defFontDep
   , defFontTree
   , fontFeature
-  , fontDependency
   , tabbedTheme
   , tabbedFeature
   , promptTheme
@@ -154,6 +156,11 @@ testFont fam = do
 fontDependency :: String -> IODependency FontBuilder
 fontDependency fam =
   IORead (unwords ["test if font", singleQuote fam, "exists"]) $ testFont fam
+
+fontDependency_ :: String -> IODependency_
+fontDependency_ fam = sysTest n $ voidRead <$> testFont fam
+  where
+    n = unwords ["test if font", singleQuote fam, "exists"]
 
 fontTree :: String -> IOTree FontBuilder
 fontTree fam = Or (Only $ fontDependency fam) (Only $ IOConst fallbackFont)

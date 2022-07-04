@@ -82,6 +82,8 @@ module XMonad.Internal.Dependency
   , pathRW
   , pathW
   , sysTest
+  , voidResult
+  , voidRead
 
   -- misc
   , shellTest
@@ -620,6 +622,15 @@ listToAnds i = foldr (And_ . Only_) (Only_ i)
 
 toAnd :: d -> d -> Tree_ d
 toAnd a b = And_ (Only_ a) (Only_ b)
+
+voidResult :: Result p -> Result_
+voidResult (Left es)               = Left es
+voidResult (Right (PostPass _ ws)) = Right ws
+
+voidRead :: Result p -> Maybe String
+voidRead (Left [])    = Just "unspecified error"
+voidRead (Left (e:_)) = Just e
+voidRead (Right _)    = Nothing
 
 --------------------------------------------------------------------------------
 -- | IO Dependency Constructors
