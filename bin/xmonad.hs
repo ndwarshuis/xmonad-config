@@ -100,6 +100,13 @@ data FeatureSet = FeatureSet
   , fsShowKeys      :: Always ([((KeyMask, KeySym), NamedAction)] -> X ())
   }
 
+tabbedFeature :: Always Theme
+tabbedFeature = Always "theme for tabbed windows" $ Option sf fallback
+  where
+    sf = Subfeature niceTheme "theme with nice font" Error
+    niceTheme = IORoot T.tabbedTheme $ fontTree T.defFontFamily
+    fallback = Always_ $ FallbackAlone $ T.tabbedTheme T.fallbackFont
+
 features :: FeatureSet
 features = FeatureSet
   { fsKeys = externalBindings
@@ -108,7 +115,7 @@ features = FeatureSet
   , fsRemovableMon = runRemovableMon
   , fsACPIHandler = runHandleACPI
   , fsDynWorkspaces = allDWs'
-  , fsTabbedTheme = T.tabbedFeature
+  , fsTabbedTheme = tabbedFeature
   , fsShowKeys = runShowKeys
   , fsDaemons = [ runNetAppDaemon
                 , runFlameshotDaemon

@@ -96,7 +96,7 @@ bodyGetCurrentState _   = Nothing
 
 exportScreensaver :: Maybe Client -> SometimesIO
 exportScreensaver client =
-  sometimesDBus client "screensaver toggle" "xset" (toAnd bus ssx) cmd
+  sometimesDBus client "screensaver toggle" "xset" (toAnd_ bus ssx) cmd
   where
     cmd cl = export cl ssPath defaultInterface
       { interfaceName = interface

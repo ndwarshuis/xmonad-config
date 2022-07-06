@@ -118,7 +118,7 @@ runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
 runCalc :: SometimesX
 runCalc = sometimesIO_ "calculator" "R" deps act
   where
-    deps = toAnd (sysExe myTerm) (sysExe "R")
+    deps = toAnd_ (sysExe myTerm) (sysExe "R")
     act = spawnCmd myTerm ["-e", "R"]
 
 runBrowser :: SometimesX

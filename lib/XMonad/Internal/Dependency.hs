@@ -59,6 +59,11 @@ module XMonad.Internal.Dependency
   , executeAlways
   , evalAlways
   , evalSometimes
+  , fontTreeAlt
+  , fontTree
+  , fontTree_
+  , fontAlways
+  , fontSometimes
 
   -- lifting
   , ioSometimes
@@ -80,7 +85,8 @@ module XMonad.Internal.Dependency
   , sysdSystem
   , sysdUser
   , listToAnds
-  , toAnd
+  , toAnd_
+  , toFallback
   , pathR
   , pathRW
   , pathW
@@ -117,6 +123,7 @@ import           XMonad.Core             (X, io)
 import           XMonad.Internal.IO
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
+import           XMonad.Internal.Theme
 
 --------------------------------------------------------------------------------
 -- | Feature Evaluation
@@ -274,8 +281,8 @@ type DBusTree_ = Tree_ DBusDependency_
 
 -- | A dependency that only requires IO to evaluate (with payload)
 data IODependency p =
-  -- an IO action that yields a payload
-  IORead String (IO (Result p))
+  -- a cachable IO action that yields a payload
+  IORead String (FIO (Result p))
   -- always yields a payload
   | IOConst p
   -- an always that yields a payload
@@ -386,13 +393,14 @@ data Cache = Cache
   { --cIO    :: forall p. Memoizable p => H.HashMap (IODependency p) (Result p)
     cIO_   :: H.HashMap IODependency_ Result_
   , cDBus_ :: H.HashMap DBusDependency_ Result_
+  , cFont  :: H.HashMap String (Result FontBuilder)
   }
 
 -- class Memoizable a
   -- cache :: a ->
 
 emptyCache :: Cache
-emptyCache = Cache H.empty H.empty
+emptyCache = Cache H.empty H.empty H.empty
 
 memoizeIO_ :: (IODependency_ -> FIO Result_) -> IODependency_ -> FIO Result_
 memoizeIO_ f d = do
@@ -414,6 +422,17 @@ memoizeDBus_ f d = do
       -- io $ putStrLn $ "not using cache for " ++ show d
       r <- f d
       modify (\s -> s { cDBus_ = H.insert d r (cDBus_ s) })
+      return r
+
+memoizeFont :: (String -> IO (Result FontBuilder)) -> String -> FIO (Result FontBuilder)
+memoizeFont f d = do
+  m <- gets cFont
+  case H.lookup d m of
+    (Just r) -> return r
+    Nothing  -> do
+      -- io $ putStrLn $ "not using cache for " ++ show d
+      r <- io $ f d
+      modify (\s -> s { cFont = H.insert d r (cFont s) })
       return r
 
 --------------------------------------------------------------------------------
@@ -511,7 +530,7 @@ testTree test_ test = go
     liftRight = either (return . Left)
 
 testIODependency :: IODependency p -> FIO (Result p)
-testIODependency (IORead _ t)      = io t
+testIODependency (IORead _ t)      = t
 testIODependency (IOConst c)       = return $ Right $ PostPass c []
 -- TODO this is a bit odd because this is a dependency that will always
 -- succeed, which kinda makes this pointless. The only reason I would want this
@@ -567,7 +586,6 @@ testSysDependency (AccessiblePath p r w) = permMsg <$> getPermissionsSafe p
         (_, Just False)          -> Just "file not writable"
         _                        -> Nothing
 
-
 shellTest :: String -> String -> IO (Maybe String)
 shellTest cmd msg = do
   (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
@@ -578,6 +596,57 @@ shellTest cmd msg = do
 unitType :: UnitType -> String
 unitType SystemUnit = "system"
 unitType UserUnit   = "user"
+
+--------------------------------------------------------------------------------
+-- | IO testers
+--
+-- Make a special case for these since we end up testing the font alot, and it
+-- would be nice if I can cache them.
+
+fontAlways :: String -> String -> Always FontBuilder
+fontAlways n fam = always1 n (fontFeatureName fam) root fallbackFont
+  where
+    root = IORoot id $ fontTree fam
+
+fontSometimes :: String -> String -> Sometimes FontBuilder
+fontSometimes n fam = sometimes1 n (fontFeatureName fam) root
+  where
+    root = IORoot id $ fontTree fam
+
+fontFeatureName :: String -> String
+fontFeatureName n = unwords ["Font family for", singleQuote n]
+
+fontTreeAlt :: String -> Tree IODependency d_ FontBuilder
+fontTreeAlt fam = Or (fontTree fam) $ Only $ IOConst fallbackFont
+
+fontTree :: String -> Tree IODependency d_ FontBuilder
+fontTree = Only . fontDependency
+
+fontTree_ :: String -> IOTree_
+fontTree_ = Only_ . fontDependency_
+
+fontDependency :: String -> IODependency FontBuilder
+fontDependency fam = IORead (fontTestName fam) $ testFont fam
+
+fontDependency_ :: String -> IODependency_
+fontDependency_ fam = IOTest_ (fontTestName fam) $ voidRead <$> testFont' fam
+
+fontTestName :: String -> String
+fontTestName fam = unwords ["test if font", singleQuote fam, "exists"]
+
+testFont :: String -> FIO (Result FontBuilder)
+testFont = memoizeFont testFont'
+
+testFont' :: String -> IO (Result FontBuilder)
+testFont' fam = do
+  (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
+  return $ case rc of
+    ExitSuccess -> Right $ PostPass (buildFont $ Just fam) []
+    _           -> Left [msg]
+  where
+    msg = unwords ["font family", qFam, "not found"]
+    cmd = fmtCmd "fc-list" ["-q", qFam]
+    qFam = singleQuote fam
 
 --------------------------------------------------------------------------------
 -- | DBus Dependency Testing
@@ -715,8 +784,11 @@ sometimesEndpoint fn name busname path iface mem client =
 listToAnds :: d -> [d] -> Tree_ d
 listToAnds i = foldr (And_ . Only_) (Only_ i)
 
-toAnd :: d -> d -> Tree_ d
-toAnd a b = And_ (Only_ a) (Only_ b)
+toAnd_ :: d -> d -> Tree_ d
+toAnd_ a b = And_ (Only_ a) (Only_ b)
+
+toFallback :: IODependency p -> p -> Tree IODependency d_ p
+toFallback a = Or (Only a) . Only . IOConst
 
 voidResult :: Result p -> Result_
 voidResult (Left es)               = Left es

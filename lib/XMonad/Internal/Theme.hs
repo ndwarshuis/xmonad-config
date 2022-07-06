@@ -21,15 +21,10 @@ module XMonad.Internal.Theme
   , FontData(..)
   , FontBuilder
   , buildFont
-  , fontTree
-  , fontDependency
-  , fontDependency_
+  , fallbackFont
+  , defFontFamily
   , defFontData
-  , defFontDep
-  , defFontTree
-  , fontFeature
   , tabbedTheme
-  , tabbedFeature
   , promptTheme
   ) where
 
@@ -38,13 +33,8 @@ import           Data.Colour
 import           Data.Colour.SRGB
 import           Data.List
 
-import           System.Exit
-
-import           XMonad.Internal.Dependency
-import           XMonad.Internal.Process
-import           XMonad.Internal.Shell
-import qualified XMonad.Layout.Decoration   as D
-import qualified XMonad.Prompt              as P
+import qualified XMonad.Layout.Decoration as D
+import qualified XMonad.Prompt            as P
 
 --------------------------------------------------------------------------------
 -- | Colors - vocabulary roughly based on GTK themes
@@ -142,36 +132,6 @@ buildFont (Just fam) FontData { weight = w
 fallbackFont :: FontBuilder
 fallbackFont = buildFont Nothing
 
-testFont :: String -> IO (Result FontBuilder)
-testFont fam = do
-  (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
-  return $ case rc of
-    ExitSuccess -> Right $ PostPass (buildFont $ Just fam) []
-    _           -> Left [msg]
-  where
-    msg = unwords ["font family", qFam, "not found"]
-    cmd = fmtCmd "fc-list" ["-q", qFam]
-    qFam = singleQuote fam
-
-fontDependency :: String -> IODependency FontBuilder
-fontDependency fam =
-  IORead (unwords ["test if font", singleQuote fam, "exists"]) $ testFont fam
-
-fontDependency_ :: String -> IODependency_
-fontDependency_ fam = IOTest_ n $ voidRead <$> testFont fam
-  where
-    n = unwords ["test if font", singleQuote fam, "exists"]
-
-fontTree :: String -> IOTree FontBuilder
-fontTree fam = Or (Only $ fontDependency fam) (Only $ IOConst fallbackFont)
-
-fontFeature :: String -> String -> Always FontBuilder
-fontFeature n fam = always1 n sfn root def
-  where
-    sfn = "Font family for " ++ fam
-    root = IORoot id $ fontTree fam
-    def = buildFont Nothing
-
 --------------------------------------------------------------------------------
 -- | Default font and data
 
@@ -184,11 +144,14 @@ defFontData = FontData
   , pixelsize = Nothing
   }
 
-defFontDep :: IODependency FontBuilder
-defFontDep = fontDependency "DejaVu Sans"
+defFontFamily :: String
+defFontFamily = "DejaVu Sans"
 
-defFontTree :: IOTree FontBuilder
-defFontTree = fontTree "DejaVu Sans"
+-- defFontDep :: IODependency FontBuilder
+-- defFontDep = fontDependency "DejaVu Sans"
+
+-- defFontTree :: IOTree FontBuilder
+-- defFontTree = fontTree "DejaVu Sans"
 
 --------------------------------------------------------------------------------
 -- | Complete themes
@@ -218,13 +181,6 @@ tabbedTheme fb = D.def
   , D.windowTitleAddons     = []
   , D.windowTitleIcons      = []
   }
-
-tabbedFeature :: Always D.Theme
-tabbedFeature = Always "theme for tabbed windows" $ Option sf fallback
-  where
-    sf = Subfeature niceTheme "theme with nice font" Error
-    niceTheme = IORoot tabbedTheme $ Only defFontDep
-    fallback = Always_ $ FallbackAlone $ tabbedTheme fallbackFont
 
 promptTheme :: FontBuilder -> P.XPConfig
 promptTheme fb = P.def

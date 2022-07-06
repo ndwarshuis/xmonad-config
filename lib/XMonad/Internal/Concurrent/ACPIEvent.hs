@@ -18,7 +18,6 @@ import           Data.Connection
 
 import           Text.Read                                (readMaybe)
 
--- import           System.Directory                         (doesPathExist)
 import           System.IO.Streams                        as S (read)
 import           System.IO.Streams.UnixSocket
 
@@ -29,7 +28,7 @@ import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
 import           XMonad.Internal.Theme
     ( FontBuilder
-    , defFontTree
+    , defFontFamily
     )
 
 --------------------------------------------------------------------------------
@@ -123,6 +122,7 @@ runHandleACPI :: Always (String -> X ())
 runHandleACPI = Always "ACPI event handler" $ Option sf fallback
   where
     sf = Subfeature withLock "acpid prompt" Error
-    withLock = IORoot (uncurry handleACPI) $ And12 (,) defFontTree $ Only
-               $ IOSometimes runScreenLock id
+    withLock = IORoot (uncurry handleACPI)
+      $ And12 (,) (fontTreeAlt defFontFamily) $ Only
+      $ IOSometimes runScreenLock id
     fallback = Always_ $ FallbackAlone $ const skip

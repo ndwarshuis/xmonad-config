@@ -96,7 +96,7 @@ quitPrompt :: T.FontBuilder -> X ()
 quitPrompt = confirmPrompt' "quit?" $ io exitSuccess
 
 sometimesPrompt :: String -> (T.FontBuilder -> X ()) -> SometimesX
-sometimesPrompt n = sometimesIO n (n ++ " command") T.defFontTree
+sometimesPrompt n = sometimesIO n (n ++ " command") $ fontTreeAlt T.defFontFamily
 
 -- TODO doesn't this need to also lock the screen?
 runSuspendPrompt :: SometimesX
@@ -140,7 +140,7 @@ runOptimusPrompt = Sometimes "graphics switcher" [s]
   where
     s = Subfeature { sfData = r, sfName = "optimus manager", sfLevel = Error }
     r = IORoot runOptimusPrompt' t
-    t = And1 T.defFontTree
+    t = And1 (fontTreeAlt T.defFontFamily)
       $ And_ (Only_ $ sysExe myOptimusManager) (Only_ $ sysExe myPrimeOffload)
 
 --------------------------------------------------------------------------------
@@ -174,7 +174,7 @@ runPowerPrompt = Sometimes "power prompt" [sf]
   where
     sf = Subfeature withLock "prompt with lock" Error
     withLock = IORoot (uncurry powerPrompt) tree
-    tree = And12 (,) lockTree T.defFontTree
+    tree = And12 (,) lockTree (fontTreeAlt T.defFontFamily)
     lockTree = Or (Only $ IOSometimes runScreenLock id) (Only $ IOConst skip)
 
 powerPrompt :: X () -> T.FontBuilder -> X ()

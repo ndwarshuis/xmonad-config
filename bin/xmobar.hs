@@ -46,7 +46,6 @@ import           XMonad.Internal.Process
     ( proc'
     , readCreateProcessWithExitCode'
     )
-import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                          as T
 import           Xmobar                                         hiding
     ( iconOffset
@@ -78,7 +77,7 @@ evalConfig db = do
 
 -- | The text font family
 textFont :: Always T.FontBuilder
-textFont = T.fontFeature "XMobar Text Font" "DejaVu Sans Mono"
+textFont = fontAlways "XMobar Text Font" "DejaVu Sans Mono"
 
 -- | Offset of the text in the bar
 textFontOffset :: Int
@@ -90,11 +89,7 @@ textFontData = T.defFontData { T.weight = Just T.Bold, T.size = Just 11 }
 
 -- | The icon font family
 iconFont :: Sometimes T.FontBuilder
-iconFont = sometimes1 "XMobar Icon Font" sfn root
-  where
-    fam = "Symbols Nerd Font"
-    sfn = "Font family for " ++ singleQuote fam
-    root = IORoot id $ T.fontTree fam
+iconFont = fontSometimes "XMobar Icon Font" "Symbols Nerd Font"
 
 -- | Offsets for the icons in the bar (relative to the text offset)
 iconOffset :: BarFont -> Int
@@ -202,7 +197,7 @@ getBattery = iconIO_ "battery level indicator" root tree
     tree = Only_ $ IOTest_ "Test if battery is present" hasBattery
 
 getVPN :: Maybe Client -> BarFeature
-getVPN cl = iconDBus_ "VPN status indicator" root $ toAnd vpnDep test
+getVPN cl = iconDBus_ "VPN status indicator" root $ toAnd_ vpnDep test
   where
     root useIcon tree = DBusRoot_ (const $ vpnCmd useIcon) tree cl
     test = DBusIO $ IOTest_ "Use nmcli to test if VPN is present" vpnPresent
@@ -225,38 +220,40 @@ getSs :: Maybe Client -> BarFeature
 getSs = xmobarDBus "screensaver indicator" ssSignalDep ssCmd
 
 getLock :: Always CmdSpec
-getLock = always1 "lock indicator" "icon indicator" root $ lockCmd False
+getLock = always1 "lock indicator" "icon indicator" root $ lockCmd fontifyAlt
   where
-    root = IORoot_ (lockCmd True) $ Only_ iconDependency
+    root = IORoot_ (lockCmd fontifyIcon) $ Only_ iconDependency
 
 --------------------------------------------------------------------------------
 -- | bar feature constructors
 
-xmobarDBus :: String -> DBusDependency_ -> (Bool -> CmdSpec) -> Maybe Client -> BarFeature
+xmobarDBus :: String -> DBusDependency_ -> (Fontifier -> CmdSpec)
+  -> Maybe Client -> BarFeature
 xmobarDBus n dep cmd cl = iconDBus_ n root (Only_ dep)
   where
     root useIcon tree = DBusRoot_ (const $ cmd useIcon) tree cl
 
-iconIO_ :: String -> (Bool -> IOTree_ -> Root CmdSpec) -> IOTree_ -> BarFeature
+iconIO_ :: String -> (Fontifier -> IOTree_ -> Root CmdSpec) -> IOTree_
+  -> BarFeature
 iconIO_ = iconSometimes' And_ Only_
 
-iconDBus :: String -> (Bool -> DBusTree p -> Root CmdSpec)
+iconDBus :: String -> (Fontifier -> DBusTree p -> Root CmdSpec)
   -> DBusTree p -> BarFeature
 iconDBus = iconSometimes' And1 $ Only_ . DBusIO
 
-iconDBus_ :: String -> (Bool -> DBusTree_ -> Root CmdSpec) -> DBusTree_
+iconDBus_ :: String -> (Fontifier -> DBusTree_ -> Root CmdSpec) -> DBusTree_
   -> BarFeature
 iconDBus_ = iconSometimes' And_ $ Only_ . DBusIO
 
 iconSometimes' :: (t -> t_ -> t) -> (IODependency_ -> t_) -> String
-  -> (Bool -> t -> Root CmdSpec) -> t -> BarFeature
+  -> (Fontifier -> t -> Root CmdSpec) -> t -> BarFeature
 iconSometimes' c d n r t = Sometimes n
   [ Subfeature icon "icon indicator" Error
   , Subfeature text "text indicator" Error
   ]
   where
-    icon = r True $ c t $ d iconDependency
-    text = r False t
+    icon = r fontifyIcon $ c t $ d iconDependency
+    text = r fontifyAlt t
 
 --------------------------------------------------------------------------------
 -- | command specifications
@@ -286,17 +283,15 @@ wirelessCmd iface = CmdSpec
     ] 5
   }
 
-ethernetCmd :: Bool -> String -> CmdSpec
-ethernetCmd icon iface = CmdSpec
+ethernetCmd :: Fontifier -> String -> CmdSpec
+ethernetCmd fontify iface = CmdSpec
   { csAlias = iface
   , csRunnable = Run
-    $ Device (iface, text, colors)
+    $ Device (iface, fontify IconMedium "\xf0e8" "ETH", colors)
   }
-  where
-    text = if icon then fontifyText IconMedium "\xf0e8" else "ETH"
 
-batteryCmd :: Bool -> CmdSpec
-batteryCmd icon = CmdSpec
+batteryCmd :: Fontifier -> CmdSpec
+batteryCmd fontify = CmdSpec
   { csAlias = "battery"
   , csRunnable = Run
     $ Battery
@@ -308,75 +303,66 @@ batteryCmd icon = CmdSpec
     , "--high", T.fgColor
     , "--"
     , "-P"
-    , "-o" , fontify "\xf0e7" "BAT"
-    , "-O" , fontify "\xf1e6" "AC"
-    , "-i" , fontify "\xf1e6" "AC"
+    , "-o" , fontify' "\xf0e7" "BAT"
+    , "-O" , fontify' "\xf1e6" "AC"
+    , "-i" , fontify' "\xf1e6" "AC"
     ] 50
   }
   where
-    fontify i t = if icon then fontifyText IconSmall i else t ++ ": "
+    fontify' = fontify IconSmall
 
-vpnCmd :: Bool -> CmdSpec
-vpnCmd icon = CmdSpec
+vpnCmd :: Fontifier -> CmdSpec
+vpnCmd fontify = CmdSpec
   { csAlias = vpnAlias
-  , csRunnable = Run $ VPN (text, colors)
+  , csRunnable = Run $ VPN (fontify IconMedium "\xf023" "VPN", colors)
   }
-  where
-    text = if icon then fontifyText IconMedium "\xf023" else "VPN"
 
-btCmd :: Bool -> CmdSpec
-btCmd icon = CmdSpec
+btCmd :: Fontifier -> CmdSpec
+btCmd fontify = CmdSpec
   { csAlias = btAlias
   , csRunnable = Run
-    $ Bluetooth (fontify "\xf5b0" "+", fontify "\xf5ae" "-") colors
+    $ Bluetooth (fontify' "\xf5b0" "+", fontify' "\xf5ae" "-") colors
   }
   where
-    fontify i t = if icon then fontifyText IconLarge i else "BT" ++ t
+    fontify' i a = fontify IconLarge i $ "BT" ++ a
 
-alsaCmd :: Bool -> CmdSpec
-alsaCmd icon = CmdSpec
+alsaCmd :: Fontifier -> CmdSpec
+alsaCmd fontify = CmdSpec
   { csAlias = "alsa:default:Master"
   , csRunnable = Run
     $ Alsa "default" "Master"
     [ "-t", "<status><volume>%"
     , "--"
     -- TODO just make this gray when muted
-    , "-O", fontify "\xf028" "+"
-    , "-o", fontify "\xf026" "-" ++ " "
+    , "-O", fontify' "\xf028" "+"
+    , "-o", fontify' "\xf026" "-" ++ " "
     , "-c", T.fgColor
     , "-C", T.fgColor
     ]
   }
   where
-    fontify i t = if icon then fontifyText IconSmall i else "VOL" ++ t
+    fontify' i a = fontify IconSmall i $ "VOL" ++ a
 
-blCmd :: Bool -> CmdSpec
-blCmd icon = CmdSpec
+blCmd :: Fontifier -> CmdSpec
+blCmd fontify = CmdSpec
   { csAlias = blAlias
-  , csRunnable = Run $ IntelBacklight text
+  , csRunnable = Run $ IntelBacklight $ fontify IconSmall "\xf185" "BL: "
   }
-  where
-    text = if icon then fontifyText IconSmall "\xf185" else "BL: "
 
-ckCmd :: Bool -> CmdSpec
-ckCmd icon = CmdSpec
+ckCmd :: Fontifier -> CmdSpec
+ckCmd fontify = CmdSpec
   { csAlias = ckAlias
-  , csRunnable = Run $ ClevoKeyboard text
+  , csRunnable = Run $ ClevoKeyboard $ fontify IconSmall "\xf40b" "KB: "
   }
-  where
-    text = if icon then fontifyText IconSmall "\xf40b" else "KB: "
 
-ssCmd :: Bool -> CmdSpec
-ssCmd icon = CmdSpec
+ssCmd :: Fontifier -> CmdSpec
+ssCmd fontify = CmdSpec
   { csAlias = ssAlias
-  , csRunnable = Run
-    $ Screensaver (text, colors)
+  , csRunnable = Run $ Screensaver (fontify IconSmall "\xf254" "SS", colors)
   }
-  where
-    text = if icon then fontifyText IconSmall "\xf254" else "SS"
 
-lockCmd :: Bool -> CmdSpec
-lockCmd icon = CmdSpec
+lockCmd :: Fontifier -> CmdSpec
+lockCmd fontify = CmdSpec
   { csAlias = "locks"
   , csRunnable = Run
     $ Locks
@@ -390,9 +376,9 @@ lockCmd icon = CmdSpec
     ]
   }
   where
-    numIcon = fontify "\xf8a5" "N"
-    capIcon = fontify "\xf657" "C"
-    fontify i t = if icon then fontifyText IconXLarge i else t
+    numIcon = fontify' "\xf8a5" "N"
+    capIcon = fontify' "\xf657" "C"
+    fontify' = fontify IconXLarge
     disabledColor = xmobarFGColor T.backdropFgColor
 
 dateCmd :: CmdSpec
@@ -425,7 +411,7 @@ sysfsNet = "/sys/class/net"
 readInterface :: String -> (String -> Bool) -> IODependency String
 readInterface n f = IORead n go
   where
-    go = do
+    go = io $ do
       ns <- filter f <$> listInterfaces
       case ns of
         [] -> return $ Left ["no interfaces found"]
@@ -482,6 +468,14 @@ iconDependency = IOSometimes_ iconFont
 
 fontifyText :: BarFont -> String -> String
 fontifyText fnt txt = concat ["<fn=", show $ 1 + fromEnum fnt, ">", txt, "</fn>"]
+
+type Fontifier = BarFont -> String -> String -> String
+
+fontifyAlt :: Fontifier
+fontifyAlt _ _ alt = alt
+
+fontifyIcon :: Fontifier
+fontifyIcon f i _ = fontifyText f i
 
 --------------------------------------------------------------------------------
 -- | various formatting things
