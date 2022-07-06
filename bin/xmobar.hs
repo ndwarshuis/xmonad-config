@@ -324,7 +324,7 @@ btCmd fontify = CmdSpec
     $ Bluetooth (fontify' "\xf5b0" "+", fontify' "\xf5ae" "-") colors
   }
   where
-    fontify' i a = fontify IconLarge i $ "BT" ++ a
+    fontify' i = fontify IconLarge i . ("BT" ++)
 
 alsaCmd :: Fontifier -> CmdSpec
 alsaCmd fontify = CmdSpec
@@ -333,7 +333,6 @@ alsaCmd fontify = CmdSpec
     $ Alsa "default" "Master"
     [ "-t", "<status><volume>%"
     , "--"
-    -- TODO just make this gray when muted
     , "-O", fontify' "\xf028" "+"
     , "-o", fontify' "\xf026" "-" ++ " "
     , "-c", T.fgColor
@@ -341,7 +340,7 @@ alsaCmd fontify = CmdSpec
     ]
   }
   where
-    fontify' i a = fontify IconSmall i $ "VOL" ++ a
+    fontify' i = fontify IconSmall i . ("VOL" ++)
 
 blCmd :: Fontifier -> CmdSpec
 blCmd fontify = CmdSpec
