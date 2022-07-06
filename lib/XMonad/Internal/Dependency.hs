@@ -104,7 +104,7 @@ import           Data.Maybe
 
 import           GHC.Generics            (Generic)
 
-import           DBus
+import           DBus                    hiding (typeOf)
 import           DBus.Client
 import           DBus.Internal
 import qualified DBus.Introspection      as I
@@ -287,17 +287,31 @@ data IODependency p =
 data DBusDependency_ = Bus BusName
   | Endpoint BusName ObjectPath InterfaceName DBusMember
   | DBusIO IODependency_
+  deriving (Eq, Generic)
+
+instance Hashable DBusDependency_ where
+  hashWithSalt s (Bus b)            = hashWithSalt s $ formatBusName b
+  hashWithSalt s (Endpoint b o i m) = s `hashWithSalt` formatBusName b
+                                      `hashWithSalt` formatObjectPath o
+                                      `hashWithSalt` formatInterfaceName i
+                                      `hashWithSalt` m
+  hashWithSalt s (DBusIO i)            = hashWithSalt s i
 
 -- | A dependency that only requires IO to evaluate (no payload)
 data IODependency_ = IOSystem_ SystemDependency
   | IOTest_ String (IO (Maybe String))
   | forall a. IOSometimes_ (Sometimes a)
 
--- instance Eq IODependency_ where
---   (==) (IOSystem_ s0) (IOSystem_ s1)     = s0 == s1
---   (==) (IOTest_ _ _) (IOTest_ _ _)       = False
---   (==) (IOSometimes_ _) (IOSometimes_ _) = False
---   (==) _ _                               = False
+instance Eq IODependency_ where
+  (==) (IOSystem_ s0) (IOSystem_ s1)     = s0 == s1
+  (==) (IOTest_ _ _) (IOTest_ _ _)       = False
+  (==) (IOSometimes_ _) (IOSometimes_ _) = False
+  (==) _ _                               = False
+
+instance Hashable IODependency_ where
+  hashWithSalt s (IOSystem_ y)                  = hashWithSalt s y
+  hashWithSalt s (IOTest_ n _)                  = hashWithSalt s n
+  hashWithSalt s (IOSometimes_ (Sometimes n _)) = hashWithSalt s n
 
 -- | A system component to an IODependency
 -- This name is dumb, but most constructors should be obvious
@@ -318,7 +332,12 @@ instance Hashable UnitType
 data DBusMember = Method_ MemberName
   | Signal_ MemberName
   | Property_ String
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance Hashable DBusMember where
+  hashWithSalt s (Method_ m)   = hashWithSalt s $ formatMemberName m
+  hashWithSalt s (Signal_ m)   = hashWithSalt s $ formatMemberName m
+  hashWithSalt s (Property_ p) = hashWithSalt s p
 
 --------------------------------------------------------------------------------
 -- | Tested dependency tree
@@ -363,21 +382,39 @@ data PostFail = PostFail [String] | PostMissing String
 
 type FIO a = StateT Cache IO a
 
-newtype Cache = Cache
-  { cSys  :: H.HashMap SystemDependency Result_
-  -- , cIO   :: forall p. H.HashMap (IODependency p) (Result p)
-  -- , cIO_  :: H.HashMap IODependency_ Result_
-  -- , cDBus :: H.HashMap DBusDependency_ Result_
+data Cache = Cache
+  { --cIO    :: forall p. Memoizable p => H.HashMap (IODependency p) (Result p)
+    cIO_   :: H.HashMap IODependency_ Result_
+  , cDBus_ :: H.HashMap DBusDependency_ Result_
   }
 
-emptyCache :: Cache
-emptyCache = Cache H.empty
+-- class Memoizable a
+  -- cache :: a ->
 
-memoizeSys :: (SystemDependency -> IO Result_) -> SystemDependency -> FIO Result_
-memoizeSys f d = do
-  m <- gets cSys
-  let r = H.lookup d m
-  maybe (io $ f d) return r
+emptyCache :: Cache
+emptyCache = Cache H.empty H.empty
+
+memoizeIO_ :: (IODependency_ -> FIO Result_) -> IODependency_ -> FIO Result_
+memoizeIO_ f d = do
+  m <- gets cIO_
+  case H.lookup d m of
+    (Just r) -> return r
+    Nothing  -> do
+      -- io $ putStrLn $ "not using cache for " ++ show d
+      r <- f d
+      modify (\s -> s { cIO_ = H.insert d r (cIO_ s) })
+      return r
+
+memoizeDBus_ :: (DBusDependency_ -> FIO Result_) -> DBusDependency_ -> FIO Result_
+memoizeDBus_ f d = do
+  m <- gets cDBus_
+  case H.lookup d m of
+    (Just r) -> return r
+    Nothing  -> do
+      -- io $ putStrLn $ "not using cache for " ++ show d
+      r <- f d
+      modify (\s -> s { cDBus_ = H.insert d r (cDBus_ s) })
+      return r
 
 --------------------------------------------------------------------------------
 -- | Testing pipeline
@@ -497,9 +534,12 @@ testTree_ test = go
     test2nd ws = fmap ((Right . (ws ++)) =<<) . go
 
 testIODependency_ :: IODependency_ -> FIO Result_
-testIODependency_ (IOSystem_ s) = memoizeSys (fmap readResult_ . testSysDependency) s
-testIODependency_ (IOTest_ _ t) = io $ readResult_ <$> t
-testIODependency_ (IOSometimes_ x) = second (\(PostPass _ ws) -> ws) <$> evalSometimesMsg x
+testIODependency_ = memoizeIO_ testIODependency'_
+
+testIODependency'_ :: IODependency_ -> FIO Result_
+testIODependency'_ (IOSystem_ s) = io $ readResult_ <$> testSysDependency s
+testIODependency'_ (IOTest_ _ t) = io $ readResult_ <$> t
+testIODependency'_ (IOSometimes_ x) = second (\(PostPass _ ws) -> ws) <$> evalSometimesMsg x
 
 --------------------------------------------------------------------------------
 -- | System Dependency Testing
@@ -549,7 +589,10 @@ introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
 testDBusDependency_ :: Client -> DBusDependency_ -> FIO Result_
-testDBusDependency_ client (Bus bus) = io $ do
+testDBusDependency_ cl = memoizeDBus_ (testDBusDependency'_ cl)
+
+testDBusDependency'_ :: Client -> DBusDependency_ -> FIO Result_
+testDBusDependency'_ client (Bus bus) = io $ do
   ret <- callMethod client queryBus queryPath queryIface queryMem
   return $ case ret of
         Left e    -> Left [e]
@@ -565,7 +608,7 @@ testDBusDependency_ client (Bus bus) = io $ do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-testDBusDependency_ client (Endpoint busname objpath iface mem) = io $ do
+testDBusDependency'_ client (Endpoint busname objpath iface mem) = io $ do
   ret <- callMethod client busname objpath introspectInterface introspectMethod
   return $ case ret of
         Left e     -> Left [e]
@@ -595,7 +638,7 @@ testDBusDependency_ client (Endpoint busname objpath iface mem) = io $ do
       , formatBusName busname
       ]
 
-testDBusDependency_ _ (DBusIO i) = testIODependency_ i
+testDBusDependency'_ _ (DBusIO i) = testIODependency_ i
 
 --------------------------------------------------------------------------------
 -- | IO Lifting functions

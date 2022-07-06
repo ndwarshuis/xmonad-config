@@ -24,9 +24,7 @@ import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
 
 import           System.Environment
-import           System.Exit
 import           System.IO
-import           System.IO.Error
 import           System.Process
 
 import           XMonad
@@ -48,6 +46,7 @@ import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ACPIEvent
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Concurrent.DynamicWorkspaces
+import           XMonad.Internal.Concurrent.VirtualBox
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.Common
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
@@ -275,15 +274,15 @@ vmDynamicWorkspace = sometimes1 "virtualbox workspace" "windows 8 VM" root
          , dwCmd = Just $ spawnCmd "vbox-start" [vm]
          }
 
--- TODO this shell command is hilariously slow and kills my fast startup time
-vmExists :: String -> IO (Maybe String)
-vmExists vm =
-  go <$> tryIOError (readCreateProcessWithExitCode' pr "")
-  where
-    pr = proc' "VBoxManage" ["showvminfo", vm]
-    go (Right (ExitSuccess, _, _))   = Nothing
-    go (Right (ExitFailure _, _, _)) = Just $ "VM not found: " ++ vm
-    go (Left e)                      = Just $ show e
+-- -- TODO this shell command is hilariously slow and kills my fast startup time
+-- vmExists :: String -> IO (Maybe String)
+-- vmExists vm =
+--   go <$> tryIOError (readCreateProcessWithExitCode' pr "")
+--   where
+--     pr = proc' "VBoxManage" ["showvminfo", vm]
+--     go (Right (ExitSuccess, _, _))   = Nothing
+--     go (Right (ExitFailure _, _, _)) = Just $ "VM not found: " ++ vm
+--     go (Left e)                      = Just $ show e
 
 xsaneDynamicWorkspace :: Sometimes DynWorkspace
 xsaneDynamicWorkspace = sometimesIO_ "scanner workspace" "xsane" tree dw
