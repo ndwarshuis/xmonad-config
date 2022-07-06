@@ -13,10 +13,6 @@ module XMonad.Internal.Command.DMenu
   , runBTMenu
   , runShowKeys
   , runAutorandrMenu
-
-  -- daemons
-  , runBwDaemon
-  , runClipManager
   ) where
 
 import           Control.Monad.Reader
@@ -108,6 +104,7 @@ runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 runWinMenu :: SometimesX
 runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
+-- TODO test that networkManager is actually running
 runNetMenu :: SometimesX
 runNetMenu = sometimesExeArgs "network control menu" "rofi NetworkManager"
   True myDmenuNetworks $ themeArgs "#ff3333"
@@ -119,31 +116,21 @@ runAutorandrMenu = sometimesExeArgs "autorandr menu" "rofi autorandr"
 --------------------------------------------------------------------------------
 -- | Password manager
 
-runBwDaemon :: Sometimes (IO ProcessHandle)
-runBwDaemon = sometimesIO_ "password manager daemon" "rofi bitwarden" tree cmd
-  where
-    tree = Only_ $ localExe myDmenuPasswords
-    cmd = snd <$> spawnPipeArgs "rofi-bw" ["-d", "3600"]
-
 runBwMenu :: SometimesX
 runBwMenu = sometimesIO_ "password manager" "rofi bitwarden"
-  (Only_ $ IOSometimes_ runBwDaemon) $ spawnCmd myDmenuPasswords
+  -- TODO test that this program is actually running (query the DBus?)
+  (Only_ $ localExe myDmenuPasswords) $ spawnCmd myDmenuPasswords
   $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
 
 --------------------------------------------------------------------------------
 -- | Clipboard
 
-runClipManager :: Sometimes (IO ProcessHandle)
-runClipManager = sometimesIO_ "clipboard daemon" "greenclip" tree cmd
-  where
-    tree = Only_ $ sysExe myClipboardManager
-    cmd = snd <$> spawnPipeArgs "greenclip" ["daemon"]
-
 runClipMenu :: SometimesX
 runClipMenu = sometimesIO_ "clipboard manager" "rofi greenclip" tree act
   where
     act = spawnCmd myDmenuCmd args
-    tree = toAnd_ (sysExe myDmenuCmd) $ IOSometimes_ runClipManager
+    -- TODO test that greenclip daemon is actually running
+    tree = toAnd_ (sysExe myDmenuCmd) $ sysExe myClipboardManager
     args = [ "-modi", "\"clipboard:greenclip print\""
            , "-show", "clipboard"
            , "-run-command", "'{cmd}'"

@@ -36,8 +36,6 @@ module XMonad.Internal.Command.Desktop
 
   -- daemons
   , runNetAppDaemon
-  , runFlameshotDaemon
-  , runNotificationDaemon
   ) where
 
 import           Control.Monad              (void)
@@ -85,9 +83,6 @@ myImageBrowser = "feh"
 
 myNotificationCtrl :: String
 myNotificationCtrl = "dunstctl"
-
-myNotificationDaemon :: String
-myNotificationDaemon = "dunst"
 
 --------------------------------------------------------------------------------
 -- | Misc constants
@@ -180,17 +175,11 @@ runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return
 --------------------------------------------------------------------------------
 -- | Notification control
 
-runNotificationDaemon :: Sometimes (IO ProcessHandle)
-runNotificationDaemon = sometimesIO_ "notification daemon" "dunst" tree cmd
-  where
-    tree = Only_ $ sysExe myNotificationDaemon
-    cmd = snd <$> spawnPipe myNotificationDaemon
-
+-- TODO test that dunst is actually running
 runNotificationCmd :: String -> FilePath -> SometimesX
 runNotificationCmd n arg = sometimesIO_ (n ++ " control") "dunstctl" tree cmd
   where
-    tree = And_ (Only_ $ IOSometimes_ runNotificationDaemon)
-      (Only_ $ sysExe myNotificationCtrl)
+    tree = Only_ $ sysExe myNotificationCtrl
     cmd = spawnCmd myNotificationCtrl [arg]
 
 runNotificationClose :: SometimesX
@@ -291,15 +280,10 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
-runFlameshotDaemon :: Sometimes (IO ProcessHandle)
-runFlameshotDaemon = sometimesIO_ "screen capture daemon" "flameshot" tree cmd
-  where
-    tree = Only_ $ sysExe myCapture
-    cmd = snd <$> (spawnPipe' $ (shell myCapture) { std_err = NoStream })
-
+-- TODO test that flameshot is actually running
 runFlameshot :: String -> String -> SometimesX
 runFlameshot n mode = sometimesIO_ n myCapture
-  (Only_ $ IOSometimes_ runFlameshotDaemon) $ spawnCmd myCapture [mode]
+  (Only_ $ sysExe myCapture) $ spawnCmd myCapture [mode]
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix

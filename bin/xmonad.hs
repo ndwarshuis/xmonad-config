@@ -117,18 +117,7 @@ features = FeatureSet
   , fsDynWorkspaces = allDWs'
   , fsTabbedTheme = tabbedFeature
   , fsShowKeys = runShowKeys
-  , fsDaemons = [ runNetAppDaemon
-                , runFlameshotDaemon
-                  -- TODO the problem with launching
-                  -- dunst here is that the history
-                  -- will get nuked on each restart
-                , runNotificationDaemon
-                , runBwDaemon
-                  -- TODO does this have a lag when
-                  -- spawned within the WM?
-                , runClipManager
-                , runAutolock
-                ]
+  , fsDaemons = [runNetAppDaemon, runAutolock]
   }
 
 evalConf db = do
