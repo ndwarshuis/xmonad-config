@@ -24,8 +24,8 @@ module XMonad.Internal.Dependency
   , PostPass(..)
   , Subfeature(..)
   , SubfeatureRoot
-  , LogLevel(..)
   , Msg(..)
+  , LogLevel(..)
 
   -- dependency tree types
   , Root(..)
@@ -101,13 +101,17 @@ module XMonad.Internal.Dependency
 
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
+import           Control.Monad.Reader
 import           Control.Monad.State
 
+import           Data.Aeson              hiding (Error, Result)
+import           Data.Aeson.Key
 import           Data.Bifunctor
 import qualified Data.HashMap.Strict     as H
 import           Data.Hashable
 import           Data.List
 import           Data.Maybe
+import           Data.Yaml
 
 import           GHC.Generics            (Generic)
 
@@ -116,9 +120,11 @@ import           DBus.Client
 import           DBus.Internal
 import qualified DBus.Introspection      as I
 
-import           System.Directory        (findExecutable, readable, writable)
+import           System.Directory
 import           System.Environment
 import           System.Exit
+import           System.FilePath
+import           System.Posix.Files
 
 import           XMonad.Core             (X, io)
 import           XMonad.Internal.IO
@@ -135,7 +141,9 @@ import           XMonad.Internal.Theme
 -- | Run feature evaluation(s) with the cache
 -- Currently there is no easy way to not use this (oh well)
 withCache :: FIO a -> IO a
-withCache x = evalStateT x emptyCache
+withCache x = do
+  p <- getParams
+  evalStateT (runReaderT x p) emptyCache
 
 -- | Execute an Always immediately
 executeAlways :: Always (IO a) -> FIO a
@@ -254,11 +262,11 @@ data Subfeature f = Subfeature
   , sfLevel :: LogLevel
   }
 
-type SubfeatureRoot a = Subfeature (Root a)
-
 -- | Loglevel at which feature testing should be reported
 -- This is currently not used for anything important
-data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord)
+data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord, Generic)
+
+type SubfeatureRoot a = Subfeature (Root a)
 
 -- | An action and its dependencies
 -- May be a plain old monad or be DBus-dependent, in which case a client is
@@ -399,18 +407,6 @@ data PostFail = PostFail [Msg] | PostMissing Msg
 -- that each repeated test without caching would be run in such close succession
 -- that the results will always be the same.
 
-type FIO a = StateT Cache IO a
-
-data Cache = Cache
-  { --cIO    :: forall p. Memoizable p => H.HashMap (IODependency p) (Result p)
-    cIO_   :: H.HashMap IODependency_ Result_
-  , cDBus_ :: H.HashMap DBusDependency_ Result_
-  , cFont  :: H.HashMap String (Result FontBuilder)
-  }
-
--- class Memoizable a
-  -- cache :: a ->
-
 emptyCache :: Cache
 emptyCache = Cache H.empty H.empty H.empty
 
@@ -446,6 +442,52 @@ memoizeFont f d = do
       r <- io $ f d
       modify (\s -> s { cFont = H.insert d r (cFont s) })
       return r
+
+--------------------------------------------------------------------------------
+-- | Configuration
+
+type FIO a = ReaderT XParams (StateT Cache IO) a
+
+data XParams = XParams
+  { xpLogLevel :: LogLevel
+  }
+
+defParams :: XParams
+defParams = XParams { xpLogLevel = Error }
+
+data Cache = Cache
+  { --cIO    :: forall p. Memoizable p => H.HashMap (IODependency p) (Result p)
+    cIO_   :: H.HashMap IODependency_ Result_
+  , cDBus_ :: H.HashMap DBusDependency_ Result_
+  , cFont  :: H.HashMap String (Result FontBuilder)
+  }
+
+getParams :: IO XParams
+getParams = do
+  p <- getParamFile
+  maybe (return defParams) decodeYaml p
+  where
+    decodeYaml p = either (\e -> print e >> return defParams) return
+      =<< decodeFileEither p
+
+getParamFile :: IO (Maybe FilePath)
+getParamFile = do
+  e <- lookupEnv "XDG_CONFIG_HOME"
+  parent <- case e of
+    Nothing -> fallback
+    Just path
+      | isRelative path -> fallback
+      | otherwise -> return path
+  let full = parent </> "xmonad.yml"
+  (\x -> if x then Just full else Nothing) <$> fileExist full
+  where
+    fallback = (</> ".config") <$> getHomeDirectory
+
+instance FromJSON XParams where
+  parseJSON = withObject "parameters" $ \o -> XParams
+    <$> o .: fromString "loglevel"
+
+instance FromJSON LogLevel
 
 --------------------------------------------------------------------------------
 -- | Testing pipeline
