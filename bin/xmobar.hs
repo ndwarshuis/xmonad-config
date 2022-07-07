@@ -11,13 +11,11 @@ module Main (main) where
 -- * Theme integration with xmonad (shared module imported below)
 -- * A custom Locks plugin from my own forked repo
 
-import           Data.Either
 import           Data.List
 import           Data.Maybe
 
 import           DBus.Client
 
-import           System.Directory
 import           System.Exit
 import           System.IO
 import           System.IO.Error
@@ -181,15 +179,13 @@ type BarFeature = Sometimes CmdSpec
 -- TODO what if I don't have a wireless card?
 getWireless :: BarFeature
 getWireless = sometimes1 "wireless status indicator" "sysfs path"
-  $ IORoot wirelessCmd
-  $ Only $ readInterface "get wifi interface" isWireless
+  $ IORoot wirelessCmd $ Only readWireless
 
 getEthernet :: Maybe Client -> BarFeature
 getEthernet cl = iconDBus "ethernet status indicator" root tree
   where
     root useIcon tree' = DBusRoot (const . ethernetCmd useIcon) tree' cl
-    tree = And1 (Only readEth) (Only_ devDep)
-    readEth = readInterface "read ethernet interface" isEthernet
+    tree = And1 (Only readEthernet) (Only_ devDep)
 
 getBattery :: BarFeature
 getBattery = iconIO_ "battery level indicator" root tree
@@ -389,35 +385,6 @@ dateCmd = CmdSpec
 
 --------------------------------------------------------------------------------
 -- | low-level testing functions
---
--- in the case of network interfaces, assume that the system uses systemd in
--- which case ethernet interfaces always start with "en" and wireless
--- interfaces always start with "wl"
-
-isWireless :: String -> Bool
-isWireless ('w':'l':_) = True
-isWireless _           = False
-
-isEthernet :: String -> Bool
-isEthernet ('e':'n':_) = True
-isEthernet _           = False
-
-listInterfaces :: IO [String]
-listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
-
-sysfsNet :: FilePath
-sysfsNet = "/sys/class/net"
-
-readInterface :: String -> (String -> Bool) -> IODependency String
-readInterface n f = IORead n go
-  where
-    go = io $ do
-      ns <- filter f <$> listInterfaces
-      case ns of
-        [] -> return $ Left [Msg Error "no interfaces found"]
-        (x:xs) -> do
-          return $ Right $ PostPass x
-            $ fmap (Msg Warn . ("ignoring extra interface: " ++)) xs
 
 vpnPresent :: IO (Maybe Msg)
 vpnPresent =

@@ -38,8 +38,10 @@ module XMonad.Internal.Command.Desktop
   , runNetAppDaemon
   ) where
 
-import           Control.Monad              (void)
+import           Control.Monad               (void)
 import           Control.Monad.IO.Class
+
+import           DBus.Client
 
 import           System.Directory
     ( createDirectoryIfMissing
@@ -48,9 +50,10 @@ import           System.Directory
 import           System.Environment
 import           System.FilePath
 
-import           XMonad                     (asks)
+import           XMonad                      (asks)
 import           XMonad.Actions.Volume
-import           XMonad.Core                hiding (spawn)
+import           XMonad.Core                 hiding (spawn)
+import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
@@ -89,10 +92,6 @@ myNotificationCtrl = "dunstctl"
 
 volumeChangeSound :: FilePath
 volumeChangeSound = "smb_fireball.wav"
-
--- TODO make this dynamic (like in xmobar)
-ethernetIface :: String
-ethernetIface = "enp7s0f1"
 
 --------------------------------------------------------------------------------
 -- | Some nice apps
@@ -211,25 +210,29 @@ runNetAppDaemon = sometimesIO_ "network applet" "NM-applet" tree cmd
     tree = Only_ $ localExe "nm-applet"
     cmd = snd <$> spawnPipe "nm-applet"
 
--- TODO test that bluetooth dbus interface is up
-runToggleBluetooth :: SometimesX
-runToggleBluetooth =
-  sometimesIO_ "bluetooth toggle" "bluetoothctl" (Only_ $ sysExe myBluetooth)
-  $ spawn
-  $ myBluetooth ++ " show | grep -q \"Powered: no\""
-  #!&& "a=on"
-  #!|| "a=off"
-  #!>> fmtCmd myBluetooth ["power", "$a", ">", "/dev/null"]
-  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a"  }
+runToggleBluetooth :: Maybe Client -> SometimesX
+runToggleBluetooth cl =
+  sometimesDBus cl "bluetooth toggle" "bluetoothctl" tree cmd
+  where
+    tree = And_ (Only_ $ DBusIO $ sysExe myBluetooth) (Only_ $ Bus btBus)
+    cmd _ = spawn
+      $ myBluetooth ++ " show | grep -q \"Powered: no\""
+      #!&& "a=on"
+      #!|| "a=off"
+      #!>> fmtCmd myBluetooth ["power", "$a", ">", "/dev/null"]
+      #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a" }
 
 runToggleEthernet :: SometimesX
-runToggleEthernet = sometimesIO_ "ethernet toggle" "nmcli" (Only_ $ sysExe "nmcli")
-  $ spawn
-  $ "nmcli -g GENERAL.STATE device show " ++ ethernetIface ++ " | grep -q disconnected"
-  #!&& "a=connect"
-  #!|| "a=disconnect"
-  #!>> fmtCmd "nmcli" ["device", "$a", ethernetIface]
-  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
+runToggleEthernet = sometimes1 "ethernet toggle" "nmcli" $ IORoot (spawn . cmd) $
+  And1 (Only readEthernet) (Only_ $ sysExe "nmcli")
+  where
+    -- TODO make this less noisy
+    cmd iface =
+      "nmcli -g GENERAL.STATE device show " ++ iface ++ " | grep -q disconnected"
+      #!&& "a=connect"
+      #!|| "a=disconnect"
+      #!>> fmtCmd "nmcli" ["device", "$a", iface]
+      #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
 
 runStartISyncTimer :: SometimesX
 runStartISyncTimer = sometimesIO_ "isync timer" "mbsync timer"

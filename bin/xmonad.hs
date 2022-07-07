@@ -678,14 +678,15 @@ externalBindings ts db =
     , KeyBinding "M-C-<F7>" "start Isync Timer" $ Left runStartISyncTimer
     , KeyBinding "M-<F8>" "select autorandr profile" $ Left runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" $ Left runToggleEthernet
-    , KeyBinding "M-<F10>" "toggle bluetooth" $ Left runToggleBluetooth
-    , KeyBinding "M-<F11>" "toggle screensaver" $ Left $ ioSometimes $ callToggle cl
+    , KeyBinding "M-<F10>" "toggle bluetooth" $ Left $ runToggleBluetooth sys
+    , KeyBinding "M-<F11>" "toggle screensaver" $ Left $ ioSometimes $ callToggle ses
     , KeyBinding "M-<F12>" "switch gpu" $ Left runOptimusPrompt
     ]
   ]
   where
-    cl = dbSesClient db
-    brightessControls ctl getter = (ioSometimes . getter . ctl) cl
+    ses = dbSesClient db
+    sys = dbSysClient db
+    brightessControls ctl getter = (ioSometimes . getter . ctl) ses
     ib = Left . brightessControls intelBacklightControls
     ck = Left . brightessControls clevoKeyboardControls
     ftrAlways n = Right . Always n . Always_ . FallbackAlone

@@ -65,6 +65,8 @@ module XMonad.Internal.Dependency
   , fontTree_
   , fontAlways
   , fontSometimes
+  , readEthernet
+  , readWireless
 
   -- lifting
   , ioSometimes
@@ -107,6 +109,7 @@ import           Control.Monad.State
 import           Data.Aeson              hiding (Error, Result)
 import           Data.Aeson.Key
 import           Data.Bifunctor
+import           Data.Either
 import qualified Data.HashMap.Strict     as H
 import           Data.Hashable
 import           Data.List
@@ -124,6 +127,7 @@ import           System.Directory
 import           System.Environment
 import           System.Exit
 import           System.FilePath
+import           System.IO.Error
 import           System.Posix.Files
 
 import           XMonad.Core             (X, io)
@@ -164,19 +168,24 @@ evalSometimes x = either goFail goPass =<< evalSometimesMsg x
   where
     goPass (a, ws) = putErrors ws >> return (Just a)
     goFail es = putErrors es >> return Nothing
-    putErrors = io . mapM_ printMsg
+    putErrors = mapM_ printMsg
 
 -- | Return the action of an Always
 evalAlways :: Always a -> FIO a
 evalAlways a = do
   (x, ws) <- evalAlwaysMsg a
-  io $ mapM_ printMsg ws
+  mapM_ printMsg ws
   return x
 
-printMsg :: FMsg -> IO ()
+printMsg :: FMsg -> FIO ()
 printMsg (FMsg fn n (Msg ll m)) = do
-  p <- getProgName
-  putStrLn $ unwords [bracket p, bracket $ show ll, bracket fn, bracket n, m]
+  xl <- asks xpLogLevel
+  p <- io getProgName
+  io $ when (ll >= xl) $ putStrLn $ unwords [ bracket p
+                                            , bracket $ show ll
+                                            , bracket fn
+                                            , bracket n, m
+                                            ]
 
 --------------------------------------------------------------------------------
 -- | Feature status
@@ -722,6 +731,43 @@ testFont' fam = maybe pass (Left . (:[])) <$> shellTest cmd msg
     cmd = fmtCmd "fc-list" ["-q", qFam]
     qFam = singleQuote fam
     pass = Right $ PostPass (buildFont $ Just fam) []
+
+--------------------------------------------------------------------------------
+-- | network dependencies
+--
+-- ASSUME that the system uses systemd in which case ethernet interfaces always
+-- start with "en" and wireless interfaces always start with "wl"
+
+readEthernet :: IODependency String
+readEthernet = readInterface "get ethernet interface" isEthernet
+
+readWireless :: IODependency String
+readWireless = readInterface "get wireless interface" isWireless
+
+isWireless :: String -> Bool
+isWireless ('w':'l':_) = True
+isWireless _           = False
+
+isEthernet :: String -> Bool
+isEthernet ('e':'n':_) = True
+isEthernet _           = False
+
+listInterfaces :: IO [String]
+listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
+
+sysfsNet :: FilePath
+sysfsNet = "/sys/class/net"
+
+readInterface :: String -> (String -> Bool) -> IODependency String
+readInterface n f = IORead n go
+  where
+    go = io $ do
+      ns <- filter f <$> listInterfaces
+      case ns of
+        [] -> return $ Left [Msg Error "no interfaces found"]
+        (x:xs) -> do
+          return $ Right $ PostPass x
+            $ fmap (Msg Warn . ("ignoring extra interface: " ++)) xs
 
 --------------------------------------------------------------------------------
 -- | DBus Dependency Testing
