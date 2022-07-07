@@ -25,6 +25,7 @@ module XMonad.Internal.Dependency
   , Subfeature(..)
   , SubfeatureRoot
   , LogLevel(..)
+  , Msg(..)
 
   -- dependency tree types
   , Root(..)
@@ -153,16 +154,21 @@ evalFeature (Left s)  = evalSometimes s
 evalSometimes :: Sometimes a -> FIO (Maybe a)
 evalSometimes x = either goFail goPass =<< evalSometimesMsg x
   where
-    goPass (PostPass a ws) = putErrors ws >> return (Just a)
+    goPass (a, ws) = putErrors ws >> return (Just a)
     goFail es = putErrors es >> return Nothing
-    putErrors = io . mapM_ putStrLn
+    putErrors = io . mapM_ printMsg
 
 -- | Return the action of an Always
 evalAlways :: Always a -> FIO a
 evalAlways a = do
-  (PostPass x ws) <- evalAlwaysMsg a
-  io $ mapM_ putStrLn ws
+  (x, ws) <- evalAlwaysMsg a
+  io $ mapM_ printMsg ws
   return x
+
+printMsg :: FMsg -> IO ()
+printMsg (FMsg fn n (Msg ll m)) = do
+  p <- getProgName
+  putStrLn $ unwords [bracket p, bracket $ show ll, bracket fn, bracket n, m]
 
 --------------------------------------------------------------------------------
 -- | Feature status
@@ -306,7 +312,7 @@ instance Hashable DBusDependency_ where
 
 -- | A dependency that only requires IO to evaluate (no payload)
 data IODependency_ = IOSystem_ SystemDependency
-  | IOTest_ String (IO (Maybe String))
+  | IOTest_ String (IO (Maybe Msg))
   | forall a. IOSometimes_ (Sometimes a)
 
 instance Eq IODependency_ where
@@ -352,6 +358,12 @@ instance Hashable DBusMember where
 -- The main reason I need this is so I have a "result" I can convert to JSON
 -- and dump on the CLI (unless there is a way to make Aeson work inside an IO)
 
+-- | A message with criteria for when to show it
+data Msg = Msg LogLevel String
+
+-- | A message annotated with subfeature and feature name
+data FMsg = FMsg String String Msg
+
 -- | Tested Always feature
 data PostAlways a = Primary (SubfeaturePass a) [SubfeatureFail] (Always_ a)
   | Fallback a [SubfeatureFail]
@@ -369,13 +381,13 @@ type SubfeaturePass a = Subfeature (PostPass a)
 type SubfeatureFail = Subfeature PostFail
 
 -- | An action that passed
-data PostPass a = PostPass a [String] deriving (Functor)
+data PostPass a = PostPass a [Msg] deriving (Functor)
 
-addMsgs :: PostPass a -> [String] -> PostPass a
+addMsgs :: PostPass a -> [Msg] -> PostPass a
 addMsgs (PostPass a ms) ms' = PostPass a $ ms ++ ms'
 
 -- | An action that failed
-data PostFail = PostFail [String] | PostMissing String
+data PostFail = PostFail [Msg] | PostMissing Msg
 
 --------------------------------------------------------------------------------
 -- | Evaluation cache
@@ -438,19 +450,33 @@ memoizeFont f d = do
 --------------------------------------------------------------------------------
 -- | Testing pipeline
 
-evalSometimesMsg :: Sometimes a -> FIO (Result a)
+evalSometimesMsg :: Sometimes a -> FIO (Either [FMsg] (a, [FMsg]))
 evalSometimesMsg (Sometimes n xs) = do
   PostSometimes { psSuccess = s, psFailed = fs } <- testSometimes xs
-  case s of
-    (Just (Subfeature { sfData = p })) -> Right . addMsgs p <$> failedMsgsIO False n fs
-    _                                  -> Left <$> failedMsgsIO True n fs
+  let fs' = failedMsgs n fs
+  return $ case s of
+    (Just p) -> Right $ second (++ fs') $ passActMsg n p
+    _        -> Left fs'
 
-evalAlwaysMsg :: Always a -> FIO (PostPass a)
+evalAlwaysMsg :: Always a -> FIO (a, [FMsg])
 evalAlwaysMsg (Always n x) = do
   r <- testAlways x
-  case r of
-    (Primary (Subfeature { sfData = p }) fs _) -> addMsgs p <$> failedMsgsIO False n fs
-    (Fallback act fs) -> PostPass act <$> failedMsgsIO False n fs
+  return $ case r of
+    (Primary p fs _)  -> second (++ failedMsgs n fs) $ passActMsg n p
+    (Fallback act fs) -> (act, failedMsgs n fs)
+
+passActMsg :: String -> SubfeaturePass a -> (a, [FMsg])
+passActMsg fn Subfeature { sfData = PostPass a ws, sfName = n } = (a, fmap (FMsg fn n) ws)
+
+failedMsgs :: String -> [SubfeatureFail] -> [FMsg]
+failedMsgs n = concatMap (failedMsg n)
+
+failedMsg :: String -> SubfeatureFail -> [FMsg]
+failedMsg fn Subfeature { sfData = d, sfName = n } = case d of
+  (PostFail es)   -> f es
+  (PostMissing e) -> f [e]
+  where
+    f = fmap (FMsg fn n)
 
 testAlways :: Always_ a -> FIO (PostAlways a)
 testAlways = go []
@@ -496,7 +522,8 @@ testRoot r = do
     (IORoot_ a t)             -> go_ a testIODependency_ t
     (DBusRoot a t (Just cl))  -> go (`a` cl) (testDBusDependency_ cl) testIODependency t
     (DBusRoot_ a t (Just cl)) -> go_ (a cl) (testDBusDependency_ cl) t
-    _                         -> return $ Left $ PostMissing "client not available"
+    _                         -> return $ Left $ PostMissing
+                                 $ Msg Error "client not available"
   where
     -- rank N polymorphism is apparently undecidable...gross
     go a f_ (f :: forall q. d q -> FIO (Result q)) t =
@@ -506,13 +533,13 @@ testRoot r = do
 --------------------------------------------------------------------------------
 -- | Payloaded dependency testing
 
-type Result p = Either [String] (PostPass p)
+type Result p = Either [Msg] (PostPass p)
 
 testTree :: forall d d_ p. (d_ -> FIO Result_) -> (forall q. d q -> FIO (Result q))
-  -> Tree d d_ p -> FIO (Either [String] (PostPass p))
+  -> Tree d d_ p -> FIO (Either [Msg] (PostPass p))
 testTree test_ test = go
   where
-    go :: forall q. Tree d d_ q -> FIO (Either [String] (PostPass q))
+    go :: forall q. Tree d d_ q -> FIO (Either [Msg] (PostPass q))
     go (And12 f a b) = do
       ra <- go a
       liftRight (\pa -> (and2nd f pa =<<) <$> go b) ra
@@ -536,15 +563,22 @@ testIODependency (IOConst c)       = return $ Right $ PostPass c []
 -- succeed, which kinda makes this pointless. The only reason I would want this
 -- is if I want to have a built-in logic to "choose" a payload to use in
 -- building a higher-level feature
-testIODependency (IOAlways a f)    = Right . fmap f <$> evalAlwaysMsg a
-testIODependency (IOSometimes x f) = second (fmap f) <$> evalSometimesMsg x
+testIODependency (IOAlways a f)    = Right . uncurry PostPass
+  -- TODO this is wetter than Taco Bell shit
+  . bimap f (fmap stripMsg) <$> evalAlwaysMsg a
+testIODependency (IOSometimes x f) =
+  bimap (fmap stripMsg) (uncurry PostPass . bimap f (fmap stripMsg))
+  <$> evalSometimesMsg x
+
+stripMsg :: FMsg -> Msg
+stripMsg (FMsg _ _ m) = m
 
 --------------------------------------------------------------------------------
 -- | Standalone dependency testing
 
-type Result_ = Either [String] [String]
+type Result_ = Either [Msg] [Msg]
 
-testTree_ :: (d -> FIO Result_) -> Tree_ d -> FIO (Either [String] [String])
+testTree_ :: (d -> FIO Result_) -> Tree_ d -> FIO Result_
 testTree_ test = go
   where
     go (And_ a b) = either (return . Left) (`test2nd` b) =<< go a
@@ -558,16 +592,17 @@ testIODependency_ = memoizeIO_ testIODependency'_
 testIODependency'_ :: IODependency_ -> FIO Result_
 testIODependency'_ (IOSystem_ s) = io $ readResult_ <$> testSysDependency s
 testIODependency'_ (IOTest_ _ t) = io $ readResult_ <$> t
-testIODependency'_ (IOSometimes_ x) = second (\(PostPass _ ws) -> ws) <$> evalSometimesMsg x
+testIODependency'_ (IOSometimes_ x) = bimap (fmap stripMsg) (fmap stripMsg . snd)
+  <$> evalSometimesMsg x
 
 --------------------------------------------------------------------------------
 -- | System Dependency Testing
 
-testSysDependency :: SystemDependency -> IO (Maybe String)
+testSysDependency :: SystemDependency -> IO (Maybe Msg)
 testSysDependency (Executable sys bin) = maybe (Just msg) (const Nothing)
   <$> findExecutable bin
   where
-    msg = unwords [e, "executable", singleQuote bin, "not found"]
+    msg = Msg Error $ unwords [e, "executable", singleQuote bin, "not found"]
     e = if sys then "system" else "local"
 testSysDependency (Systemd t n) = shellTest cmd msg
   where
@@ -577,21 +612,22 @@ testSysDependency (AccessiblePath p r w) = permMsg <$> getPermissionsSafe p
   where
     testPerm False _ _  = Nothing
     testPerm True f res = Just $ f res
-    permMsg NotFoundError            = Just "file not found"
-    permMsg PermError                = Just "could not get permissions"
+    mkErr = Just . Msg Error
+    permMsg NotFoundError            = mkErr "file not found"
+    permMsg PermError                = mkErr "could not get permissions"
     permMsg (PermResult res) =
       case (testPerm r readable res, testPerm w writable res) of
-        (Just False, Just False) -> Just "file not readable or writable"
-        (Just False, _)          -> Just "file not readable"
-        (_, Just False)          -> Just "file not writable"
+        (Just False, Just False) -> mkErr "file not readable or writable"
+        (Just False, _)          -> mkErr "file not readable"
+        (_, Just False)          -> mkErr "file not writable"
         _                        -> Nothing
 
-shellTest :: String -> String -> IO (Maybe String)
+shellTest :: String -> String -> IO (Maybe Msg)
 shellTest cmd msg = do
   (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
   return $ case rc of
     ExitSuccess -> Nothing
-    _           -> Just msg
+    _           -> Just $ Msg Error msg
 
 unitType :: UnitType -> String
 unitType SystemUnit = "system"
@@ -638,15 +674,12 @@ testFont :: String -> FIO (Result FontBuilder)
 testFont = memoizeFont testFont'
 
 testFont' :: String -> IO (Result FontBuilder)
-testFont' fam = do
-  (rc, _, _) <- readCreateProcessWithExitCode' (shell cmd) ""
-  return $ case rc of
-    ExitSuccess -> Right $ PostPass (buildFont $ Just fam) []
-    _           -> Left [msg]
+testFont' fam = maybe pass (Left . (:[])) <$> shellTest cmd msg
   where
     msg = unwords ["font family", qFam, "not found"]
     cmd = fmtCmd "fc-list" ["-q", qFam]
     qFam = singleQuote fam
+    pass = Right $ PostPass (buildFont $ Just fam) []
 
 --------------------------------------------------------------------------------
 -- | DBus Dependency Testing
@@ -664,10 +697,12 @@ testDBusDependency'_ :: Client -> DBusDependency_ -> FIO Result_
 testDBusDependency'_ client (Bus bus) = io $ do
   ret <- callMethod client queryBus queryPath queryIface queryMem
   return $ case ret of
-        Left e    -> Left [e]
+        Left e    -> Left [Msg Error e]
         Right b -> let ns = bodyGetNames b in
           if bus' `elem` ns then Right []
-          else Left [unwords ["name", singleQuote bus', "not found on dbus"]]
+          else Left [
+            Msg Error $ unwords ["name", singleQuote bus', "not found on dbus"]
+            ]
   where
     bus' = formatBusName bus
     queryBus = busName_ "org.freedesktop.DBus"
@@ -680,14 +715,14 @@ testDBusDependency'_ client (Bus bus) = io $ do
 testDBusDependency'_ client (Endpoint busname objpath iface mem) = io $ do
   ret <- callMethod client busname objpath introspectInterface introspectMethod
   return $ case ret of
-        Left e     -> Left [e]
+        Left e     -> Left [Msg Error e]
         Right body -> procBody body
   where
     procBody body = let res = findMem =<< I.parseXML objpath =<< fromVariant
                           =<< listToMaybe body in
       case res of
         Just True -> Right []
-        _         -> Left [fmtMsg' mem]
+        _         -> Left [Msg Error $ fmtMsg' mem]
     findMem = fmap (matchMem mem)
       . find (\i -> I.interfaceName i == iface)
       . I.objectInterfaces
@@ -794,12 +829,12 @@ voidResult :: Result p -> Result_
 voidResult (Left es)               = Left es
 voidResult (Right (PostPass _ ws)) = Right ws
 
-voidRead :: Result p -> Maybe String
-voidRead (Left [])    = Just "unspecified error"
+voidRead :: Result p -> Maybe Msg
+voidRead (Left [])    = Just $ Msg Error "unspecified error"
 voidRead (Left (e:_)) = Just e
 voidRead (Right _)    = Nothing
 
-readResult_ :: Maybe String -> Result_
+readResult_ :: Maybe Msg -> Result_
 readResult_ (Just w) = Left [w]
 readResult_ _        = Right []
 
@@ -976,11 +1011,16 @@ dataDBusDependency d =
     memberData (Signal_ n)   = ("signal", formatMemberName n)
     memberData (Property_ n) = ("property", n)
 
-fromResult :: Result a -> (Bool, [JSONQuotable])
-fromResult = second (fmap Q) . either (False,) (\(PostPass _ ws) -> (True, ws))
+fromMsg :: Msg -> JSONUnquotable
+fromMsg (Msg e s) = jsonObject [ ("level", JSON_Q $ Q $ show e)
+                               , ("msg", JSON_Q $ Q s)
+                               ]
 
-fromResult_ :: Result_ -> (Bool, [JSONQuotable])
-fromResult_ = second (fmap Q) . either (False,) (True,)
+fromResult :: Result a -> (Bool, [JSONUnquotable])
+fromResult = second (fmap fromMsg) . either (False,) (\(PostPass _ ws) -> (True, ws))
+
+fromResult_ :: Result_ -> (Bool, [JSONUnquotable])
+fromResult_ = second (fmap fromMsg) . either (False,) (True,)
 
 --------------------------------------------------------------------------------
 -- | JSON formatting
@@ -1032,7 +1072,7 @@ jsonRoot isIO tree = jsonObject
 jsonLeafUntested :: JSONQuotable -> [(String, JSONMixed)] -> JSONUnquotable
 jsonLeafUntested = jsonLeaf Nothing
 
-jsonLeaf :: Maybe (Bool, [JSONQuotable]) -> JSONQuotable -> [(String, JSONMixed)]
+jsonLeaf :: Maybe (Bool, [JSONUnquotable]) -> JSONQuotable -> [(String, JSONMixed)]
   -> JSONUnquotable
 jsonLeaf status deptype depdata = jsonObject
   [ ("type", JSON_Q deptype)
@@ -1040,10 +1080,10 @@ jsonLeaf status deptype depdata = jsonObject
   , ("data", JSON_UQ $ jsonObject depdata)
   ]
 
-jsonStatus :: Bool -> [JSONQuotable] -> JSONUnquotable
+jsonStatus :: Bool -> [JSONUnquotable] -> JSONUnquotable
 jsonStatus present messages = jsonObject
   [ ("present", JSON_UQ $ jsonBool present)
-  , ("messages", JSON_UQ $ jsonArray $ fmap JSON_Q messages)
+  , ("messages", JSON_UQ $ jsonArray $ fmap JSON_UQ messages)
   ]
 
 jsonAnd :: JSONUnquotable -> JSONUnquotable -> JSONUnquotable
@@ -1086,19 +1126,19 @@ curly s = "{" ++ s ++ "}"
 --------------------------------------------------------------------------------
 -- | Other random formatting
 
-failedMsgsIO :: Bool -> String -> [SubfeatureFail] -> FIO [String]
-failedMsgsIO err fn = io . failedMsgs err fn
+-- failedMsgsIO :: Bool -> String -> [SubfeatureFail] -> FIO [Msg]
+-- failedMsgsIO err fn = io . failedMsgs err fn
 
-failedMsgs :: Bool -> String -> [SubfeatureFail] -> IO [String]
-failedMsgs err fn = fmap concat . mapM (failedMsg err fn)
+-- failedMsgs :: Bool -> String -> [SubfeatureFail] -> IO [Msg]
+-- failedMsgs err fn = fmap concat . mapM (failedMsg err fn)
 
-failedMsg :: Bool -> String -> SubfeatureFail -> IO [String]
-failedMsg err fn Subfeature { sfData = d, sfName = n } = do
-  mapM (fmtMsg err fn n) $ case d of (PostMissing e) -> [e]; (PostFail es) -> es
+-- failedMsg :: Bool -> String -> SubfeatureFail -> IO [Msg]
+-- failedMsg err fn Subfeature { sfData = d, sfName = n } = do
+--   mapM (fmtMsg err fn n) $ case d of (PostMissing e) -> [e]; (PostFail es) -> es
 
-fmtMsg :: Bool -> String -> String -> String -> IO String
-fmtMsg err fn n msg = do
-  let e = if err then "ERROR" else "WARNING"
-  p <- getProgName
-  return $ unwords [bracket p, bracket e, bracket fn, bracket n, msg]
+-- fmtMsg :: Bool -> String -> String -> Msg -> IO Msg
+-- fmtMsg err fn n msg = do
+--   let e = if err then "ERROR" else "WARNING"
+--   p <- getProgName
+--   return $ unwords [bracket p, bracket e, bracket fn, bracket n, msg]
 

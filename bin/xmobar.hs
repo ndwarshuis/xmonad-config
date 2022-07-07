@@ -178,6 +178,7 @@ rightPlugins DBusState { dbSesClient = ses, dbSysClient = sys }
 
 type BarFeature = Sometimes CmdSpec
 
+-- TODO what if I don't have a wireless card?
 getWireless :: BarFeature
 getWireless = sometimes1 "wireless status indicator" "sysfs path"
   $ IORoot wirelessCmd
@@ -194,7 +195,7 @@ getBattery :: BarFeature
 getBattery = iconIO_ "battery level indicator" root tree
   where
     root useIcon = IORoot_ (batteryCmd useIcon)
-    tree = Only_ $ IOTest_ "Test if battery is present" hasBattery
+    tree = Only_ $ IOTest_ "Test if battery is present" $ fmap (Msg Error) <$> hasBattery
 
 getVPN :: Maybe Client -> BarFeature
 getVPN cl = iconDBus_ "VPN status indicator" root $ toAnd_ vpnDep test
@@ -413,20 +414,22 @@ readInterface n f = IORead n go
     go = io $ do
       ns <- filter f <$> listInterfaces
       case ns of
-        [] -> return $ Left ["no interfaces found"]
+        [] -> return $ Left [Msg Error "no interfaces found"]
         (x:xs) -> do
-          return $ Right $ PostPass x $ fmap ("ignoring extra interface: "++) xs
+          return $ Right $ PostPass x
+            $ fmap (Msg Warn . ("ignoring extra interface: " ++)) xs
 
-vpnPresent :: IO (Maybe String)
+vpnPresent :: IO (Maybe Msg)
 vpnPresent =
   go <$> tryIOError (readCreateProcessWithExitCode' (proc' "nmcli" args) "")
   where
     args = ["-c", "no", "-t", "-f", "TYPE", "c", "show"]
     go (Right (ExitSuccess, out, _))   = if "vpn" `elem` lines out then Nothing
-                                         else Just "vpn not found"
-    go (Right (ExitFailure c, _, err)) = Just $ "vpn search exited with code "
+                                         else Just $ Msg Error "vpn not found"
+    go (Right (ExitFailure c, _, err)) = Just $ Msg Error
+                                         $ "vpn search exited with code "
                                          ++ show c ++ ": " ++ err
-    go (Left e)                        = Just $ show e
+    go (Left e)                        = Just $ Msg Error $ show e
 
 --------------------------------------------------------------------------------
 -- | text font

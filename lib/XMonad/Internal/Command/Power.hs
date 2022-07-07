@@ -135,6 +135,7 @@ runOptimusPrompt' fb = do
       #!&& unwords [myOptimusManager, "--switch", mode, "--no-confirm"]
       #!&& "killall xmonad"
 
+-- TODO test that the socket is open (/tmp/optimus-manager)
 runOptimusPrompt :: SometimesX
 runOptimusPrompt = Sometimes "graphics switcher" [s]
   where

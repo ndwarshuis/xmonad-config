@@ -90,6 +90,7 @@ myNotificationCtrl = "dunstctl"
 volumeChangeSound :: FilePath
 volumeChangeSound = "smb_fireball.wav"
 
+-- TODO make this dynamic (like in xmobar)
 ethernetIface :: String
 ethernetIface = "enp7s0f1"
 
@@ -99,6 +100,7 @@ ethernetIface = "enp7s0f1"
 runTerm :: SometimesX
 runTerm = sometimesExe "terminal" "urxvt" True myTerm
 
+-- TODO test that tmux is actually running (/tmp/tmux-<UID>/default)
 runTMux :: SometimesX
 runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
   where
@@ -119,6 +121,7 @@ runCalc = sometimesIO_ "calculator" "R" deps act
 runBrowser :: SometimesX
 runBrowser = sometimesExe "web browser" "brave" False myBrowser
 
+-- TODO test that emacs is actually running (/run/user/1000/emacs/server)
 runEditor :: SometimesX
 runEditor = sometimesExeArgs "text editor" "emacs" True myEditor
   ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
@@ -175,7 +178,7 @@ runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return
 --------------------------------------------------------------------------------
 -- | Notification control
 
--- TODO test that dunst is actually running
+-- TODO test that dunst is actually running (org.freedesktop.Notifications/org.dunstproject.cmd0)
 runNotificationCmd :: String -> FilePath -> SometimesX
 runNotificationCmd n arg = sometimesIO_ (n ++ " control") "dunstctl" tree cmd
   where
@@ -201,12 +204,14 @@ runNotificationContext =
 -- | System commands
 
 -- this is required for some vpn's to work properly with network-manager
+-- TODO test that network manager is up
 runNetAppDaemon :: Sometimes (IO ProcessHandle)
 runNetAppDaemon = sometimesIO_ "network applet" "NM-applet" tree cmd
   where
     tree = Only_ $ localExe "nm-applet"
     cmd = snd <$> spawnPipe "nm-applet"
 
+-- TODO test that bluetooth dbus interface is up
 runToggleBluetooth :: SometimesX
 runToggleBluetooth =
   sometimesIO_ "bluetooth toggle" "bluetoothctl" (Only_ $ sysExe myBluetooth)
@@ -280,7 +285,7 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
--- TODO test that flameshot is actually running
+-- TODO test that flameshot is actually running (Bus org.flameshot.Flameshot)
 runFlameshot :: String -> String -> SometimesX
 runFlameshot n mode = sometimesIO_ n myCapture
   (Only_ $ sysExe myCapture) $ spawnCmd myCapture [mode]

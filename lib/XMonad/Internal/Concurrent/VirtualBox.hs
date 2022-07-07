@@ -12,17 +12,18 @@ import           Text.XML.Light
 
 import           System.Directory
 
+import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
 
-vmExists :: String -> IO (Maybe String)
+vmExists :: String -> IO (Maybe Msg)
 vmExists vm = do
   d <- vmDirectory
-  either (return . Just) findVMDir d
+  either (return . Just . Msg Error) findVMDir d
   where
     findVMDir vd = do
       vs <- listDirectory vd
       return $ if vm `elem` vs then Nothing
-        else Just $ "could not find " ++ singleQuote vm
+        else Just $ Msg Error $ "could not find " ++ singleQuote vm
 
 vmDirectory :: IO (Either String String)
 vmDirectory = do

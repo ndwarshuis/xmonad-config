@@ -74,6 +74,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 --------------------------------------------------------------------------------
 -- | Exported Commands
 
+-- TODO test that veracrypt and friends are installed
 runDevMenu :: SometimesX
 runDevMenu = sometimesIO_ "device manager" "rofi devices" t x
   where
@@ -85,11 +86,12 @@ runDevMenu = sometimesIO_ "device manager" "rofi devices" t x
         ++ "--" : themeArgs "#999933"
         ++ myDmenuMatchingArgs
 
+-- TODO test that bluetooth interface exists
 runBTMenu :: SometimesX
 runBTMenu = sometimesExeArgs "bluetooth selector" "rofi bluetooth" False
   myDmenuBluetooth $ "-c":themeArgs "#0044bb"
 
-
+-- TODO test that expressVPN is actually running (/var/lib/expressvpn/expressvpnd.socket)
 runVPNMenu :: SometimesX
 runVPNMenu = sometimesIO_ "VPN selector" "rofi VPN"
   (Only_ $ localExe myDmenuVPN) $ spawnCmd myDmenuVPN
@@ -104,7 +106,7 @@ runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 runWinMenu :: SometimesX
 runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
--- TODO test that networkManager is actually running
+-- TODO test that networkManager is actually running (systemd service)
 runNetMenu :: SometimesX
 runNetMenu = sometimesExeArgs "network control menu" "rofi NetworkManager"
   True myDmenuNetworks $ themeArgs "#ff3333"
@@ -125,11 +127,11 @@ runBwMenu = sometimesIO_ "password manager" "rofi bitwarden"
 --------------------------------------------------------------------------------
 -- | Clipboard
 
+-- TODO test that greenclip daemon is actually running (get process id?)
 runClipMenu :: SometimesX
 runClipMenu = sometimesIO_ "clipboard manager" "rofi greenclip" tree act
   where
     act = spawnCmd myDmenuCmd args
-    -- TODO test that greenclip daemon is actually running
     tree = toAnd_ (sysExe myDmenuCmd) $ sysExe myClipboardManager
     args = [ "-modi", "\"clipboard:greenclip print\""
            , "-show", "clipboard"
