@@ -41,14 +41,14 @@ module XMonad.Internal.Command.Desktop
 import           Control.Monad               (void)
 import           Control.Monad.IO.Class
 
+import           DBus
 import           DBus.Client
 
 import           System.Directory
-    ( createDirectoryIfMissing
-    , getHomeDirectory
-    )
 import           System.Environment
 import           System.FilePath
+import           System.Posix.Files
+import           System.Posix.User
 
 import           XMonad                      (asks)
 import           XMonad.Actions.Volume
@@ -99,17 +99,33 @@ volumeChangeSound = "smb_fireball.wav"
 runTerm :: SometimesX
 runTerm = sometimesExe "terminal" "urxvt" True myTerm
 
--- TODO test that tmux is actually running (/tmp/tmux-<UID>/default)
 runTMux :: SometimesX
 runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
   where
-    deps = listToAnds (sysExe myTerm) $ fmap sysExe ["tmux", "bash"]
+    deps = listToAnds (socketExists socketName)
+      $ fmap sysExe [myTerm, "tmux", "bash"]
     act = spawn
       $ "tmux has-session"
       #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
       #!|| fmtNotifyCmd defNoteError { body = Just $ Text msg }
     c = "exec tmux attach-session -d"
     msg = "could not connect to tmux session"
+    socketName = do
+      u <- getEffectiveUserID
+      t <- getTemporaryDirectory
+      return $ t </> "tmux-" ++ show u </> "default"
+
+socketExists :: IO FilePath -> IODependency_
+socketExists getPath = IOTest_ "find tmux socket current user" $ do
+  p <- getPath
+  e <- fileExist p
+  s <- isSocket <$> getFileStatus p
+  return $ case (e, s) of
+    (True, True) -> Nothing
+    (False, _)   -> toErr $ "could not find socket at " ++ p
+    (_, False)   -> toErr $ p ++ " is not a socket"
+  where
+    toErr = Just . Msg Error
 
 runCalc :: SometimesX
 runCalc = sometimesIO_ "calculator" "R" deps act
@@ -120,10 +136,13 @@ runCalc = sometimesIO_ "calculator" "R" deps act
 runBrowser :: SometimesX
 runBrowser = sometimesExe "web browser" "brave" False myBrowser
 
--- TODO test that emacs is actually running (/run/user/1000/emacs/server)
 runEditor :: SometimesX
-runEditor = sometimesExeArgs "text editor" "emacs" True myEditor
-  ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
+runEditor = sometimesIO_ "text editor" "emacs" tree cmd
+  where
+    cmd = spawnCmd myEditor
+      ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
+    tree = toAnd_ (sysExe myEditor) (socketExists socketName)
+    socketName = (</> "emacs" </> "server") <$> getEnv "XDG_RUNTIME_DIR"
 
 runFileManager :: SometimesX
 runFileManager = sometimesExe "file browser" "pcmanfm" True "pcmanfm"
@@ -177,25 +196,27 @@ runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return
 --------------------------------------------------------------------------------
 -- | Notification control
 
--- TODO test that dunst is actually running (org.freedesktop.Notifications/org.dunstproject.cmd0)
-runNotificationCmd :: String -> FilePath -> SometimesX
-runNotificationCmd n arg = sometimesIO_ (n ++ " control") "dunstctl" tree cmd
+runNotificationCmd :: String -> FilePath -> Maybe Client -> SometimesX
+runNotificationCmd n arg cl =
+  sometimesDBus cl (n ++ " control") "dunstctl" tree cmd
   where
-    tree = Only_ $ sysExe myNotificationCtrl
-    cmd = spawnCmd myNotificationCtrl [arg]
+    cmd _ = spawnCmd myNotificationCtrl [arg]
+    tree = toAnd_ (DBusIO $ sysExe myNotificationCtrl)
+      $ Endpoint notifyBus notifyPath (interfaceName_ "org.dunstproject.cmd0")
+      $ Method_ $ memberName_ "NotificationAction"
 
-runNotificationClose :: SometimesX
+runNotificationClose :: Maybe Client -> SometimesX
 runNotificationClose = runNotificationCmd "close notification" "close"
 
-runNotificationCloseAll :: SometimesX
+runNotificationCloseAll :: Maybe Client -> SometimesX
 runNotificationCloseAll =
   runNotificationCmd "close all notifications" "close-all"
 
-runNotificationHistory :: SometimesX
+runNotificationHistory :: Maybe Client -> SometimesX
 runNotificationHistory =
   runNotificationCmd "see notification history" "history-pop"
 
-runNotificationContext :: SometimesX
+runNotificationContext :: Maybe Client -> SometimesX
 runNotificationContext =
   runNotificationCmd "open notification context" "context"
 
@@ -264,13 +285,6 @@ runRecompile = do
     #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "compilation succeeded" }
     #!|| fmtNotifyCmd defNoteError { body = Just $ Text "compilation failed" }
 
--- runRecompile :: X ()
--- runRecompile = do
---   -- assume that the conf directory contains a valid stack project
---   -- TODO this is hacky AF
---   confDir <- getXMonadDir
---   spawnCmdAt confDir "stack" ["install"]
-
 --------------------------------------------------------------------------------
 -- | Screen capture commands
 
@@ -288,22 +302,23 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
--- TODO test that flameshot is actually running (Bus org.flameshot.Flameshot)
-runFlameshot :: String -> String -> SometimesX
-runFlameshot n mode = sometimesIO_ n myCapture
-  (Only_ $ sysExe myCapture) $ spawnCmd myCapture [mode]
+runFlameshot :: String -> String -> Maybe Client -> SometimesX
+runFlameshot n mode cl = sometimesDBus cl n myCapture tree cmd
+  where
+    cmd _ = spawnCmd myCapture [mode]
+    tree = toAnd_ (DBusIO $ sysExe myCapture) $ Bus $ busName_ "org.flameshot.Flameshot"
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
-runAreaCapture :: SometimesX
+runAreaCapture :: Maybe Client -> SometimesX
 runAreaCapture = runFlameshot "screen area capture" "gui"
 
 -- myWindowCap = "screencap -w" --external script
 
-runDesktopCapture :: SometimesX
+runDesktopCapture :: Maybe Client -> SometimesX
 runDesktopCapture = runFlameshot "fullscreen capture" "full"
 
-runScreenCapture :: SometimesX
+runScreenCapture :: Maybe Client -> SometimesX
 runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: SometimesX

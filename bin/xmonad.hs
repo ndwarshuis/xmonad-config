@@ -635,9 +635,9 @@ externalBindings ts db =
     [ KeyBinding "M-q" "close window" $ ftrAlways "kill window function" kill1
     , KeyBinding "M-r" "run program" $ Left runCmdMenu
     , KeyBinding "M-<Space>" "warp pointer" $ ftrAlways "warp function" $ warpToWindow 0.5 0.5
-    , KeyBinding "M-C-s" "capture area" $ Left runAreaCapture
-    , KeyBinding "M-C-S-s" "capture screen" $ Left runScreenCapture
-    , KeyBinding "M-C-d" "capture desktop" $ Left runDesktopCapture
+    , KeyBinding "M-C-s" "capture area" $ Left $ runAreaCapture ses
+    , KeyBinding "M-C-S-s" "capture screen" $ Left $ runScreenCapture ses
+    , KeyBinding "M-C-d" "capture desktop" $ Left $ runDesktopCapture ses
     , KeyBinding "M-C-b" "browse captures" $ Left runCaptureBrowser
     -- , ("M-C-S-s", "capture focused window", spawn myWindowCap)
     ]
@@ -653,10 +653,10 @@ externalBindings ts db =
     ]
 
   , KeyGroup "Dunst"
-    [ KeyBinding "M-`" "dunst history" $ Left runNotificationHistory
-    , KeyBinding "M-S-`" "dunst close" $ Left runNotificationClose
-    , KeyBinding "M-M1-`" "dunst context menu" $ Left runNotificationContext
-    , KeyBinding "M-C-`" "dunst close all" $ Left runNotificationCloseAll
+    [ KeyBinding "M-`" "dunst history" $ Left $ runNotificationHistory ses
+    , KeyBinding "M-S-`" "dunst close" $ Left $ runNotificationClose ses
+    , KeyBinding "M-M1-`" "dunst context menu" $ Left $ runNotificationContext ses
+    , KeyBinding "M-C-`" "dunst close all" $ Left $ runNotificationCloseAll ses
     ]
 
   , KeyGroup "System"
