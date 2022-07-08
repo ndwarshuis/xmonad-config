@@ -119,6 +119,7 @@ import           Data.Maybe
 import           Data.Yaml
 
 import           GHC.Generics            (Generic)
+import           GHC.IO.Exception        (ioe_description)
 
 import           DBus                    hiding (typeOf)
 import           DBus.Client
@@ -780,12 +781,10 @@ socketExists n = IOTest_ ("test if " ++ n ++ " socket exists") . socketExists'
 socketExists' :: IO FilePath -> IO (Maybe Msg)
 socketExists' getPath = do
   p <- getPath
-  e <- fileExist p
-  s <- isSocket <$> getFileStatus p
-  return $ case (e, s) of
-    (True, True) -> Nothing
-    (False, _)   -> toErr $ "could not find socket at " ++ p
-    (_, False)   -> toErr $ p ++ " is not a socket"
+  r <- tryIOError $ getFileStatus p
+  return $ case r of
+    Left e  -> toErr $ ioe_description e
+    Right s -> if isSocket s then Nothing else toErr $ p ++ " is not a socket"
   where
     toErr = Just . Msg Error
 

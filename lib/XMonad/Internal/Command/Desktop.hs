@@ -128,8 +128,7 @@ runEditor = sometimesIO_ "text editor" "emacs" tree cmd
   where
     cmd = spawnCmd myEditor
       ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
-    tree = toAnd_ (sysExe myEditor) (socketExists "emacs" socketName)
-    socketName = (</> "emacs" </> "server") <$> getEnv "XDG_RUNTIME_DIR"
+    tree = Only_ $ sysExe myEditor
 
 runFileManager :: SometimesX
 runFileManager = sometimesExe "file browser" "pcmanfm" True "pcmanfm"
