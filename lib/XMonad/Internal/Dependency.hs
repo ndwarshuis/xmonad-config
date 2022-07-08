@@ -27,6 +27,10 @@ module XMonad.Internal.Dependency
   , Msg(..)
   , LogLevel(..)
 
+  -- configuration
+  , XParams(..)
+  , XPFeatures(..)
+
   -- dependency tree types
   , Root(..)
   , Tree(..)
@@ -183,10 +187,11 @@ printMsg :: FMsg -> FIO ()
 printMsg (FMsg fn n (Msg ll m)) = do
   xl <- asks xpLogLevel
   p <- io getProgName
-  io $ when (ll >= xl) $ putStrLn $ unwords [ bracket p
+  io $ when (ll <= xl) $ putStrLn $ unwords [ bracket p
                                             , bracket $ show ll
                                             , bracket fn
-                                            , bracket n, m
+                                            , bracket $ fromMaybe "<toplevel>" n
+                                            , m
                                             ]
 
 --------------------------------------------------------------------------------
@@ -211,7 +216,7 @@ dumpAlways (Always n x) = go [] x
 
 -- | Dump the status of a Sometimes to stdout
 dumpSometimes :: Sometimes a -> FIO JSONUnquotable
-dumpSometimes (Sometimes n a) = go [] a
+dumpSometimes (Sometimes n _ a) = go [] a
   where
     go failed [] = return $ jsonSometimes (Q n) Nothing failed []
     go failed (x:xs) = do
@@ -258,7 +263,7 @@ data FallbackStack p = FallbackBottom (Always p)
 -- | Feature that might not be present
 -- This is like an Always except it doesn't fall back on a guaranteed monadic
 -- action
-data Sometimes a = Sometimes String (Sometimes_ a)
+data Sometimes a = Sometimes String (XPFeatures -> Bool) (Sometimes_ a)
 
 -- | Feature that might not be present (inner data)
 type Sometimes_ a = [SubfeatureRoot a]
@@ -341,9 +346,9 @@ instance Eq IODependency_ where
   (==) _ _                               = False
 
 instance Hashable IODependency_ where
-  hashWithSalt s (IOSystem_ y)                  = hashWithSalt s y
-  hashWithSalt s (IOTest_ n _)                  = hashWithSalt s n
-  hashWithSalt s (IOSometimes_ (Sometimes n _)) = hashWithSalt s n
+  hashWithSalt s (IOSystem_ y)                    = hashWithSalt s y
+  hashWithSalt s (IOTest_ n _)                    = hashWithSalt s n
+  hashWithSalt s (IOSometimes_ (Sometimes n _ _)) = hashWithSalt s n
 
 -- | A system component to an IODependency
 -- This name is dumb, but most constructors should be obvious
@@ -382,7 +387,7 @@ instance Hashable DBusMember where
 data Msg = Msg LogLevel String
 
 -- | A message annotated with subfeature and feature name
-data FMsg = FMsg String String Msg
+data FMsg = FMsg String (Maybe String) Msg
 
 -- | Tested Always feature
 data PostAlways a = Primary (SubfeaturePass a) [SubfeatureFail] (Always_ a)
@@ -462,10 +467,55 @@ type FIO a = ReaderT XParams (StateT Cache IO) a
 
 data XParams = XParams
   { xpLogLevel :: LogLevel
+  , xpFeatures :: XPFeatures
   }
 
+instance FromJSON XParams where
+  parseJSON = withObject "parameters" $ \o -> XParams
+    <$> o .: fromString "loglevel"
+    <*> o .: fromString "features"
+
+instance FromJSON LogLevel
+
+data XPFeatures = XPFeatures
+  { xpfOptimus        :: Bool
+  , xpfVirtualBox     :: Bool
+  , xpfXSANE          :: Bool
+  , xpfWireless       :: Bool
+  , xpfVPN            :: Bool
+  , xpfBluetooth      :: Bool
+  , xpfIntelBacklight :: Bool
+  , xpfClevoBacklight :: Bool
+  }
+
+instance FromJSON XPFeatures where
+  parseJSON = withObject "features" $ \o -> XPFeatures
+    <$> o .:+ "optimus"
+    <*> o .:+ "virtualbox"
+    <*> o .:+ "xsane"
+    <*> o .:+ "wireless"
+    <*> o .:+ "vpn"
+    <*> o .:+ "bluetooth"
+    <*> o .:+ "intel_backlight"
+    <*> o .:+ "clevo_backlight"
+
 defParams :: XParams
-defParams = XParams { xpLogLevel = Error }
+defParams = XParams
+  { xpLogLevel = Error
+  , xpFeatures = defXPFeatures
+  }
+
+defXPFeatures :: XPFeatures
+defXPFeatures = XPFeatures
+  { xpfOptimus = False
+  , xpfVirtualBox = False
+  , xpfXSANE = False
+  , xpfWireless = False
+  , xpfVPN = False
+  , xpfBluetooth = False
+  , xpfIntelBacklight = False
+  , xpfClevoBacklight = False
+  }
 
 data Cache = Cache
   { --cIO    :: forall p. Memoizable p => H.HashMap (IODependency p) (Result p)
@@ -495,22 +545,23 @@ getParamFile = do
   where
     fallback = (</> ".config") <$> getHomeDirectory
 
-instance FromJSON XParams where
-  parseJSON = withObject "parameters" $ \o -> XParams
-    <$> o .: fromString "loglevel"
+(.:+) :: Object -> String -> Parser Bool
+(.:+) o n = o .:? fromString n .!= False
 
-instance FromJSON LogLevel
+infix .:+
 
 --------------------------------------------------------------------------------
 -- | Testing pipeline
 
 evalSometimesMsg :: Sometimes a -> FIO (Either [FMsg] (a, [FMsg]))
-evalSometimesMsg (Sometimes n xs) = do
-  PostSometimes { psSuccess = s, psFailed = fs } <- testSometimes xs
-  let fs' = failedMsgs n fs
-  return $ case s of
-    (Just p) -> Right $ second (++ fs') $ passActMsg n p
-    _        -> Left fs'
+evalSometimesMsg (Sometimes n u xs) = do
+  r <- asks (u . xpFeatures)
+  if not r then return $ Left [FMsg n Nothing (Msg Debug "disabled")] else do
+    PostSometimes { psSuccess = s, psFailed = fs } <- testSometimes xs
+    let fs' = failedMsgs n fs
+    return $ case s of
+      (Just p) -> Right $ second (++ fs') $ passActMsg n p
+      _        -> Left fs'
 
 evalAlwaysMsg :: Always a -> FIO (a, [FMsg])
 evalAlwaysMsg (Always n x) = do
@@ -520,7 +571,7 @@ evalAlwaysMsg (Always n x) = do
     (Fallback act fs) -> (act, failedMsgs n fs)
 
 passActMsg :: String -> SubfeaturePass a -> (a, [FMsg])
-passActMsg fn Subfeature { sfData = PostPass a ws, sfName = n } = (a, fmap (FMsg fn n) ws)
+passActMsg fn Subfeature { sfData = PostPass a ws, sfName = n } = (a, fmap (FMsg fn (Just n)) ws)
 
 failedMsgs :: String -> [SubfeatureFail] -> [FMsg]
 failedMsgs n = concatMap (failedMsg n)
@@ -530,7 +581,7 @@ failedMsg fn Subfeature { sfData = d, sfName = n } = case d of
   (PostFail es)   -> f es
   (PostMissing e) -> f [e]
   where
-    f = fmap (FMsg fn n)
+    f = fmap (FMsg fn (Just n))
 
 testAlways :: Always_ a -> FIO (PostAlways a)
 testAlways = go []
@@ -857,7 +908,7 @@ testDBusDependency'_ _ (DBusIO i) = testIODependency_ i
 -- | IO Lifting functions
 
 ioSometimes :: MonadIO m => Sometimes (IO a) -> Sometimes (m a)
-ioSometimes (Sometimes n xs) = Sometimes n $ fmap ioSubfeature xs
+ioSometimes (Sometimes n t xs) = Sometimes n t $ fmap ioSubfeature xs
 
 ioAlways :: MonadIO m => Always (IO a) -> Always (m a)
 ioAlways (Always n x)   = Always n $ ioAlways' x
@@ -882,8 +933,8 @@ ioRoot (DBusRoot_ a t cl) = DBusRoot_ (io . a) t cl
 --------------------------------------------------------------------------------
 -- | Feature constructors
 
-sometimes1_ :: LogLevel -> String -> String -> Root a -> Sometimes a
-sometimes1_ l fn n t = Sometimes fn
+sometimes1_ :: (XPFeatures -> Bool) -> LogLevel -> String -> String -> Root a -> Sometimes a
+sometimes1_ x l fn n t = Sometimes fn x
   [Subfeature{ sfData = t, sfName = n, sfLevel = l }]
 
 always1_ :: LogLevel -> String -> String -> Root a -> a -> Always a
@@ -891,7 +942,7 @@ always1_ l fn n t x = Always fn
   $ Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always_ $ FallbackAlone x)
 
 sometimes1 :: String -> String -> Root a -> Sometimes a
-sometimes1 = sometimes1_ Error
+sometimes1 = sometimes1_ (const True) Error
 
 always1 :: String -> String -> Root a -> a -> Always a
 always1 = always1_ Error
@@ -1079,10 +1130,11 @@ dataTree_ f_ = go
 
 dataIODependency :: IODependency p -> DependencyData
 dataIODependency d = first Q $ case d of
-  (IORead n _)                    -> ("ioread", [("desc", JSON_Q $ Q n)])
-  (IOConst _)                     -> ("const", [])
-  (IOSometimes (Sometimes n _) _) -> ("sometimes", [("name", JSON_Q $ Q n)])
-  (IOAlways (Always n _) _)       -> ("always", [("name", JSON_Q $ Q n)])
+  (IORead n _)                      -> ("ioread", [("desc", JSON_Q $ Q n)])
+  (IOConst _)                       -> ("const", [])
+  -- TODO what if this isn't required?
+  (IOSometimes (Sometimes n _ _) _) -> ("sometimes", [("name", JSON_Q $ Q n)])
+  (IOAlways (Always n _) _)         -> ("always", [("name", JSON_Q $ Q n)])
 
 dataIODependency_ :: IODependency_ -> DependencyData
 dataIODependency_ d = case d of

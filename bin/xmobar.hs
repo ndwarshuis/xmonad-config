@@ -244,7 +244,7 @@ iconDBus_ = iconSometimes' And_ $ Only_ . DBusIO
 
 iconSometimes' :: (t -> t_ -> t) -> (IODependency_ -> t_) -> String
   -> (Fontifier -> t -> Root CmdSpec) -> t -> BarFeature
-iconSometimes' c d n r t = Sometimes n
+iconSometimes' c d n r t = Sometimes n (const True)
   [ Subfeature icon "icon indicator" Error
   , Subfeature text "text indicator" Error
   ]

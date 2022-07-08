@@ -136,7 +136,7 @@ runOptimusPrompt' fb = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: SometimesX
-runOptimusPrompt = Sometimes "graphics switcher" [s]
+runOptimusPrompt = Sometimes "graphics switcher" xpfOptimus [s]
   where
     s = Subfeature { sfData = r, sfName = "optimus manager", sfLevel = Error }
     r = IORoot runOptimusPrompt' t
@@ -172,7 +172,7 @@ instance XPrompt PowerPrompt where
     showXPrompt PowerPrompt = "(P)oweroff (S)uspend (H)ibernate (R)eboot:"
 
 runPowerPrompt :: SometimesX
-runPowerPrompt = Sometimes "power prompt" [sf]
+runPowerPrompt = Sometimes "power prompt" (const True) [sf]
   where
     sf = Subfeature withLock "prompt with lock" Error
     withLock = IORoot (uncurry powerPrompt) tree
