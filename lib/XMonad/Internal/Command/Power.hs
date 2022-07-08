@@ -135,14 +135,15 @@ runOptimusPrompt' fb = do
       #!&& unwords [myOptimusManager, "--switch", mode, "--no-confirm"]
       #!&& "killall xmonad"
 
--- TODO test that the socket is open (/tmp/optimus-manager)
 runOptimusPrompt :: SometimesX
 runOptimusPrompt = Sometimes "graphics switcher" [s]
   where
     s = Subfeature { sfData = r, sfName = "optimus manager", sfLevel = Error }
     r = IORoot runOptimusPrompt' t
     t = And1 (fontTreeAlt T.defFontFamily)
-      $ And_ (Only_ $ sysExe myOptimusManager) (Only_ $ sysExe myPrimeOffload)
+      $ listToAnds (socketExists "optimus-manager" socketName) $ sysExe
+      <$> [myOptimusManager, myPrimeOffload]
+    socketName = (</> "optimus-manager") <$> getTemporaryDirectory
 
 --------------------------------------------------------------------------------
 -- | Universal power prompt

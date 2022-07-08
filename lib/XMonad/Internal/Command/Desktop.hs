@@ -71,6 +71,9 @@ myBrowser = "brave-accel"
 myEditor :: String
 myEditor = "emacsclient"
 
+myEditorServer :: String
+myEditorServer = "emacs"
+
 myMultimediaCtl :: String
 myMultimediaCtl = "playerctl"
 
@@ -128,7 +131,9 @@ runEditor = sometimesIO_ "text editor" "emacs" tree cmd
   where
     cmd = spawnCmd myEditor
       ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
-    tree = Only_ $ sysExe myEditor
+    -- NOTE we could test if the emacs socket exists, but it won't come up
+    -- before xmonad starts, so just check to see if the process has started
+    tree = toAnd_ (sysExe myEditor) $ process myEditorServer
 
 runFileManager :: SometimesX
 runFileManager = sometimesExe "file browser" "pcmanfm" True "pcmanfm"

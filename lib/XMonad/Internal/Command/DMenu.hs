@@ -143,7 +143,7 @@ runClipMenu :: SometimesX
 runClipMenu = sometimesIO_ "clipboard manager" "rofi greenclip" tree act
   where
     act = spawnCmd myDmenuCmd args
-    tree = listToAnds (processExists myClipboardManager)
+    tree = listToAnds (process myClipboardManager)
       $ sysExe <$> [myDmenuCmd, myClipboardManager]
     args = [ "-modi", "\"clipboard:greenclip print\""
            , "-show", "clipboard"

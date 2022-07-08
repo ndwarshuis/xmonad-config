@@ -68,7 +68,6 @@ module XMonad.Internal.Dependency
   , readEthernet
   , readWireless
   , socketExists
-  , processExists
 
   -- lifting
   , ioSometimes
@@ -95,9 +94,9 @@ module XMonad.Internal.Dependency
   , pathR
   , pathRW
   , pathW
-  -- , sysTest
   , voidResult
   , voidRead
+  , process
 
   -- misc
   , shellTest
@@ -352,6 +351,7 @@ data SystemDependency =
   Executable Bool FilePath
   | AccessiblePath FilePath Bool Bool
   | Systemd UnitType String
+  | Process String
   deriving (Eq, Show, Generic)
 
 instance Hashable SystemDependency
@@ -662,6 +662,8 @@ testSysDependency (Systemd t n) = shellTest cmd msg
   where
     msg = unwords ["systemd", unitType t, "unit", singleQuote n, "not found"]
     cmd = fmtCmd "systemctl" $ ["--user" | t == UserUnit] ++ ["status", n]
+testSysDependency (Process n) = shellTest (fmtCmd "pidof" [n])
+  $ "Process " ++ singleQuote n ++ " not found"
 testSysDependency (AccessiblePath p r w) = permMsg <$> getPermissionsSafe p
   where
     testPerm False _ _  = Nothing
@@ -787,14 +789,6 @@ socketExists' getPath = do
     Right s -> if isSocket s then Nothing else toErr $ p ++ " is not a socket"
   where
     toErr = Just . Msg Error
-
-processExists :: String -> IODependency_
-processExists n = IOTest_ ("determine if process " ++ n ++ " is running")
-  $ processExists' n
-
-processExists' :: String -> IO (Maybe Msg)
-processExists' n = shellTest (fmtCmd "pidof" [n])
-  $ "Process " ++ singleQuote n ++ " not found"
 
 --------------------------------------------------------------------------------
 -- | DBus Dependency Testing
@@ -983,8 +977,8 @@ sysdUser = sysd UserUnit
 sysdSystem :: String -> IODependency_
 sysdSystem = sysd SystemUnit
 
--- sysTest :: String -> IO (Maybe String) -> IODependency_
--- sysTest n = IOSystem_ . IOTest n
+process :: String -> IODependency_
+process = IOSystem_ . Process
 
 --------------------------------------------------------------------------------
 -- | Printing
@@ -1108,6 +1102,7 @@ dataSysDependency d = first Q $
                                        ])
     (Systemd t n) -> ("systemd", [ ("unittype", JSON_Q $ Q $ unitType t)
                                  , ("unit", JSON_Q $ Q n)])
+    (Process n) -> ("process", [("name", JSON_Q $ Q n)])
 
 dataDBusDependency :: DBusDependency_ -> DependencyData
 dataDBusDependency d =
