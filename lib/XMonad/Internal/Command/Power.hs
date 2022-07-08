@@ -138,7 +138,7 @@ runOptimusPrompt' fb = do
 runOptimusPrompt :: SometimesX
 runOptimusPrompt = Sometimes "graphics switcher" xpfOptimus [s]
   where
-    s = Subfeature { sfData = r, sfName = "optimus manager", sfLevel = Error }
+    s = Subfeature { sfData = r, sfName = "optimus manager" }
     r = IORoot runOptimusPrompt' t
     t = And1 (fontTreeAlt T.defFontFamily)
       $ listToAnds (socketExists "optimus-manager" socketName) $ sysExe
@@ -174,7 +174,7 @@ instance XPrompt PowerPrompt where
 runPowerPrompt :: SometimesX
 runPowerPrompt = Sometimes "power prompt" (const True) [sf]
   where
-    sf = Subfeature withLock "prompt with lock" Error
+    sf = Subfeature withLock "prompt with lock"
     withLock = IORoot (uncurry powerPrompt) tree
     tree = And12 (,) lockTree (fontTreeAlt T.defFontFamily)
     lockTree = Or (Only $ IOSometimes runScreenLock id) (Only $ IOConst skip)

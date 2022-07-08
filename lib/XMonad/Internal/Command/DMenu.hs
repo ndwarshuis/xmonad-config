@@ -165,7 +165,6 @@ showKeysDMenu :: SubfeatureRoot ([((KeyMask, KeySym), NamedAction)] -> X ())
 showKeysDMenu = Subfeature
   { sfName = "keyboard shortcut menu"
   , sfData = IORoot_ showKeys $ Only_ $ sysExe myDmenuCmd
-  , sfLevel = Warn
   }
 
 showKeys :: [((KeyMask, KeySym), NamedAction)] -> X ()

@@ -103,7 +103,7 @@ data FeatureSet = FeatureSet
 tabbedFeature :: Always Theme
 tabbedFeature = Always "theme for tabbed windows" $ Option sf fallback
   where
-    sf = Subfeature niceTheme "theme with nice font" Error
+    sf = Subfeature niceTheme "theme with nice font"
     niceTheme = IORoot T.tabbedTheme $ fontTree T.defFontFamily
     fallback = Always_ $ FallbackAlone $ T.tabbedTheme T.fallbackFont
 

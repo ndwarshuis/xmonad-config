@@ -273,9 +273,8 @@ type Sometimes_ a = [SubfeatureRoot a]
 -- the 'action' itself to be tested and any auxilary data for describing the
 -- sub-feature.
 data Subfeature f = Subfeature
-  { sfData  :: f
-  , sfName  :: String
-  , sfLevel :: LogLevel
+  { sfData :: f
+  , sfName :: String
   }
 
 -- | Loglevel at which feature testing should be reported
@@ -933,19 +932,19 @@ ioRoot (DBusRoot_ a t cl) = DBusRoot_ (io . a) t cl
 --------------------------------------------------------------------------------
 -- | Feature constructors
 
-sometimes1_ :: (XPFeatures -> Bool) -> LogLevel -> String -> String -> Root a -> Sometimes a
-sometimes1_ x l fn n t = Sometimes fn x
-  [Subfeature{ sfData = t, sfName = n, sfLevel = l }]
+sometimes1_ :: (XPFeatures -> Bool) -> String -> String -> Root a -> Sometimes a
+sometimes1_ x fn n t = Sometimes fn x
+  [Subfeature{ sfData = t, sfName = n }]
 
-always1_ :: LogLevel -> String -> String -> Root a -> a -> Always a
-always1_ l fn n t x = Always fn
-  $ Option (Subfeature{ sfData = t, sfName = n, sfLevel = l }) (Always_ $ FallbackAlone x)
+always1_ :: String -> String -> Root a -> a -> Always a
+always1_ fn n t x = Always fn
+  $ Option (Subfeature{ sfData = t, sfName = n }) (Always_ $ FallbackAlone x)
 
 sometimes1 :: String -> String -> Root a -> Sometimes a
-sometimes1 = sometimes1_ (const True) Error
+sometimes1 = sometimes1_ (const True)
 
 always1 :: String -> String -> Root a -> a -> Always a
-always1 = always1_ Error
+always1 = always1_
 
 sometimesIO_ :: String -> String -> IOTree_ -> a -> Sometimes a
 sometimesIO_ fn n t x = sometimes1 fn n $ IORoot_ x t

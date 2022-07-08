@@ -121,7 +121,7 @@ runPowermon = sometimesIO_ "ACPI event monitor" "acpid" socketDep listenACPI
 runHandleACPI :: Always (String -> X ())
 runHandleACPI = Always "ACPI event handler" $ Option sf fallback
   where
-    sf = Subfeature withLock "acpid prompt" Error
+    sf = Subfeature withLock "acpid prompt"
     withLock = IORoot (uncurry handleACPI)
       $ And12 (,) (fontTreeAlt defFontFamily) $ Only
       $ IOSometimes runScreenLock id
