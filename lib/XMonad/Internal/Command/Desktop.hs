@@ -47,7 +47,6 @@ import           DBus.Client
 import           System.Directory
 import           System.Environment
 import           System.FilePath
-import           System.Posix.Files
 import           System.Posix.User
 
 import           XMonad                      (asks)
@@ -102,7 +101,7 @@ runTerm = sometimesExe "terminal" "urxvt" True myTerm
 runTMux :: SometimesX
 runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
   where
-    deps = listToAnds (socketExists socketName)
+    deps = listToAnds (socketExists "tmux" socketName)
       $ fmap sysExe [myTerm, "tmux", "bash"]
     act = spawn
       $ "tmux has-session"
@@ -114,18 +113,6 @@ runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
       u <- getEffectiveUserID
       t <- getTemporaryDirectory
       return $ t </> "tmux-" ++ show u </> "default"
-
-socketExists :: IO FilePath -> IODependency_
-socketExists getPath = IOTest_ "find tmux socket current user" $ do
-  p <- getPath
-  e <- fileExist p
-  s <- isSocket <$> getFileStatus p
-  return $ case (e, s) of
-    (True, True) -> Nothing
-    (False, _)   -> toErr $ "could not find socket at " ++ p
-    (_, False)   -> toErr $ p ++ " is not a socket"
-  where
-    toErr = Just . Msg Error
 
 runCalc :: SometimesX
 runCalc = sometimesIO_ "calculator" "R" deps act
@@ -141,7 +128,7 @@ runEditor = sometimesIO_ "text editor" "emacs" tree cmd
   where
     cmd = spawnCmd myEditor
       ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
-    tree = toAnd_ (sysExe myEditor) (socketExists socketName)
+    tree = toAnd_ (sysExe myEditor) (socketExists "emacs" socketName)
     socketName = (</> "emacs" </> "server") <$> getEnv "XDG_RUNTIME_DIR"
 
 runFileManager :: SometimesX
@@ -224,12 +211,11 @@ runNotificationContext =
 -- | System commands
 
 -- this is required for some vpn's to work properly with network-manager
--- TODO test that network manager is up
-runNetAppDaemon :: Sometimes (IO ProcessHandle)
-runNetAppDaemon = sometimesIO_ "network applet" "NM-applet" tree cmd
+runNetAppDaemon :: Maybe Client -> Sometimes (IO ProcessHandle)
+runNetAppDaemon cl = sometimesDBus cl "network applet" "NM-applet" tree cmd
   where
-    tree = Only_ $ localExe "nm-applet"
-    cmd = snd <$> spawnPipe "nm-applet"
+    tree = toAnd_ (DBusIO $ localExe "nm-applet") $ Bus networkManagerBus
+    cmd _ = snd <$> spawnPipe "nm-applet"
 
 runToggleBluetooth :: Maybe Client -> SometimesX
 runToggleBluetooth cl =

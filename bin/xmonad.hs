@@ -107,8 +107,8 @@ tabbedFeature = Always "theme for tabbed windows" $ Option sf fallback
     niceTheme = IORoot T.tabbedTheme $ fontTree T.defFontFamily
     fallback = Always_ $ FallbackAlone $ T.tabbedTheme T.fallbackFont
 
-features :: FeatureSet
-features = FeatureSet
+features :: Maybe Client -> FeatureSet
+features cl = FeatureSet
   { fsKeys = externalBindings
   , fsDBusExporters = dbusExporters
   , fsPowerMon = runPowermon
@@ -117,22 +117,23 @@ features = FeatureSet
   , fsDynWorkspaces = allDWs'
   , fsTabbedTheme = tabbedFeature
   , fsShowKeys = runShowKeys
-  , fsDaemons = [runNetAppDaemon, runAutolock]
+  , fsDaemons = [runNetAppDaemon cl, runAutolock]
   }
 
-evalConf db = do
+evalConf db@DBusState { dbSysClient = cl } = do
   -- start DBus interfaces first since many features after this test these
   -- interfaces as dependencies
-  startDBusInterfaces
-  (xmobarHandle, ts) <- startChildDaemons
-  startRemovableMon
-  startPowerMon
-  dws <- startDynWorkspaces
-  tt <- evalAlways $ fsTabbedTheme features
+  let fs = features cl
+  startDBusInterfaces fs
+  (xmobarHandle, ts) <- startChildDaemons fs
+  startRemovableMon fs
+  startPowerMon fs
+  dws <- startDynWorkspaces fs
+  tt <- evalAlways $ fsTabbedTheme fs
   -- fb <- evalAlways $ fsFontBuilder features
-  kbs <- filterExternal <$> evalExternal (fsKeys features ts db)
-  sk <- evalAlways $ fsShowKeys features
-  ha <- evalAlways $ fsACPIHandler features
+  kbs <- filterExternal <$> evalExternal (fsKeys fs ts db)
+  sk <- evalAlways $ fsShowKeys fs
+  ha <- evalAlways $ fsACPIHandler fs
   return $ ewmh
     $ addKeymap dws sk kbs
     $ docks
@@ -151,17 +152,17 @@ evalConf db = do
           }
   where
     forkIO_ = void . forkIO
-    startDBusInterfaces = mapM_ (\f -> executeSometimes $ f $ dbSesClient db)
-      $ fsDBusExporters features
-    startChildDaemons = do
+    startDBusInterfaces fs = mapM_ (\f -> executeSometimes $ f $ dbSesClient db)
+      $ fsDBusExporters fs
+    startChildDaemons fs = do
       (h, p) <- io $ spawnPipe "xmobar"
-      ps <- catMaybes <$> mapM executeSometimes (fsDaemons features)
+      ps <- catMaybes <$> mapM executeSometimes (fsDaemons fs)
       return (h, ThreadState (p:ps) [h])
-    startRemovableMon = void $ executeSometimes $ fsRemovableMon features
+    startRemovableMon fs = void $ executeSometimes $ fsRemovableMon fs
                         $ dbSysClient db
-    startPowerMon = void $ fork $ void $ executeSometimes $ fsPowerMon features
-    startDynWorkspaces = do
-      dws <- catMaybes <$> mapM evalSometimes (fsDynWorkspaces features)
+    startPowerMon fs = void $ fork $ void $ executeSometimes $ fsPowerMon fs
+    startDynWorkspaces fs = do
+      dws <- catMaybes <$> mapM evalSometimes (fsDynWorkspaces fs)
       io $ forkIO_ $ runWorkspaceMon dws
       return dws
 
@@ -617,10 +618,10 @@ externalBindings ts db =
   [ KeyGroup "Launchers"
     [ KeyBinding "<XF86Search>" "select/launch app" $ Left runAppMenu
     , KeyBinding "M-g" "launch clipboard manager" $ Left runClipMenu
-    , KeyBinding "M-a" "launch network selector" $ Left runNetMenu
+    , KeyBinding "M-a" "launch network selector" $ Left $ runNetMenu sys
     , KeyBinding "M-w" "launch window selector" $ Left runWinMenu
     , KeyBinding "M-u" "launch device selector" $ Left runDevMenu
-    , KeyBinding "M-b" "launch bitwarden selector" $ Left runBwMenu
+    , KeyBinding "M-b" "launch bitwarden selector" $ Left $ runBwMenu ses
     , KeyBinding "M-v" "launch ExpressVPN selector" $ Left runVPNMenu
     , KeyBinding "M-e" "launch bluetooth selector" $ Left runBTMenu
     , KeyBinding "M-C-e" "launch editor" $ Left runEditor

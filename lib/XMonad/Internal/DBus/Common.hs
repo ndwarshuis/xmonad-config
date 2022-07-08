@@ -6,6 +6,7 @@ module XMonad.Internal.DBus.Common
   , btBus
   , notifyBus
   , notifyPath
+  , networkManagerBus
   ) where
 
 import           DBus
@@ -21,4 +22,7 @@ notifyBus = busName_ "org.freedesktop.Notifications"
 
 notifyPath :: ObjectPath
 notifyPath = objectPath_ "/org/freedesktop/Notifications"
+
+networkManagerBus :: BusName
+networkManagerBus = busName_ "org.freedesktop.NetworkManager"
 

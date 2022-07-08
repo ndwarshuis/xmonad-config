@@ -67,6 +67,8 @@ module XMonad.Internal.Dependency
   , fontSometimes
   , readEthernet
   , readWireless
+  , socketExists
+  , processExists
 
   -- lifting
   , ioSometimes
@@ -685,7 +687,7 @@ unitType SystemUnit = "system"
 unitType UserUnit   = "user"
 
 --------------------------------------------------------------------------------
--- | IO testers
+-- | Font testers
 --
 -- Make a special case for these since we end up testing the font alot, and it
 -- would be nice if I can cache them.
@@ -733,7 +735,7 @@ testFont' fam = maybe pass (Left . (:[])) <$> shellTest cmd msg
     pass = Right $ PostPass (buildFont $ Just fam) []
 
 --------------------------------------------------------------------------------
--- | network dependencies
+-- | Network Testers
 --
 -- ASSUME that the system uses systemd in which case ethernet interfaces always
 -- start with "en" and wireless interfaces always start with "wl"
@@ -768,6 +770,32 @@ readInterface n f = IORead n go
         (x:xs) -> do
           return $ Right $ PostPass x
             $ fmap (Msg Warn . ("ignoring extra interface: " ++)) xs
+
+--------------------------------------------------------------------------------
+-- | Misc testers
+
+socketExists :: String -> IO FilePath -> IODependency_
+socketExists n = IOTest_ ("test if " ++ n ++ " socket exists") . socketExists'
+
+socketExists' :: IO FilePath -> IO (Maybe Msg)
+socketExists' getPath = do
+  p <- getPath
+  e <- fileExist p
+  s <- isSocket <$> getFileStatus p
+  return $ case (e, s) of
+    (True, True) -> Nothing
+    (False, _)   -> toErr $ "could not find socket at " ++ p
+    (_, False)   -> toErr $ p ++ " is not a socket"
+  where
+    toErr = Just . Msg Error
+
+processExists :: String -> IODependency_
+processExists n = IOTest_ ("determine if process " ++ n ++ " is running")
+  $ processExists' n
+
+processExists' :: String -> IO (Maybe Msg)
+processExists' n = shellTest (fmtCmd "pidof" [n])
+  $ "Process " ++ singleQuote n ++ " not found"
 
 --------------------------------------------------------------------------------
 -- | DBus Dependency Testing
