@@ -598,12 +598,11 @@ evalKeyBinding k@KeyBinding { kbMaybeAction = a } =
 filterExternal :: [KeyGroup MaybeX] -> [KeyGroup (X ())]
 filterExternal = fmap go
   where
-    go k@KeyGroup { kgBindings = bs } = k { kgBindings = mapMaybe flagKeyBinding bs }
-
-flagKeyBinding :: KeyBinding MaybeX -> Maybe (KeyBinding (X ()))
-flagKeyBinding k@KeyBinding{ kbDesc = d, kbMaybeAction = a } = case a of
-  (Just x) -> Just $ k{ kbMaybeAction = x }
-  Nothing  -> Just $ k{ kbDesc = "[!!!]" ++  d, kbMaybeAction = skip }
+    go k@KeyGroup { kgBindings = bs } =
+      k { kgBindings = [ kb { kbMaybeAction = x }
+                       | kb@KeyBinding { kbMaybeAction = Just x } <- bs
+                       ]
+        }
 
 externalBindings :: ThreadState -> DBusState -> [KeyGroup FeatureX]
 externalBindings ts db =
