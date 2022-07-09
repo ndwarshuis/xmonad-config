@@ -97,21 +97,21 @@ myNotificationCtrl = "dunstctl"
 -- | Packages
 
 myTermPkgs :: [Fulfillment]
-myTermPkgs = [ Package True "rxvt-unicode"
-             , Package True "urxvt-perls"
+myTermPkgs = [ Package Official "rxvt-unicode"
+             , Package Official "urxvt-perls"
              ]
 
 myEditorPkgs :: [Fulfillment]
-myEditorPkgs = [Package True "emacs-nativecomp"]
+myEditorPkgs = [Package Official "emacs-nativecomp"]
 
 notifyPkgs :: [Fulfillment]
-notifyPkgs = [Package True "dunst"]
+notifyPkgs = [Package Official "dunst"]
 
 bluetoothPkgs :: [Fulfillment]
-bluetoothPkgs = [Package True "bluez-utils"]
+bluetoothPkgs = [Package Official "bluez-utils"]
 
 networkManagerPkgs :: [Fulfillment]
-networkManagerPkgs = [Package True "networkmanager"]
+networkManagerPkgs = [Package Official "networkmanager"]
 
 --------------------------------------------------------------------------------
 -- | Misc constants
@@ -144,11 +144,11 @@ runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
 runCalc :: SometimesX
 runCalc = sometimesIO_ "calculator" "R" deps act
   where
-    deps = toAnd_ (sysExe myTermPkgs myTerm) (sysExe [Package True "bc"] myCalc)
+    deps = toAnd_ (sysExe myTermPkgs myTerm) (sysExe [Package Official "bc"] myCalc)
     act = spawnCmd myTerm ["-e", myCalc, "-l"]
 
 runBrowser :: SometimesX
-runBrowser = sometimesExe "web browser" "brave" [Package False "brave-bin"]
+runBrowser = sometimesExe "web browser" "brave" [Package AUR "brave-bin"]
   False myBrowser
 
 runEditor :: SometimesX
@@ -161,7 +161,7 @@ runEditor = sometimesIO_ "text editor" "emacs" tree cmd
     tree = toAnd_ (sysExe myEditorPkgs myEditor) $ process [] myEditorServer
 
 runFileManager :: SometimesX
-runFileManager = sometimesExe "file browser" "pcmanfm" [Package True "pcmanfm"]
+runFileManager = sometimesExe "file browser" "pcmanfm" [Package Official "pcmanfm"]
   True "pcmanfm"
 
 --------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ runFileManager = sometimesExe "file browser" "pcmanfm" [Package True "pcmanfm"]
 
 runMultimediaIfInstalled :: String -> String -> SometimesX
 runMultimediaIfInstalled n cmd = sometimesExeArgs (n ++ " multimedia control")
-  "playerctl" [Package True "playerctl"] True myMultimediaCtl [cmd]
+  "playerctl" [Package Official "playerctl"] True myMultimediaCtl [cmd]
 
 runTogglePlay :: SometimesX
 runTogglePlay = runMultimediaIfInstalled "play/pause" "play-pause"
@@ -201,7 +201,7 @@ featureSound n file pre post =
   sometimesIO_ ("volume " ++ n ++ " control") "paplay" tree
   $ pre >> playSound file >> post
   where
-    tree = Only_ $ sysExe [Package True "libpulse"] "paplay"
+    tree = Only_ $ sysExe [Package Official "libpulse"] "paplay"
 
 runVolumeDown :: SometimesX
 runVolumeDown = featureSound "up" volumeChangeSound (return ()) $ void (lowerVolume 2)
@@ -248,7 +248,7 @@ runNetAppDaemon cl = Sometimes "network applet" xpfVPN
   [Subfeature (DBusRoot_ cmd tree cl) "NM-applet"]
   where
     tree = toAnd_ app $ Bus networkManagerPkgs networkManagerBus
-    app = DBusIO $ sysExe [Package True "network-manager-applet"] "nm-applet"
+    app = DBusIO $ sysExe [Package Official "network-manager-applet"] "nm-applet"
     cmd _ = snd <$> spawnPipe "nm-applet"
 
 runToggleBluetooth :: Maybe Client -> SometimesX
@@ -310,7 +310,7 @@ runFlameshot :: String -> String -> Maybe Client -> SometimesX
 runFlameshot n mode cl = sometimesDBus cl n myCapture tree cmd
   where
     cmd _ = spawnCmd myCapture [mode]
-    tree = toAnd_ (DBusIO $ sysExe [Package True "flameshot"] myCapture)
+    tree = toAnd_ (DBusIO $ sysExe [Package Official "flameshot"] myCapture)
       $ Bus [] $ busName_ "org.flameshot.Flameshot"
 
 -- TODO this will steal focus from the current window (and puts it
@@ -328,6 +328,6 @@ runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: SometimesX
 runCaptureBrowser = sometimesIO_ "screen capture browser" "feh"
-  (Only_ $ sysExe [Package True "feh"] myImageBrowser) $ do
+  (Only_ $ sysExe [Package Official "feh"] myImageBrowser) $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

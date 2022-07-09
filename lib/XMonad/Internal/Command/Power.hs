@@ -62,14 +62,14 @@ myPrimeOffload = "prime-offload"
 -- | Packages
 
 optimusPackages :: [Fulfillment]
-optimusPackages = [Package False "optimus-manager"]
+optimusPackages = [Package AUR "optimus-manager"]
 
 --------------------------------------------------------------------------------
 -- | Core commands
 
 runScreenLock :: SometimesX
 runScreenLock = sometimesExe "screen locker" "i3lock script"
-  [Package False "i3lock-color"] False myScreenlock
+  [Package AUR "i3lock-color"] False myScreenlock
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -89,7 +89,7 @@ runReboot = spawn "systemctl reboot"
 runAutolock :: Sometimes (IO ProcessHandle)
 runAutolock = sometimesIO_ "automatic screen lock" "xss-lock" tree cmd
   where
-    tree = And_ (Only_ $ sysExe [Package True "xss-lock"] "xss-lock")
+    tree = And_ (Only_ $ sysExe [Package Official "xss-lock"] "xss-lock")
       $ Only_ $ IOSometimes_ runScreenLock
     cmd = snd <$> spawnPipeArgs "xss-lock" ["--ignore-sleep", "screenlock"]
 
@@ -100,7 +100,7 @@ promptFontDep :: IOTree T.FontBuilder
 promptFontDep = fontTreeAlt T.defFontFamily defFontPkgs
 
 defFontPkgs :: [Fulfillment]
-defFontPkgs = [Package True "ttf-dejavu"]
+defFontPkgs = [Package Official "ttf-dejavu"]
 
 confirmPrompt' :: String -> X () -> T.FontBuilder -> X ()
 confirmPrompt' s x fb = confirmPrompt (T.promptTheme fb) s x

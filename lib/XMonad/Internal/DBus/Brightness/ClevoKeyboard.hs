@@ -108,10 +108,10 @@ clevoKeyboardConfig = BrightnessConfig
 -- | Exported haskell API
 
 stateFileDep :: IODependency_
-stateFileDep = pathRW stateFile [Package True "tuxedo-keyboard"]
+stateFileDep = pathRW stateFile [Package AUR "tuxedo-keyboard"]
 
 brightnessFileDep :: IODependency_
-brightnessFileDep = pathR brightnessFile [Package True "tuxedo-keyboard"]
+brightnessFileDep = pathR brightnessFile [Package AUR "tuxedo-keyboard"]
 
 clevoKeyboardSignalDep :: DBusDependency_
 clevoKeyboardSignalDep = signalDep clevoKeyboardConfig

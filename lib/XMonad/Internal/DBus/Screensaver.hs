@@ -117,7 +117,7 @@ exportScreensaver client =
         ]
       }
     bus = Bus [] xmonadBusName
-    ssx = DBusIO $ sysExe [Package True "xorg-xset"] ssExecutable
+    ssx = DBusIO $ sysExe [Package Official "xorg-xset"] ssExecutable
 
 callToggle :: Maybe Client -> SometimesIO
 callToggle = sometimesEndpoint "screensaver toggle" "dbus switch" []

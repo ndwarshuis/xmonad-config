@@ -91,7 +91,7 @@ acpiPath :: FilePath
 acpiPath = "/var/run/acpid.socket"
 
 socketDep :: IOTree_
-socketDep = Only_ $ pathR acpiPath [Package True "acpid"]
+socketDep = Only_ $ pathR acpiPath [Package Official "acpid"]
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)

@@ -236,7 +236,7 @@ f5Tag = "F5VPN"
 gimpDynamicWorkspace :: Sometimes DynWorkspace
 gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
   where
-    tree = Only_ $ sysExe [Package True "gimp"] exe
+    tree = Only_ $ sysExe [Package Official "gimp"] exe
     dw = DynWorkspace
          { dwName = "Gimp"
          , dwTag = gimpTag
@@ -259,7 +259,7 @@ vmDynamicWorkspace :: Sometimes DynWorkspace
 vmDynamicWorkspace = Sometimes "virtualbox workspace" xpfVirtualBox
   [Subfeature root "windows 8 VM"]
   where
-    root = IORoot_ dw $ toAnd_ (sysExe [Package True "virtualbox"] "VBoxManage")
+    root = IORoot_ dw $ toAnd_ (sysExe [Package Official "virtualbox"] "VBoxManage")
       $ IOTest_ name [] $ vmExists vm
     name = unwords ["test if", vm, "exists"]
     c = "VirtualBoxVM"
@@ -277,7 +277,7 @@ xsaneDynamicWorkspace :: Sometimes DynWorkspace
 xsaneDynamicWorkspace = Sometimes "scanner workspace" xpfXSANE
   [Subfeature (IORoot_ dw tree) "xsane"]
   where
-    tree = Only_ $ sysExe [Package True "xsane"] "xsane"
+    tree = Only_ $ sysExe [Package Official "xsane"] "xsane"
     dw = DynWorkspace
          { dwName = "XSane"
          , dwTag = xsaneTag
@@ -292,7 +292,7 @@ f5vpnDynamicWorkspace :: Sometimes DynWorkspace
 f5vpnDynamicWorkspace = Sometimes "F5 VPN workspace" xpfF5VPN
   [Subfeature (IORoot_ dw tree) "f5vpn"]
   where
-    tree = Only_ $ sysExe [Package False "f5vpn"] "f5vpn"
+    tree = Only_ $ sysExe [Package AUR "f5vpn"] "f5vpn"
     dw = DynWorkspace
          { dwName = "F5Vpn"
          , dwTag = f5Tag

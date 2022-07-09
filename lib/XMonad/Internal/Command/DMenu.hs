@@ -68,10 +68,10 @@ myClipboardManager = "greenclip"
 -- | Packages
 
 dmenuPkgs :: [Fulfillment]
-dmenuPkgs = [Package True "rofi"]
+dmenuPkgs = [Package Official "rofi"]
 
 clipboardPkgs :: [Fulfillment]
-clipboardPkgs = [Package False "rofi-greenclip"]
+clipboardPkgs = [Package AUR "rofi-greenclip"]
 
 --------------------------------------------------------------------------------
 -- | Other internal functions
@@ -144,7 +144,7 @@ runNetMenu cl =
     cmd _ = spawnCmd myDmenuNetworks $ themeArgs "#ff3333"
     tree = And_ (Only_ $ Bus networkManagerPkgs networkManagerBus)
       $ toAnd_ (DBusIO dmenuDep) $ DBusIO
-      $ sysExe [Package False "networkmanager-dmenu-git"] myDmenuNetworks
+      $ sysExe [Package AUR "networkmanager-dmenu-git"] myDmenuNetworks
 
 runAutorandrMenu :: SometimesX
 runAutorandrMenu = sometimesIO_ "autorandr menu" "rofi autorandr" tree cmd

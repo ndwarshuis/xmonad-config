@@ -89,7 +89,7 @@ textFontData = T.defFontData { T.weight = Just T.Bold, T.size = Just 11 }
 -- | The icon font family
 iconFont :: Sometimes T.FontBuilder
 iconFont = fontSometimes "XMobar Icon Font" "Symbols Nerd Font"
-  [Package True "ttf-nerd-fonts-symbols"]
+  [Package Official "ttf-nerd-fonts-symbols"]
 
 -- | Offsets for the icons in the bar (relative to the text offset)
 iconOffset :: BarFont -> Int
@@ -208,7 +208,7 @@ getBt = xmobarDBus "bluetooth status indicator" xpfBluetooth btDep btCmd
 
 getAlsa :: BarFeature
 getAlsa = iconIO_ "volume level indicator" (const True) root
-  $ Only_ $ sysExe [Package True "alsa-utils"] "alsactl"
+  $ Only_ $ sysExe [Package Official "alsa-utils"] "alsactl"
   where
     root useIcon = IORoot_ (alsaCmd useIcon)
 

@@ -48,6 +48,7 @@ module XMonad.Internal.Dependency
   , UnitType(..)
   , Result
   , Fulfillment(..)
+  , ArchPkg(..)
 
   -- dumping
   , dumpFeature
@@ -387,10 +388,14 @@ instance Hashable DBusMember where
 -- TODO there is a third type of package: not in aur or official
 -- | A means to fulfill a dependency
 -- For now this is just the name of an Arch Linux package (AUR or official)
-data Fulfillment = Package Bool String deriving (Eq, Show)
+data Fulfillment = Package ArchPkg String deriving (Eq, Show)
 
 instance Hashable Fulfillment where
   hashWithSalt s (Package a n) = s `hashWithSalt` a `hashWithSalt` n
+
+data ArchPkg = Official | AUR | Custom deriving (Eq, Show, Generic)
+
+instance Hashable ArchPkg
 
 --------------------------------------------------------------------------------
 -- | Tested dependency tree
@@ -1227,7 +1232,7 @@ dataFulfillments = jsonArray . fmap (JSON_UQ . dataFulfillment)
 
 dataFulfillment :: Fulfillment -> JSONUnquotable
 dataFulfillment (Package a n) = jsonObject [ ("type", JSON_Q $ Q "package")
-                                           , ("official", JSON_UQ $ jsonBool a)
+                                           , ("type", JSON_Q $ Q $ show a)
                                            , ("name", JSON_Q $ Q n)
                                            ]
 

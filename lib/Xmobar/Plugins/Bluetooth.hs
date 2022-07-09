@@ -57,7 +57,7 @@ btAlias :: String
 btAlias = "bluetooth"
 
 btDep :: DBusDependency_
-btDep = Endpoint [Package True "bluez"] btBus btOMPath omInterface
+btDep = Endpoint [Package Official "bluez"] btBus btOMPath omInterface
   $ Method_ getManagedObjects
 
 data Bluetooth = Bluetooth Icons Colors deriving (Read, Show)
