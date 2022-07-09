@@ -13,13 +13,14 @@ module XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           Control.Monad                          (when)
 
 import           Data.Int                               (Int32)
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
 
 import           DBus
 
 import           System.FilePath.Posix
 
 import           XMonad.Internal.DBus.Brightness.Common
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.IO
 
 --------------------------------------------------------------------------------
@@ -123,7 +124,7 @@ clevoKeyboardControls :: Maybe SesClient -> BrightnessControls
 clevoKeyboardControls = brightnessControls xpfClevoBacklight clevoKeyboardConfig
 
 callGetBrightnessCK :: SesClient -> IO (Maybe Brightness)
-callGetBrightnessCK = callGetBrightness clevoKeyboardConfig . toClient
+callGetBrightnessCK = callGetBrightness clevoKeyboardConfig
 
 matchSignalCK :: (Maybe Brightness -> IO ()) -> SesClient -> IO ()
-matchSignalCK cb = matchSignal clevoKeyboardConfig cb . toClient
+matchSignalCK = matchSignal clevoKeyboardConfig

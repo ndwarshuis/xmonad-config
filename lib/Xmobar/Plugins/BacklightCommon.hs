@@ -6,7 +6,8 @@
 
 module Xmobar.Plugins.BacklightCommon (startBacklight) where
 
-import           XMonad.Internal.Dependency
+import           Data.Internal.DBus
+
 import           Xmobar.Plugins.Common
 
 startBacklight :: RealFrac a => ((Maybe a -> IO ()) -> SesClient -> IO ())

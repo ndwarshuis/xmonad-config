@@ -8,14 +8,15 @@ module XMonad.Internal.DBus.Removable (runRemovableMon) where
 
 import           Control.Monad
 
-import           Data.Map.Lazy                   (Map, member)
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
+import           Data.Map.Strict                 (Map, member)
 
 import           DBus
 import           DBus.Client
 
 import           XMonad.Core                     (io)
 import           XMonad.Internal.Command.Desktop
-import           XMonad.Internal.Dependency
 
 bus :: BusName
 bus = busName_ "org.freedesktop.UDisks2"

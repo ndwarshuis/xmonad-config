@@ -42,6 +42,9 @@ module XMonad.Internal.Command.Desktop
 import           Control.Monad               (void)
 import           Control.Monad.IO.Class
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
+
 import           DBus
 
 import           System.Directory
@@ -53,7 +56,6 @@ import           XMonad                      (asks)
 import           XMonad.Actions.Volume
 import           XMonad.Core                 hiding (spawn)
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell

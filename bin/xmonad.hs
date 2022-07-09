@@ -10,6 +10,8 @@ import           Control.Concurrent
 import           Control.Concurrent.Lifted                      (fork)
 import           Control.Monad
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
 import           Data.List
     ( intercalate
     , isPrefixOf
@@ -53,7 +55,6 @@ import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.Removable
 import           XMonad.Internal.DBus.Screensaver
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme                          as T

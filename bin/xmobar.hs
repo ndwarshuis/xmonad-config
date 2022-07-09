@@ -11,6 +11,8 @@ module Main (main) where
 -- * Theme integration with xmonad (shared module imported below)
 -- * A custom Locks plugin from my own forked repo
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
 import           Data.List
 import           Data.Maybe
 
@@ -38,7 +40,6 @@ import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
     ( proc'
     , readCreateProcessWithExitCode'

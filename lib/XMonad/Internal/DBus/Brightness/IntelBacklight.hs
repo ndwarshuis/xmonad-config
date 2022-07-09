@@ -11,13 +11,14 @@ module XMonad.Internal.DBus.Brightness.IntelBacklight
   ) where
 
 import           Data.Int                               (Int32)
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
 
 import           DBus
 
 import           System.FilePath.Posix
 
 import           XMonad.Internal.DBus.Brightness.Common
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.IO
 
 --------------------------------------------------------------------------------
@@ -105,7 +106,7 @@ intelBacklightControls :: Maybe SesClient -> BrightnessControls
 intelBacklightControls = brightnessControls xpfIntelBacklight intelBacklightConfig
 
 callGetBrightnessIB :: SesClient -> IO (Maybe Brightness)
-callGetBrightnessIB = callGetBrightness intelBacklightConfig . toClient
+callGetBrightnessIB = callGetBrightness intelBacklightConfig
 
 matchSignalIB :: (Maybe Brightness -> IO ()) -> SesClient -> IO ()
-matchSignalIB cb = matchSignal intelBacklightConfig cb . toClient
+matchSignalIB = matchSignal intelBacklightConfig

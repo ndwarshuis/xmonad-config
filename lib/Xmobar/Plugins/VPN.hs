@@ -14,16 +14,16 @@ module Xmobar.Plugins.VPN
 import           Control.Concurrent.MVar
 import           Control.Monad
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
 import qualified Data.Map                        as M
 import           Data.Maybe
 import qualified Data.Set                        as S
 
 import           DBus
-import           DBus.Internal
 
 import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common
 
@@ -70,16 +70,16 @@ updateState f state op = modifyMVar_ state $ return . f op
 --
 
 getVPNObjectTree :: SysClient -> IO ObjectTree
-getVPNObjectTree client = callGetManagedObjects (toClient client) vpnBus vpnPath
+getVPNObjectTree sys = callGetManagedObjects sys vpnBus vpnPath
 
 findTunnels :: ObjectTree -> VPNState
 findTunnels = S.fromList . M.keys . M.filter (elem vpnDeviceTun . M.keys)
 
 vpnAddedListener :: SignalCallback -> SysClient -> IO ()
-vpnAddedListener cb = void . addInterfaceAddedListener vpnBus vpnPath cb . toClient
+vpnAddedListener cb = void . addInterfaceAddedListener vpnBus vpnPath cb
 
 vpnRemovedListener :: SignalCallback -> SysClient -> IO ()
-vpnRemovedListener cb = void . addInterfaceRemovedListener vpnBus vpnPath cb . toClient
+vpnRemovedListener cb = void . addInterfaceRemovedListener vpnBus vpnPath cb
 
 addedCallback :: MutableVPNState -> IO () -> SignalCallback
 addedCallback state display [device, added] = update >> display

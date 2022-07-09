@@ -19,6 +19,9 @@ module XMonad.Internal.DBus.Control
 
 import           Control.Monad
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
+
 import           DBus
 import           DBus.Client
 
@@ -26,7 +29,6 @@ import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.DBus.Screensaver
-import           XMonad.Internal.Dependency
 
 -- | Current connections to the DBus (session and system buses)
 data DBusState = DBusState

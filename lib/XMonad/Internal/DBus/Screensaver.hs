@@ -11,16 +11,17 @@ module XMonad.Internal.DBus.Screensaver
 
 import           Control.Monad               (void)
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
+
 import           DBus
 import           DBus.Client
-import           DBus.Internal
 import qualified DBus.Introspection          as I
 
 import           Graphics.X11.XScreenSaver
 import           Graphics.X11.Xlib.Display
 
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process
 
 --------------------------------------------------------------------------------
@@ -124,14 +125,14 @@ callToggle :: Maybe SesClient -> SometimesIO
 callToggle = sometimesEndpoint "screensaver toggle" "dbus switch" []
   xmonadBusName ssPath interface memToggle
 
-callQuery :: Client -> IO (Maybe SSState)
-callQuery client = do
-  reply <- callMethod client xmonadBusName ssPath interface memQuery
+callQuery :: SesClient -> IO (Maybe SSState)
+callQuery ses = do
+  reply <- callMethod ses xmonadBusName ssPath interface memQuery
   return $ either (const Nothing) bodyGetCurrentState reply
 
 matchSignal :: (Maybe SSState -> IO ()) -> SesClient -> IO ()
 matchSignal cb ses = void $ addMatchCallback ruleCurrentState
-  (cb . bodyGetCurrentState) $ toClient ses
+  (cb . bodyGetCurrentState) ses
 
 ssSignalDep :: DBusDependency_ SesClient
 ssSignalDep = Endpoint [] xmonadBusName ssPath interface $ Signal_ memState

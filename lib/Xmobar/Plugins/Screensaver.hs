@@ -12,7 +12,6 @@ module Xmobar.Plugins.Screensaver
 import           Xmobar
 
 import           XMonad.Internal.DBus.Screensaver
-import           XMonad.Internal.Dependency
 import           Xmobar.Plugins.Common
 
 newtype Screensaver = Screensaver (String, Colors) deriving (Read, Show)
@@ -23,9 +22,9 @@ ssAlias = "screensaver"
 instance Exec Screensaver where
   alias (Screensaver _) = ssAlias
   start (Screensaver (text, colors)) cb = do
-    withDBusClientConnection cb $ \c -> do
-      matchSignal display c
-      display =<< callQuery (toClient c)
+    withDBusClientConnection cb $ \sys -> do
+      matchSignal display sys
+      display =<< callQuery sys
     where
       display = displayMaybe cb $ return . (\s -> colorText colors s text)
 

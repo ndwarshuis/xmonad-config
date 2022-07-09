@@ -14,15 +14,15 @@ module XMonad.Internal.DBus.Brightness.Common
 import           Control.Monad               (void)
 
 import           Data.Int                    (Int32)
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
 
 import           DBus
 import           DBus.Client
-import           DBus.Internal
 import qualified DBus.Introspection          as I
 
 import           XMonad.Core                 (io)
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.Dependency
 
 --------------------------------------------------------------------------------
 -- | External API
@@ -64,7 +64,8 @@ brightnessControls q bc cl =
   where
     cb = callBacklight q cl bc
 
-callGetBrightness :: Num c => BrightnessConfig a b -> Client -> IO (Maybe c)
+callGetBrightness :: (SafeClient c, Num n) => BrightnessConfig a b -> c
+  -> IO (Maybe n)
 callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client =
   either (const Nothing) bodyGetBrightness
   <$> callMethod client xmonadBusName p i memGet
@@ -73,7 +74,8 @@ signalDep :: BrightnessConfig a b -> DBusDependency_ SesClient
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
   Endpoint [] xmonadBusName p i $ Signal_ memCur
 
-matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> Client -> IO ()
+matchSignal :: (SafeClient c, Num n) => BrightnessConfig a b
+  -> (Maybe n-> IO ()) -> c -> IO ()
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
   void . addMatchCallback brMatcher (cb . bodyGetBrightness)
   where
@@ -139,7 +141,7 @@ callBacklight q cl BrightnessConfig { bcPath = p
   Sometimes (unwords [n, controlName]) q [Subfeature root "method call"]
   where
     root = DBusRoot_ cmd (Only_ $ Endpoint [] xmonadBusName p i $ Method_ m) cl
-    cmd c = io $ void $ callMethod (toClient c) xmonadBusName p i m
+    cmd c = io $ void $ callMethod c xmonadBusName p i m
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)

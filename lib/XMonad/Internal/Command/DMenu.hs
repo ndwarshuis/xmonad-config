@@ -17,6 +17,9 @@ module XMonad.Internal.Command.DMenu
 
 import           Control.Monad.Reader
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
+
 import           DBus
 
 import           Graphics.X11.Types
@@ -30,7 +33,6 @@ import           System.IO
 import           XMonad.Core                     hiding (spawn)
 import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
 import           XMonad.Internal.Process
 import           XMonad.Internal.Shell

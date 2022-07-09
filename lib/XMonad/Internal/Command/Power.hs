@@ -27,6 +27,8 @@ module XMonad.Internal.Command.Power
 
 import           Control.Arrow               (first)
 
+import           Data.Internal.Dependency
+
 import           Data.Either
 import qualified Data.Map                    as M
 
@@ -39,7 +41,6 @@ import           System.IO.Error
 import           System.Process              (ProcessHandle)
 
 import           XMonad.Core
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Process     (spawnPipeArgs)
 import           XMonad.Internal.Shell
 import qualified XMonad.Internal.Theme       as T

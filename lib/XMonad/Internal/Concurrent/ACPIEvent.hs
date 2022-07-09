@@ -15,6 +15,7 @@ import           Control.Monad
 import           Data.ByteString                          hiding (readFile)
 import           Data.ByteString.Char8                    as C hiding (readFile)
 import           Data.Connection
+import           Data.Internal.Dependency
 
 import           Text.Read                                (readMaybe)
 
@@ -24,7 +25,6 @@ import           System.IO.Streams.UnixSocket
 import           XMonad.Core
 import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ClientMessage
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
 import           XMonad.Internal.Theme                    (FontBuilder)
 

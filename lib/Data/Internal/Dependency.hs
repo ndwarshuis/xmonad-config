@@ -8,7 +8,7 @@
 --------------------------------------------------------------------------------
 -- | Functions for handling dependencies
 
-module XMonad.Internal.Dependency
+module Data.Internal.Dependency
   -- feature types
   ( Feature
   , Always(..)
@@ -41,8 +41,6 @@ module XMonad.Internal.Dependency
   , DBusTree
   , DBusTree_
   , SafeClient(..)
-  , SysClient(..)
-  , SesClient(..)
   , IODependency(..)
   , IODependency_(..)
   , SystemDependency(..)
@@ -112,7 +110,6 @@ module XMonad.Internal.Dependency
   , shellTest
   ) where
 
-import           Control.Exception       hiding (bracket)
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
 import           Control.Monad.Reader
@@ -124,6 +121,7 @@ import           Data.Bifunctor
 import           Data.Either
 import qualified Data.HashMap.Strict     as H
 import           Data.Hashable
+import           Data.Internal.DBus
 import           Data.List
 import           Data.Maybe
 import           Data.Yaml
@@ -132,8 +130,6 @@ import           GHC.Generics            (Generic)
 import           GHC.IO.Exception        (ioe_description)
 
 import           DBus                    hiding (typeOf)
-import           DBus.Client
-import           DBus.Internal
 import qualified DBus.Introspection      as I
 
 import           System.Directory
@@ -299,47 +295,6 @@ data Root a = forall p. IORoot (p -> a) (IOTree p)
   | IORoot_ a IOTree_
   | forall c p. SafeClient c => DBusRoot (p -> c -> a) (DBusTree c p) (Maybe c)
   | forall c. SafeClient c => DBusRoot_ (c -> a) (DBusTree_ c) (Maybe c)
-
-class SafeClient c where
-  toClient :: c -> Client
-
-  getDBusClient :: IO (Maybe c)
-
-  withDBusClient :: (c -> IO a) -> IO (Maybe a)
-  withDBusClient f = do
-    client <- getDBusClient
-    forM client $ \c -> do
-      r <- f c
-      disconnect (toClient c)
-      return r
-
-  withDBusClient_ :: (c -> IO ()) -> IO ()
-  withDBusClient_ = void . withDBusClient
-
-  fromDBusClient :: (c -> a) -> IO (Maybe a)
-  fromDBusClient f = withDBusClient (return . f)
-
-newtype SysClient = SysClient Client
-
-instance SafeClient SysClient where
-  toClient (SysClient cl) = cl
-
-  getDBusClient = fmap SysClient <$> getDBusClient' True
-
-newtype SesClient = SesClient Client
-
-instance SafeClient SesClient where
-  toClient (SesClient cl) = cl
-
-  getDBusClient = fmap SesClient <$> getDBusClient' False
-
-getDBusClient' :: Bool -> IO (Maybe Client)
-getDBusClient' sys = do
-  res <- try $ if sys then connectSystem else connectSession
-  case res of
-    Left e  -> putStrLn (clientErrorMessage e) >> return Nothing
-    Right c -> return $ Just c
-
 
 -- | The dependency tree with rule to merge results when needed
 data Tree d d_ p =
@@ -937,7 +892,7 @@ testDBusDependency_ = testDBusDependency'_
 
 testDBusDependency'_ :: SafeClient c => c -> DBusDependency_ c -> FIO Result_
 testDBusDependency'_ cl (Bus _ bus) = io $ do
-  ret <- callMethod (toClient cl) queryBus queryPath queryIface queryMem
+  ret <- callMethod cl queryBus queryPath queryIface queryMem
   return $ case ret of
         Left e    -> Left [Msg Error e]
         Right b -> let ns = bodyGetNames b in
@@ -955,7 +910,7 @@ testDBusDependency'_ cl (Bus _ bus) = io $ do
     bodyGetNames _   = []
 
 testDBusDependency'_ cl (Endpoint _ busname objpath iface mem) = io $ do
-  ret <- callMethod (toClient cl) busname objpath introspectInterface introspectMethod
+  ret <- callMethod cl busname objpath introspectInterface introspectMethod
   return $ case ret of
         Left e     -> Left [Msg Error e]
         Right body -> procBody body
@@ -1055,7 +1010,7 @@ sometimesEndpoint fn name ful busname path iface mem cl =
   sometimesDBus cl fn name deps cmd
   where
     deps = Only_ $ Endpoint ful busname path iface $ Method_ mem
-    cmd c = io $ void $ callMethod (toClient c) busname path iface mem
+    cmd c = io $ void $ callMethod c busname path iface mem
 
 --------------------------------------------------------------------------------
 -- | Dependency Tree Constructors
@@ -1395,23 +1350,3 @@ bracket s = "[" ++ s ++ "]"
 
 curly :: String -> String
 curly s = "{" ++ s ++ "}"
-
---------------------------------------------------------------------------------
--- | Other random formatting
-
--- failedMsgsIO :: Bool -> String -> [SubfeatureFail] -> FIO [Msg]
--- failedMsgsIO err fn = io . failedMsgs err fn
-
--- failedMsgs :: Bool -> String -> [SubfeatureFail] -> IO [Msg]
--- failedMsgs err fn = fmap concat . mapM (failedMsg err fn)
-
--- failedMsg :: Bool -> String -> SubfeatureFail -> IO [Msg]
--- failedMsg err fn Subfeature { sfData = d, sfName = n } = do
---   mapM (fmtMsg err fn n) $ case d of (PostMissing e) -> [e]; (PostFail es) -> es
-
--- fmtMsg :: Bool -> String -> String -> Msg -> IO Msg
--- fmtMsg err fn n msg = do
---   let e = if err then "ERROR" else "WARNING"
---   p <- getProgName
---   return $ unwords [bracket p, bracket e, bracket fn, bracket n, msg]
-

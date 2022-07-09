@@ -11,15 +11,14 @@ module Xmobar.Plugins.Device
 
 import           Control.Monad
 
+import           Data.Internal.DBus
+import           Data.Internal.Dependency
 import           Data.Word
 
 import           DBus
-import           DBus.Client
-import           DBus.Internal
 
 import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.DBus.Common
-import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common
 
@@ -45,13 +44,13 @@ devDep = Endpoint networkManagerPkgs networkManagerBus nmPath nmInterface
   $ Method_ getByIP
 
 getDevice :: SysClient -> String -> IO (Maybe ObjectPath)
-getDevice cl iface = bodyToMaybe <$> callMethod' (toClient cl) mc
+getDevice sys iface = bodyToMaybe <$> callMethod' sys mc
   where
     mc = (methodCallBus networkManagerBus nmPath nmInterface getByIP)
       { methodCallBody = [toVariant iface]
       }
 
-getDeviceConnected :: ObjectPath -> Client -> IO [Variant]
+getDeviceConnected :: ObjectPath -> SysClient -> IO [Variant]
 getDeviceConnected path = callPropertyGet networkManagerBus path nmDeviceInterface
   $ memberName_ devSignal
 
@@ -61,13 +60,13 @@ matchStatus = matchPropertyChanged nmDeviceInterface devSignal
 instance Exec Device where
   alias (Device (iface, _, _)) = iface
   start (Device (iface, text, colors)) cb = do
-    withDBusClientConnection cb $ \client -> do
-      path <- getDevice client iface
-      displayMaybe' cb (listener client) path
+    withDBusClientConnection cb $ \sys -> do
+      path <- getDevice sys iface
+      displayMaybe' cb (listener sys) path
     where
-      listener client path = do
-        rule <- matchPropertyFull (toClient client) networkManagerBus (Just path)
+      listener sys path = do
+        rule <- matchPropertyFull sys networkManagerBus (Just path)
         -- TODO warn the user here rather than silently drop the listener
         forM_ rule $ \r ->
-          startListener r (getDeviceConnected path) matchStatus chooseColor' cb (toClient client)
+          startListener r (getDeviceConnected path) matchStatus chooseColor' cb sys
       chooseColor' = return . (\s -> colorText colors s text) . (> 1)

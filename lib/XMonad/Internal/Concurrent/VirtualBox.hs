@@ -8,11 +8,12 @@ module XMonad.Internal.Concurrent.VirtualBox
 
 import           Control.Exception
 
+import           Data.Internal.Dependency
+
 import           Text.XML.Light
 
 import           System.Directory
 
-import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
 
 vmExists :: String -> IO (Maybe Msg)

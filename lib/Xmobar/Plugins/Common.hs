@@ -1,4 +1,3 @@
-
 module Xmobar.Plugins.Common
   ( colorText
   , startListener
@@ -16,12 +15,12 @@ module Xmobar.Plugins.Common
 
 import           Control.Monad
 
+import           Data.Internal.DBus
+
 import           DBus
 import           DBus.Client
-import           DBus.Internal
 
-import           XMonad.Hooks.DynamicLog    (xmobarColor)
-import           XMonad.Internal.Dependency
+import           XMonad.Hooks.DynamicLog (xmobarColor)
 
 type Callback = String -> IO ()
 
@@ -31,9 +30,9 @@ data Colors = Colors
   }
   deriving (Eq, Show, Read)
 
-startListener :: IsVariant a => MatchRule -> (Client -> IO [Variant])
+startListener :: (SafeClient c, IsVariant a) => MatchRule -> (c -> IO [Variant])
   -> ([Variant] -> SignalMatch a) -> (a -> IO String) -> Callback
-  -> Client -> IO ()
+  -> c -> IO ()
 startListener rule getProp fromSignal toColor cb client = do
   reply <- getProp client
   displayMaybe cb toColor $ fromSingletonVariant reply
