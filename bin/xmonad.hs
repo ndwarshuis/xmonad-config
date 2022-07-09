@@ -255,10 +255,11 @@ gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
     c = "Gimp-2.10" -- TODO I don't feel like changing the version long term
 
 vmDynamicWorkspace :: Sometimes DynWorkspace
-vmDynamicWorkspace = sometimes1 "virtualbox workspace" "windows 8 VM" root
+vmDynamicWorkspace = Sometimes "virtualbox workspace" xpfVirtualBox
+  [Subfeature root "windows 8 VM"]
   where
-    root = IORoot_ dw $ And_ (Only_ $ sysExe "VBoxManage")
-      $ Only_ $ IOTest_ name $ vmExists vm
+    root = IORoot_ dw $ toAnd_ (sysExe "VBoxManage")
+      $ IOTest_ name $ vmExists vm
     name = unwords ["test if", vm, "exists"]
     c = "VirtualBoxVM"
     vm = "win8raw"
@@ -271,18 +272,9 @@ vmDynamicWorkspace = sometimes1 "virtualbox workspace" "windows 8 VM" root
          , dwCmd = Just $ spawnCmd "vbox-start" [vm]
          }
 
--- -- TODO this shell command is hilariously slow and kills my fast startup time
--- vmExists :: String -> IO (Maybe String)
--- vmExists vm =
---   go <$> tryIOError (readCreateProcessWithExitCode' pr "")
---   where
---     pr = proc' "VBoxManage" ["showvminfo", vm]
---     go (Right (ExitSuccess, _, _))   = Nothing
---     go (Right (ExitFailure _, _, _)) = Just $ "VM not found: " ++ vm
---     go (Left e)                      = Just $ show e
-
 xsaneDynamicWorkspace :: Sometimes DynWorkspace
-xsaneDynamicWorkspace = sometimesIO_ "scanner workspace" "xsane" tree dw
+xsaneDynamicWorkspace = Sometimes "scanner workspace" xpfXSANE
+  [Subfeature (IORoot_ dw tree) "xsane"]
   where
     tree = Only_ $ sysExe "xsane"
     dw = DynWorkspace

@@ -136,7 +136,8 @@ runOptimusPrompt' fb = do
       #!&& "killall xmonad"
 
 runOptimusPrompt :: SometimesX
-runOptimusPrompt = Sometimes "graphics switcher" xpfOptimus [s]
+runOptimusPrompt = Sometimes "graphics switcher"
+  (\x -> xpfOptimus x && xpfBattery x) [s]
   where
     s = Subfeature { sfData = r, sfName = "optimus manager" }
     r = IORoot runOptimusPrompt' t

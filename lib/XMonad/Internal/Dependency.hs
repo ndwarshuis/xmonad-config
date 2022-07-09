@@ -30,6 +30,7 @@ module XMonad.Internal.Dependency
   -- configuration
   , XParams(..)
   , XPFeatures(..)
+  , XPQuery
 
   -- dependency tree types
   , Root(..)
@@ -187,12 +188,14 @@ printMsg :: FMsg -> FIO ()
 printMsg (FMsg fn n (Msg ll m)) = do
   xl <- asks xpLogLevel
   p <- io getProgName
-  io $ when (ll <= xl) $ putStrLn $ unwords [ bracket p
-                                            , bracket $ show ll
-                                            , bracket fn
-                                            , bracket $ fromMaybe "<toplevel>" n
-                                            , m
-                                            ]
+  io $ when (ll <= xl) $ putStrLn $ unwords $ s p
+  where
+    s p = [ bracket p
+          , bracket $ show ll
+          , bracket fn
+          ]
+          ++ maybe [] ((:[]) . bracket) n
+          ++ [m]
 
 --------------------------------------------------------------------------------
 -- | Feature status
@@ -263,7 +266,7 @@ data FallbackStack p = FallbackBottom (Always p)
 -- | Feature that might not be present
 -- This is like an Always except it doesn't fall back on a guaranteed monadic
 -- action
-data Sometimes a = Sometimes String (XPFeatures -> Bool) (Sometimes_ a)
+data Sometimes a = Sometimes String XPQuery (Sometimes_ a)
 
 -- | Feature that might not be present (inner data)
 type Sometimes_ a = [SubfeatureRoot a]
@@ -485,6 +488,7 @@ data XPFeatures = XPFeatures
   , xpfBluetooth      :: Bool
   , xpfIntelBacklight :: Bool
   , xpfClevoBacklight :: Bool
+  , xpfBattery        :: Bool
   }
 
 instance FromJSON XPFeatures where
@@ -497,6 +501,7 @@ instance FromJSON XPFeatures where
     <*> o .:+ "bluetooth"
     <*> o .:+ "intel_backlight"
     <*> o .:+ "clevo_backlight"
+    <*> o .:+ "battery"
 
 defParams :: XParams
 defParams = XParams
@@ -510,11 +515,15 @@ defXPFeatures = XPFeatures
   , xpfVirtualBox = False
   , xpfXSANE = False
   , xpfWireless = False
+  -- TODO this might be broken down into different flags (expressvpn, etc)
   , xpfVPN = False
   , xpfBluetooth = False
   , xpfIntelBacklight = False
   , xpfClevoBacklight = False
+  , xpfBattery = False
   }
+
+type XPQuery = XPFeatures -> Bool
 
 data Cache = Cache
   { --cIO    :: forall p. Memoizable p => H.HashMap (IODependency p) (Result p)
@@ -555,12 +564,14 @@ infix .:+
 evalSometimesMsg :: Sometimes a -> FIO (Either [FMsg] (a, [FMsg]))
 evalSometimesMsg (Sometimes n u xs) = do
   r <- asks (u . xpFeatures)
-  if not r then return $ Left [FMsg n Nothing (Msg Debug "disabled")] else do
+  if not r then return $ Left [dis n] else do
     PostSometimes { psSuccess = s, psFailed = fs } <- testSometimes xs
     let fs' = failedMsgs n fs
     return $ case s of
       (Just p) -> Right $ second (++ fs') $ passActMsg n p
       _        -> Left fs'
+  where
+    dis name = FMsg name Nothing (Msg Debug "feature disabled")
 
 evalAlwaysMsg :: Always a -> FIO (a, [FMsg])
 evalAlwaysMsg (Always n x) = do
@@ -932,7 +943,7 @@ ioRoot (DBusRoot_ a t cl) = DBusRoot_ (io . a) t cl
 --------------------------------------------------------------------------------
 -- | Feature constructors
 
-sometimes1_ :: (XPFeatures -> Bool) -> String -> String -> Root a -> Sometimes a
+sometimes1_ :: XPQuery -> String -> String -> Root a -> Sometimes a
 sometimes1_ x fn n t = Sometimes fn x
   [Subfeature{ sfData = t, sfName = n }]
 

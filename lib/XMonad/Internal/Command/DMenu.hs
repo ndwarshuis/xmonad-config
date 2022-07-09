@@ -95,13 +95,18 @@ runDevMenu = sometimesIO_ "device manager" "rofi devices" t x
 
 -- TODO test that bluetooth interface exists
 runBTMenu :: SometimesX
-runBTMenu = sometimesExeArgs "bluetooth selector" "rofi bluetooth" False
-  myDmenuBluetooth $ "-c":themeArgs "#0044bb"
+runBTMenu = Sometimes "bluetooth selector" xpfBluetooth
+  [Subfeature (IORoot_ cmd tree) "rofi bluetooth"]
+  where
+    cmd = spawnCmd myDmenuBluetooth $ "-c":themeArgs "#0044bb"
+    tree = Only_ $ sysExe myDmenuBluetooth
 
 runVPNMenu :: SometimesX
-runVPNMenu = sometimesIO_ "VPN selector" "rofi VPN" tree $ spawnCmd myDmenuVPN
-  $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
+runVPNMenu = Sometimes "VPN selector" xpfVPN
+  [Subfeature (IORoot_ cmd tree) "rofi VPN"]
   where
+    cmd = spawnCmd myDmenuVPN
+      $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
     tree = toAnd_ (localExe myDmenuVPN) $ socketExists "expressVPN"
       $ return "/var/lib/expressvpn/expressvpnd.socket"
 

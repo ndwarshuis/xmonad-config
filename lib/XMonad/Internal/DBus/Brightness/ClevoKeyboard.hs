@@ -117,11 +117,11 @@ clevoKeyboardSignalDep :: DBusDependency_
 clevoKeyboardSignalDep = signalDep clevoKeyboardConfig
 
 exportClevoKeyboard :: Maybe Client -> SometimesIO
-exportClevoKeyboard =
-  brightnessExporter [stateFileDep, brightnessFileDep] clevoKeyboardConfig
+exportClevoKeyboard = brightnessExporter xpfClevoBacklight
+  [stateFileDep, brightnessFileDep] clevoKeyboardConfig
 
 clevoKeyboardControls :: Maybe Client -> BrightnessControls
-clevoKeyboardControls = brightnessControls clevoKeyboardConfig
+clevoKeyboardControls = brightnessControls xpfClevoBacklight clevoKeyboardConfig
 
 callGetBrightnessCK :: Client -> IO (Maybe Brightness)
 callGetBrightnessCK = callGetBrightness clevoKeyboardConfig

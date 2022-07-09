@@ -99,11 +99,11 @@ intelBacklightSignalDep :: DBusDependency_
 intelBacklightSignalDep = signalDep intelBacklightConfig
 
 exportIntelBacklight :: Maybe Client -> SometimesIO
-exportIntelBacklight =
-  brightnessExporter [curFileDep, maxFileDep] intelBacklightConfig
+exportIntelBacklight = brightnessExporter xpfIntelBacklight
+  [curFileDep, maxFileDep] intelBacklightConfig
 
 intelBacklightControls :: Maybe Client -> BrightnessControls
-intelBacklightControls = brightnessControls intelBacklightConfig
+intelBacklightControls = brightnessControls xpfIntelBacklight intelBacklightConfig
 
 callGetBrightnessIB :: Client -> IO (Maybe Brightness)
 callGetBrightnessIB = callGetBrightness intelBacklightConfig

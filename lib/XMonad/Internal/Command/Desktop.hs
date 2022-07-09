@@ -216,14 +216,15 @@ runNotificationContext =
 
 -- this is required for some vpn's to work properly with network-manager
 runNetAppDaemon :: Maybe Client -> Sometimes (IO ProcessHandle)
-runNetAppDaemon cl = sometimesDBus cl "network applet" "NM-applet" tree cmd
+runNetAppDaemon cl = Sometimes "network applet" xpfVPN
+  [Subfeature (DBusRoot_ cmd tree cl) "NM-applet"]
   where
     tree = toAnd_ (DBusIO $ localExe "nm-applet") $ Bus networkManagerBus
     cmd _ = snd <$> spawnPipe "nm-applet"
 
 runToggleBluetooth :: Maybe Client -> SometimesX
-runToggleBluetooth cl =
-  sometimesDBus cl "bluetooth toggle" "bluetoothctl" tree cmd
+runToggleBluetooth cl = Sometimes "bluetooth toggle" xpfBluetooth
+  [Subfeature (DBusRoot_ cmd tree cl) "bluetoothctl"]
   where
     tree = And_ (Only_ $ DBusIO $ sysExe myBluetooth) (Only_ $ Bus btBus)
     cmd _ = spawn

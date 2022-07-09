@@ -178,43 +178,46 @@ type BarFeature = Sometimes CmdSpec
 
 -- TODO what if I don't have a wireless card?
 getWireless :: BarFeature
-getWireless = sometimes1 "wireless status indicator" "sysfs path"
-  $ IORoot wirelessCmd $ Only readWireless
+getWireless = Sometimes "wireless status indicator" xpfWireless
+  [Subfeature (IORoot wirelessCmd $ Only readWireless) "sysfs path"]
 
 getEthernet :: Maybe Client -> BarFeature
-getEthernet cl = iconDBus "ethernet status indicator" root tree
+getEthernet cl = iconDBus "ethernet status indicator" (const True) root tree
   where
     root useIcon tree' = DBusRoot (const . ethernetCmd useIcon) tree' cl
     tree = And1 (Only readEthernet) (Only_ devDep)
 
 getBattery :: BarFeature
-getBattery = iconIO_ "battery level indicator" root tree
+getBattery = iconIO_ "battery level indicator" xpfBattery root tree
   where
     root useIcon = IORoot_ (batteryCmd useIcon)
     tree = Only_ $ IOTest_ "Test if battery is present" $ fmap (Msg Error) <$> hasBattery
 
 getVPN :: Maybe Client -> BarFeature
-getVPN cl = iconDBus_ "VPN status indicator" root $ toAnd_ vpnDep test
+getVPN cl = iconDBus_ "VPN status indicator" xpfVPN root $ toAnd_ vpnDep test
   where
     root useIcon tree = DBusRoot_ (const $ vpnCmd useIcon) tree cl
     test = DBusIO $ IOTest_ "Use nmcli to test if VPN is present" vpnPresent
 
 getBt :: Maybe Client -> BarFeature
-getBt = xmobarDBus "bluetooth status indicator" btDep btCmd
+getBt = xmobarDBus "bluetooth status indicator" xpfBluetooth btDep btCmd
 
 getAlsa :: BarFeature
-getAlsa = iconIO_ "volume level indicator" root $ Only_ $ sysExe "alsactl"
+getAlsa = iconIO_ "volume level indicator" (const True) root
+  $ Only_ $ sysExe "alsactl"
   where
     root useIcon = IORoot_ (alsaCmd useIcon)
 
 getBl :: Maybe Client -> BarFeature
-getBl = xmobarDBus "Intel backlight indicator" intelBacklightSignalDep blCmd
+getBl = xmobarDBus "Intel backlight indicator" xpfIntelBacklight
+  intelBacklightSignalDep blCmd
 
 getCk :: Maybe Client -> BarFeature
-getCk = xmobarDBus "Clevo keyboard indicator" clevoKeyboardSignalDep ckCmd
+getCk = xmobarDBus "Clevo keyboard indicator" xpfClevoBacklight
+  clevoKeyboardSignalDep ckCmd
 
 getSs :: Maybe Client -> BarFeature
-getSs = xmobarDBus "screensaver indicator" ssSignalDep ssCmd
+getSs = xmobarDBus "screensaver indicator" (const True) ssSignalDep ssCmd
 
 getLock :: Always CmdSpec
 getLock = always1 "lock indicator" "icon indicator" root $ lockCmd fontifyAlt
@@ -224,27 +227,27 @@ getLock = always1 "lock indicator" "icon indicator" root $ lockCmd fontifyAlt
 --------------------------------------------------------------------------------
 -- | bar feature constructors
 
-xmobarDBus :: String -> DBusDependency_ -> (Fontifier -> CmdSpec)
+xmobarDBus :: String -> XPQuery -> DBusDependency_ -> (Fontifier -> CmdSpec)
   -> Maybe Client -> BarFeature
-xmobarDBus n dep cmd cl = iconDBus_ n root (Only_ dep)
+xmobarDBus n q dep cmd cl = iconDBus_ n q root (Only_ dep)
   where
     root useIcon tree = DBusRoot_ (const $ cmd useIcon) tree cl
 
-iconIO_ :: String -> (Fontifier -> IOTree_ -> Root CmdSpec) -> IOTree_
-  -> BarFeature
+iconIO_ :: String -> XPQuery -> (Fontifier -> IOTree_ -> Root CmdSpec)
+  -> IOTree_ -> BarFeature
 iconIO_ = iconSometimes' And_ Only_
 
-iconDBus :: String -> (Fontifier -> DBusTree p -> Root CmdSpec)
+iconDBus :: String -> XPQuery -> (Fontifier -> DBusTree p -> Root CmdSpec)
   -> DBusTree p -> BarFeature
 iconDBus = iconSometimes' And1 $ Only_ . DBusIO
 
-iconDBus_ :: String -> (Fontifier -> DBusTree_ -> Root CmdSpec) -> DBusTree_
-  -> BarFeature
+iconDBus_ :: String -> XPQuery -> (Fontifier -> DBusTree_ -> Root CmdSpec)
+  -> DBusTree_ -> BarFeature
 iconDBus_ = iconSometimes' And_ $ Only_ . DBusIO
 
-iconSometimes' :: (t -> t_ -> t) -> (IODependency_ -> t_) -> String
+iconSometimes' :: (t -> t_ -> t) -> (IODependency_ -> t_) -> String -> XPQuery
   -> (Fontifier -> t -> Root CmdSpec) -> t -> BarFeature
-iconSometimes' c d n r t = Sometimes n (const True)
+iconSometimes' c d n q r t = Sometimes n q
   [ Subfeature icon "icon indicator"
   , Subfeature text "text indicator"
   ]
