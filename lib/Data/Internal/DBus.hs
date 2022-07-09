@@ -45,6 +45,9 @@ class SafeClient c where
 
   getDBusClient :: IO (Maybe c)
 
+  disconnectDBusClient :: c -> IO ()
+  disconnectDBusClient = disconnect . toClient
+
   withDBusClient :: (c -> IO a) -> IO (Maybe a)
   withDBusClient f = do
     client <- getDBusClient

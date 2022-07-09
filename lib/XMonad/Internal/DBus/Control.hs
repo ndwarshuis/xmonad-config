@@ -43,34 +43,35 @@ connectDBus = do
   sys <- getDBusClient
   return DBusState { dbSesClient = ses, dbSysClient = sys }
 
--- TODO why is this only the session client?
 -- | Disconnect from the DBus
 disconnectDBus :: DBusState -> IO ()
-disconnectDBus db = forM_ (toClient <$> dbSysClient db) disconnect
+disconnectDBus db = disc dbSesClient >> disc dbSysClient
+  where
+    disc f = maybe (return ()) disconnectDBusClient $ f db
 
 -- | Connect to the DBus and request the XMonad name
 connectDBusX :: IO DBusState
 connectDBusX = do
   db <- connectDBus
-  forM_ (toClient <$> dbSesClient db) requestXMonadName
+  forM_ (dbSesClient db) requestXMonadName
   return db
 
 -- | Disconnect from DBus and release the XMonad name
 disconnectDBusX :: DBusState -> IO ()
 disconnectDBusX db = do
-  forM_ (toClient <$> dbSesClient db) releaseXMonadName
+  forM_ (dbSesClient db) releaseXMonadName
   disconnectDBus db
 
 -- | All exporter features to be assigned to the DBus
 dbusExporters :: [Maybe SesClient -> SometimesIO]
 dbusExporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
 
-releaseXMonadName :: Client -> IO ()
-releaseXMonadName cl = void $ releaseName cl xmonadBusName
+releaseXMonadName :: SesClient -> IO ()
+releaseXMonadName ses = void $ releaseName (toClient ses) xmonadBusName
 
-requestXMonadName :: Client -> IO ()
-requestXMonadName client = do
-  res <- requestName client xmonadBusName []
+requestXMonadName :: SesClient -> IO ()
+requestXMonadName ses = do
+  res <- requestName (toClient ses) xmonadBusName []
   -- TODO if the client is not released on shutdown the owner will be different
   let msg | res == NamePrimaryOwner = Nothing
           | res == NameAlreadyOwner = Just $ "this process already owns " ++ xn
@@ -80,6 +81,3 @@ requestXMonadName client = do
   forM_ msg putStrLn
   where
     xn = "'" ++ formatBusName xmonadBusName ++ "'"
-
--- executeExporters :: Maybe Client -> IO ()
--- executeExporters cl = mapM_ (\f -> executeSometimes $ f cl) dbusExporters
