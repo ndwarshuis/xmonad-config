@@ -236,7 +236,7 @@ f5Tag = "F5VPN"
 gimpDynamicWorkspace :: Sometimes DynWorkspace
 gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
   where
-    tree = Only_ $ sysExe [Package True "gimp"] "gimp-2.10"
+    tree = Only_ $ sysExe [Package True "gimp"] exe
     dw = DynWorkspace
          { dwName = "Gimp"
          , dwTag = gimpTag
@@ -248,8 +248,9 @@ gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
            , className =? c -?> appendViewShift gimpTag
            ]
          , dwKey = 'g'
-         , dwCmd = Just $ spawnCmd "gimp-2.10" []
+         , dwCmd = Just $ spawnCmd exe []
          }
+    exe = "gimp-2.10"
     matchGimpRole role = isPrefixOf role <$> stringProperty "WM_WINDOW_ROLE"
       <&&> className =? c
     c = "Gimp-2.10" -- TODO I don't feel like changing the version long term
