@@ -18,7 +18,6 @@ module XMonad.Internal.Command.DMenu
 import           Control.Monad.Reader
 
 import           DBus
-import           DBus.Client
 
 import           Graphics.X11.Types
 
@@ -137,7 +136,7 @@ runAppMenu = spawnDmenuCmd "app launcher" ["-show", "drun"]
 runWinMenu :: SometimesX
 runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
-runNetMenu :: Maybe Client -> SometimesX
+runNetMenu :: Maybe SysClient -> SometimesX
 runNetMenu cl =
   sometimesDBus cl "network control menu" "rofi NetworkManager" tree cmd
   where
@@ -155,7 +154,7 @@ runAutorandrMenu = sometimesIO_ "autorandr menu" "rofi autorandr" tree cmd
 --------------------------------------------------------------------------------
 -- | Password manager
 
-runBwMenu :: Maybe Client -> SometimesX
+runBwMenu :: Maybe SesClient -> SometimesX
 runBwMenu cl = sometimesDBus cl "password manager" "rofi bitwarden" tree cmd
   where
     cmd _ = spawnCmd myDmenuPasswords

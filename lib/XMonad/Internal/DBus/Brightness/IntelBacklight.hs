@@ -13,7 +13,6 @@ module XMonad.Internal.DBus.Brightness.IntelBacklight
 import           Data.Int                               (Int32)
 
 import           DBus
-import           DBus.Client
 
 import           System.FilePath.Posix
 
@@ -95,18 +94,18 @@ curFileDep = pathRW curFile []
 maxFileDep :: IODependency_
 maxFileDep = pathR maxFile []
 
-intelBacklightSignalDep :: DBusDependency_
+intelBacklightSignalDep :: DBusDependency_ SesClient
 intelBacklightSignalDep = signalDep intelBacklightConfig
 
-exportIntelBacklight :: Maybe Client -> SometimesIO
+exportIntelBacklight :: Maybe SesClient -> SometimesIO
 exportIntelBacklight = brightnessExporter xpfIntelBacklight []
   [curFileDep, maxFileDep] intelBacklightConfig
 
-intelBacklightControls :: Maybe Client -> BrightnessControls
+intelBacklightControls :: Maybe SesClient -> BrightnessControls
 intelBacklightControls = brightnessControls xpfIntelBacklight intelBacklightConfig
 
-callGetBrightnessIB :: Client -> IO (Maybe Brightness)
-callGetBrightnessIB = callGetBrightness intelBacklightConfig
+callGetBrightnessIB :: SesClient -> IO (Maybe Brightness)
+callGetBrightnessIB = callGetBrightness intelBacklightConfig . toClient
 
-matchSignalIB :: (Maybe Brightness -> IO ()) -> Client -> IO ()
-matchSignalIB = matchSignal intelBacklightConfig
+matchSignalIB :: (Maybe Brightness -> IO ()) -> SesClient -> IO ()
+matchSignalIB cb = matchSignal intelBacklightConfig cb . toClient

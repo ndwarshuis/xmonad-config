@@ -6,14 +6,13 @@
 
 module Xmobar.Plugins.BacklightCommon (startBacklight) where
 
-import           DBus.Client
-
+import           XMonad.Internal.Dependency
 import           Xmobar.Plugins.Common
 
-startBacklight :: RealFrac a => ((Maybe a -> IO ()) -> Client -> IO ())
-  -> (Client -> IO (Maybe a)) -> String -> Callback -> IO ()
+startBacklight :: RealFrac a => ((Maybe a -> IO ()) -> SesClient -> IO ())
+  -> (SesClient -> IO (Maybe a)) -> String -> Callback -> IO ()
 startBacklight matchSignal callGetBrightness icon cb = do
-    withDBusClientConnection False cb $ \c -> do
+    withDBusClientConnection cb $ \c -> do
       matchSignal display c
       display =<< callGetBrightness c
     where

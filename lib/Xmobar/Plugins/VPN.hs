@@ -19,10 +19,10 @@ import           Data.Maybe
 import qualified Data.Set                        as S
 
 import           DBus
-import           DBus.Client
 import           DBus.Internal
 
 import           XMonad.Internal.Command.Desktop
+import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common
@@ -32,7 +32,7 @@ newtype VPN = VPN (String, Colors) deriving (Read, Show)
 instance Exec VPN where
   alias (VPN _) = vpnAlias
   start (VPN (text, colors)) cb =
-    withDBusClientConnection True cb $ \c -> do
+    withDBusClientConnection cb $ \c -> do
     state <- initState c
     let display = displayMaybe cb iconFormatter . Just =<< readState state
     let signalCallback' f = f state display
@@ -53,7 +53,7 @@ type VPNState = S.Set ObjectPath
 
 type MutableVPNState = MVar VPNState
 
-initState :: Client -> IO MutableVPNState
+initState :: SysClient -> IO MutableVPNState
 initState client = do
   ot <- getVPNObjectTree client
   newMVar $ findTunnels ot
@@ -69,17 +69,17 @@ updateState f state op = modifyMVar_ state $ return . f op
 -- | Tunnel Device Detection
 --
 
-getVPNObjectTree :: Client -> IO ObjectTree
-getVPNObjectTree client = callGetManagedObjects client vpnBus vpnPath
+getVPNObjectTree :: SysClient -> IO ObjectTree
+getVPNObjectTree client = callGetManagedObjects (toClient client) vpnBus vpnPath
 
 findTunnels :: ObjectTree -> VPNState
 findTunnels = S.fromList . M.keys . M.filter (elem vpnDeviceTun . M.keys)
 
-vpnAddedListener :: SignalCallback -> Client -> IO ()
-vpnAddedListener = fmap void . addInterfaceAddedListener vpnBus vpnPath
+vpnAddedListener :: SignalCallback -> SysClient -> IO ()
+vpnAddedListener cb = void . addInterfaceAddedListener vpnBus vpnPath cb . toClient
 
-vpnRemovedListener :: SignalCallback -> Client -> IO ()
-vpnRemovedListener = fmap void . addInterfaceRemovedListener vpnBus vpnPath
+vpnRemovedListener :: SignalCallback -> SysClient -> IO ()
+vpnRemovedListener cb = void . addInterfaceRemovedListener vpnBus vpnPath cb . toClient
 
 addedCallback :: MutableVPNState -> IO () -> SignalCallback
 addedCallback state display [device, added] = update >> display
@@ -119,6 +119,6 @@ vpnDeviceTun = "org.freedesktop.NetworkManager.Device.Tun"
 vpnAlias :: String
 vpnAlias = "vpn"
 
-vpnDep :: DBusDependency_
-vpnDep = Endpoint networkManagerPkgs vpnBus vpnPath omInterface
+vpnDep :: DBusDependency_ SysClient
+vpnDep = Endpoint networkManagerPkgs networkManagerBus vpnPath omInterface
   $ Method_ getManagedObjects

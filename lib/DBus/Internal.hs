@@ -3,10 +3,10 @@
 
 module DBus.Internal
   ( addMatchCallback
-  , getDBusClient
-  , fromDBusClient
-  , withDBusClient
-  , withDBusClient_
+  -- , getDBusClient
+  -- , fromDBusClient
+  -- , withDBusClient
+  -- , withDBusClient_
   , matchProperty
   , matchPropertyFull
   , matchPropertyChanged
@@ -28,11 +28,11 @@ module DBus.Internal
   , bodyToMaybe
   ) where
 
-import           Control.Exception
+-- import           Control.Exception
 import           Control.Monad
 
 import           Data.Bifunctor
-import qualified Data.Map.Strict   as M
+import qualified Data.Map.Strict as M
 import           Data.Maybe
 
 import           DBus
@@ -144,26 +144,26 @@ matchPropertyChanged _ _ _ = Failure
 --------------------------------------------------------------------------------
 -- | Client requests
 
-getDBusClient :: Bool -> IO (Maybe Client)
-getDBusClient sys = do
-  res <- try $ if sys then connectSystem else connectSession
-  case res of
-    Left e  -> putStrLn (clientErrorMessage e) >> return Nothing
-    Right c -> return $ Just c
+-- getDBusClient :: Bool -> IO (Maybe Client)
+-- getDBusClient sys = do
+--   res <- try $ if sys then connectSystem else connectSession
+--   case res of
+--     Left e  -> putStrLn (clientErrorMessage e) >> return Nothing
+--     Right c -> return $ Just c
 
-withDBusClient :: Bool -> (Client -> IO a) -> IO (Maybe a)
-withDBusClient sys f = do
-  client <- getDBusClient sys
-  forM client $ \c -> do
-    r <- f c
-    disconnect c
-    return r
+-- withDBusClient :: Bool -> (c -> IO a) -> IO (Maybe a)
+-- withDBusClient sys f = do
+--   client <- getDBusClient sys
+--   forM client $ \c -> do
+--     r <- f c
+--     disconnect c
+--     return r
 
-withDBusClient_ :: Bool -> (Client -> IO ()) -> IO ()
-withDBusClient_ sys = void . withDBusClient sys
+-- withDBusClient_ :: Bool -> (Client -> IO ()) -> IO ()
+-- withDBusClient_ sys = void . withDBusClient sys
 
-fromDBusClient :: Bool -> (Client -> a) -> IO (Maybe a)
-fromDBusClient sys f = withDBusClient sys (return . f)
+-- fromDBusClient :: Bool -> (Client -> a) -> IO (Maybe a)
+-- fromDBusClient sys f = withDBusClient sys (return . f)
 
 --------------------------------------------------------------------------------
 -- | Object Manager

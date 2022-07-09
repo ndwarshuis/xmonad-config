@@ -14,8 +14,6 @@ module Main (main) where
 import           Data.List
 import           Data.Maybe
 
-import           DBus.Client
-
 import           System.Exit
 import           System.IO
 import           System.IO.Error
@@ -183,7 +181,7 @@ getWireless :: BarFeature
 getWireless = Sometimes "wireless status indicator" xpfWireless
   [Subfeature (IORoot wirelessCmd $ Only readWireless) "sysfs path"]
 
-getEthernet :: Maybe Client -> BarFeature
+getEthernet :: Maybe SysClient -> BarFeature
 getEthernet cl = iconDBus "ethernet status indicator" (const True) root tree
   where
     root useIcon tree' = DBusRoot (const . ethernetCmd useIcon) tree' cl
@@ -196,14 +194,14 @@ getBattery = iconIO_ "battery level indicator" xpfBattery root tree
     tree = Only_ $ IOTest_ "Test if battery is present" []
       $ fmap (Msg Error) <$> hasBattery
 
-getVPN :: Maybe Client -> BarFeature
+getVPN :: Maybe SysClient -> BarFeature
 getVPN cl = iconDBus_ "VPN status indicator" xpfVPN root $ toAnd_ vpnDep test
   where
     root useIcon tree = DBusRoot_ (const $ vpnCmd useIcon) tree cl
     test = DBusIO $ IOTest_ "Use nmcli to test if VPN is present"
       networkManagerPkgs vpnPresent
 
-getBt :: Maybe Client -> BarFeature
+getBt :: Maybe SysClient -> BarFeature
 getBt = xmobarDBus "bluetooth status indicator" xpfBluetooth btDep btCmd
 
 getAlsa :: BarFeature
@@ -212,15 +210,15 @@ getAlsa = iconIO_ "volume level indicator" (const True) root
   where
     root useIcon = IORoot_ (alsaCmd useIcon)
 
-getBl :: Maybe Client -> BarFeature
+getBl :: Maybe SesClient -> BarFeature
 getBl = xmobarDBus "Intel backlight indicator" xpfIntelBacklight
   intelBacklightSignalDep blCmd
 
-getCk :: Maybe Client -> BarFeature
+getCk :: Maybe SesClient -> BarFeature
 getCk = xmobarDBus "Clevo keyboard indicator" xpfClevoBacklight
   clevoKeyboardSignalDep ckCmd
 
-getSs :: Maybe Client -> BarFeature
+getSs :: Maybe SesClient -> BarFeature
 getSs = xmobarDBus "screensaver indicator" (const True) ssSignalDep ssCmd
 
 getLock :: Always CmdSpec
@@ -231,8 +229,8 @@ getLock = always1 "lock indicator" "icon indicator" root $ lockCmd fontifyAlt
 --------------------------------------------------------------------------------
 -- | bar feature constructors
 
-xmobarDBus :: String -> XPQuery -> DBusDependency_ -> (Fontifier -> CmdSpec)
-  -> Maybe Client -> BarFeature
+xmobarDBus :: SafeClient c => String -> XPQuery -> DBusDependency_ c
+  -> (Fontifier -> CmdSpec) -> Maybe c -> BarFeature
 xmobarDBus n q dep cmd cl = iconDBus_ n q root (Only_ dep)
   where
     root useIcon tree = DBusRoot_ (const $ cmd useIcon) tree cl
@@ -241,12 +239,12 @@ iconIO_ :: String -> XPQuery -> (Fontifier -> IOTree_ -> Root CmdSpec)
   -> IOTree_ -> BarFeature
 iconIO_ = iconSometimes' And_ Only_
 
-iconDBus :: String -> XPQuery -> (Fontifier -> DBusTree p -> Root CmdSpec)
-  -> DBusTree p -> BarFeature
+iconDBus :: SafeClient c => String -> XPQuery
+  -> (Fontifier -> DBusTree c p -> Root CmdSpec) -> DBusTree c p -> BarFeature
 iconDBus = iconSometimes' And1 $ Only_ . DBusIO
 
-iconDBus_ :: String -> XPQuery -> (Fontifier -> DBusTree_ -> Root CmdSpec)
-  -> DBusTree_ -> BarFeature
+iconDBus_ :: SafeClient c => String -> XPQuery
+  -> (Fontifier -> DBusTree_ c -> Root CmdSpec) -> DBusTree_ c -> BarFeature
 iconDBus_ = iconSometimes' And_ $ Only_ . DBusIO
 
 iconSometimes' :: (t -> t_ -> t) -> (IODependency_ -> t_) -> String -> XPQuery

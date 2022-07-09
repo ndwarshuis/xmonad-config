@@ -32,13 +32,13 @@ memAdded = memberName_ "InterfacesAdded"
 memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
-dbusDep :: MemberName -> DBusDependency_
+dbusDep :: MemberName -> DBusDependency_ SysClient
 dbusDep m = Endpoint [Package Official "udisks2"] bus path interface $ Signal_ m
 
-addedDep :: DBusDependency_
+addedDep :: DBusDependency_ SysClient
 addedDep = dbusDep memAdded
 
-removedDep :: DBusDependency_
+removedDep :: DBusDependency_ SysClient
 removedDep = dbusDep memRemoved
 
 driveInsertedSound :: FilePath
@@ -73,15 +73,15 @@ playSoundMaybe p b = when b $ io $ playSound p
 -- If it not already, we won't see any signals from the dbus until it is
 -- started (it will work after it is started however). It seems safe to simply
 -- enable the udisks2 service at boot; however this is not default behavior.
-listenDevices :: Client -> IO ()
-listenDevices client = do
+listenDevices :: SysClient -> IO ()
+listenDevices cl = do
   addMatch' memAdded driveInsertedSound addedHasDrive
   addMatch' memRemoved driveRemovedSound removedHasDrive
   where
-    addMatch' m p f = void $ addMatch client ruleUdisks { matchMember = Just m }
+    addMatch' m p f = void $ addMatch (toClient cl) ruleUdisks { matchMember = Just m }
       $ playSoundMaybe p . f . signalBody
 
-runRemovableMon :: Maybe Client -> SometimesIO
+runRemovableMon :: Maybe SysClient -> SometimesIO
 runRemovableMon cl =
   sometimesDBus cl "removeable device monitor" "dbus monitor" deps listenDevices
   where

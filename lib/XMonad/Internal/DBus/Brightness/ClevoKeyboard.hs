@@ -15,7 +15,6 @@ import           Control.Monad                          (when)
 import           Data.Int                               (Int32)
 
 import           DBus
-import           DBus.Client
 
 import           System.FilePath.Posix
 
@@ -113,18 +112,18 @@ stateFileDep = pathRW stateFile [Package AUR "tuxedo-keyboard"]
 brightnessFileDep :: IODependency_
 brightnessFileDep = pathR brightnessFile [Package AUR "tuxedo-keyboard"]
 
-clevoKeyboardSignalDep :: DBusDependency_
+clevoKeyboardSignalDep :: DBusDependency_ SesClient
 clevoKeyboardSignalDep = signalDep clevoKeyboardConfig
 
-exportClevoKeyboard :: Maybe Client -> SometimesIO
+exportClevoKeyboard :: Maybe SesClient -> SometimesIO
 exportClevoKeyboard = brightnessExporter xpfClevoBacklight []
   [stateFileDep, brightnessFileDep] clevoKeyboardConfig
 
-clevoKeyboardControls :: Maybe Client -> BrightnessControls
+clevoKeyboardControls :: Maybe SesClient -> BrightnessControls
 clevoKeyboardControls = brightnessControls xpfClevoBacklight clevoKeyboardConfig
 
-callGetBrightnessCK :: Client -> IO (Maybe Brightness)
-callGetBrightnessCK = callGetBrightness clevoKeyboardConfig
+callGetBrightnessCK :: SesClient -> IO (Maybe Brightness)
+callGetBrightnessCK = callGetBrightness clevoKeyboardConfig . toClient
 
-matchSignalCK :: (Maybe Brightness -> IO ()) -> Client -> IO ()
-matchSignalCK = matchSignal clevoKeyboardConfig
+matchSignalCK :: (Maybe Brightness -> IO ()) -> SesClient -> IO ()
+matchSignalCK cb = matchSignal clevoKeyboardConfig cb . toClient

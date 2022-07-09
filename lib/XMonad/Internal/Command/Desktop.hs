@@ -43,7 +43,6 @@ import           Control.Monad               (void)
 import           Control.Monad.IO.Class
 
 import           DBus
-import           DBus.Client
 
 import           System.Directory
 import           System.Environment
@@ -215,7 +214,7 @@ runVolumeMute = featureSound "mute" volumeChangeSound (void toggleMute) $ return
 --------------------------------------------------------------------------------
 -- | Notification control
 
-runNotificationCmd :: String -> FilePath -> Maybe Client -> SometimesX
+runNotificationCmd :: String -> FilePath -> Maybe SesClient -> SometimesX
 runNotificationCmd n arg cl =
   sometimesDBus cl (n ++ " control") "dunstctl" tree cmd
   where
@@ -224,18 +223,18 @@ runNotificationCmd n arg cl =
       $ Endpoint [] notifyBus notifyPath (interfaceName_ "org.dunstproject.cmd0")
       $ Method_ $ memberName_ "NotificationAction"
 
-runNotificationClose :: Maybe Client -> SometimesX
+runNotificationClose :: Maybe SesClient -> SometimesX
 runNotificationClose = runNotificationCmd "close notification" "close"
 
-runNotificationCloseAll :: Maybe Client -> SometimesX
+runNotificationCloseAll :: Maybe SesClient -> SometimesX
 runNotificationCloseAll =
   runNotificationCmd "close all notifications" "close-all"
 
-runNotificationHistory :: Maybe Client -> SometimesX
+runNotificationHistory :: Maybe SesClient -> SometimesX
 runNotificationHistory =
   runNotificationCmd "see notification history" "history-pop"
 
-runNotificationContext :: Maybe Client -> SometimesX
+runNotificationContext :: Maybe SesClient -> SometimesX
 runNotificationContext =
   runNotificationCmd "open notification context" "context"
 
@@ -243,7 +242,7 @@ runNotificationContext =
 -- | System commands
 
 -- this is required for some vpn's to work properly with network-manager
-runNetAppDaemon :: Maybe Client -> Sometimes (IO ProcessHandle)
+runNetAppDaemon :: Maybe SysClient -> Sometimes (IO ProcessHandle)
 runNetAppDaemon cl = Sometimes "network applet" xpfVPN
   [Subfeature (DBusRoot_ cmd tree cl) "NM-applet"]
   where
@@ -251,7 +250,7 @@ runNetAppDaemon cl = Sometimes "network applet" xpfVPN
     app = DBusIO $ sysExe [Package Official "network-manager-applet"] "nm-applet"
     cmd _ = snd <$> spawnPipe "nm-applet"
 
-runToggleBluetooth :: Maybe Client -> SometimesX
+runToggleBluetooth :: Maybe SysClient -> SometimesX
 runToggleBluetooth cl = Sometimes "bluetooth toggle" xpfBluetooth
   [Subfeature (DBusRoot_ cmd tree cl) "bluetoothctl"]
   where
@@ -306,7 +305,7 @@ getCaptureDir = do
   where
     fallback = (</> ".local/share") <$> getHomeDirectory
 
-runFlameshot :: String -> String -> Maybe Client -> SometimesX
+runFlameshot :: String -> String -> Maybe SesClient -> SometimesX
 runFlameshot n mode cl = sometimesDBus cl n myCapture tree cmd
   where
     cmd _ = spawnCmd myCapture [mode]
@@ -315,15 +314,15 @@ runFlameshot n mode cl = sometimesDBus cl n myCapture tree cmd
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
-runAreaCapture :: Maybe Client -> SometimesX
+runAreaCapture :: Maybe SesClient -> SometimesX
 runAreaCapture = runFlameshot "screen area capture" "gui"
 
 -- myWindowCap = "screencap -w" --external script
 
-runDesktopCapture :: Maybe Client -> SometimesX
+runDesktopCapture :: Maybe SesClient -> SometimesX
 runDesktopCapture = runFlameshot "fullscreen capture" "full"
 
-runScreenCapture :: Maybe Client -> SometimesX
+runScreenCapture :: Maybe SesClient -> SometimesX
 runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: SometimesX

@@ -94,14 +94,15 @@ bodyGetCurrentState _   = Nothing
 --------------------------------------------------------------------------------
 -- | Exported haskell API
 
-exportScreensaver :: Maybe Client -> SometimesIO
-exportScreensaver client =
-  sometimesDBus client "screensaver toggle" "xset" (toAnd_ bus ssx) cmd
+exportScreensaver :: Maybe SesClient -> SometimesIO
+exportScreensaver ses =
+  sometimesDBus ses "screensaver toggle" "xset" (toAnd_ bus ssx) cmd
   where
-    cmd cl = export cl ssPath defaultInterface
+    cmd cl = let cl' = toClient cl in
+      export cl' ssPath defaultInterface
       { interfaceName = interface
       , interfaceMethods =
-        [ autoMethod memToggle $ emitState cl =<< toggle
+        [ autoMethod memToggle $ emitState cl' =<< toggle
         , autoMethod memQuery query
         ]
       , interfaceSignals = [sig]
@@ -119,7 +120,7 @@ exportScreensaver client =
     bus = Bus [] xmonadBusName
     ssx = DBusIO $ sysExe [Package Official "xorg-xset"] ssExecutable
 
-callToggle :: Maybe Client -> SometimesIO
+callToggle :: Maybe SesClient -> SometimesIO
 callToggle = sometimesEndpoint "screensaver toggle" "dbus switch" []
   xmonadBusName ssPath interface memToggle
 
@@ -128,9 +129,9 @@ callQuery client = do
   reply <- callMethod client xmonadBusName ssPath interface memQuery
   return $ either (const Nothing) bodyGetCurrentState reply
 
-matchSignal :: (Maybe SSState -> IO ()) -> Client -> IO ()
-matchSignal cb =
-  fmap void . addMatchCallback ruleCurrentState $ cb . bodyGetCurrentState
+matchSignal :: (Maybe SSState -> IO ()) -> SesClient -> IO ()
+matchSignal cb ses = void $ addMatchCallback ruleCurrentState
+  (cb . bodyGetCurrentState) $ toClient ses
 
-ssSignalDep :: DBusDependency_
+ssSignalDep :: DBusDependency_ SesClient
 ssSignalDep = Endpoint [] xmonadBusName ssPath interface $ Signal_ memState

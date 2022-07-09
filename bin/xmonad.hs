@@ -90,9 +90,9 @@ run = do
 
 data FeatureSet = FeatureSet
   { fsKeys          :: ThreadState -> DBusState -> [KeyGroup FeatureX]
-  , fsDBusExporters :: [Maybe Client -> SometimesIO]
+  , fsDBusExporters :: [Maybe SesClient -> SometimesIO]
   , fsPowerMon      :: SometimesIO
-  , fsRemovableMon  :: Maybe Client -> SometimesIO
+  , fsRemovableMon  :: Maybe SysClient -> SometimesIO
   , fsDaemons       :: [Sometimes (IO ProcessHandle)]
   , fsACPIHandler   :: Always (String -> X ())
   , fsTabbedTheme   :: Always Theme
@@ -107,7 +107,7 @@ tabbedFeature = Always "theme for tabbed windows" $ Option sf fallback
     niceTheme = IORoot T.tabbedTheme $ fontTree T.defFontFamily defFontPkgs
     fallback = Always_ $ FallbackAlone $ T.tabbedTheme T.fallbackFont
 
-features :: Maybe Client -> FeatureSet
+features :: Maybe SysClient -> FeatureSet
 features cl = FeatureSet
   { fsKeys = externalBindings
   , fsDBusExporters = dbusExporters

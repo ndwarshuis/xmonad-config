@@ -20,7 +20,8 @@ import           DBus
 import           DBus.Client
 import           DBus.Internal
 
-import           XMonad.Hooks.DynamicLog (xmobarColor)
+import           XMonad.Hooks.DynamicLog    (xmobarColor)
+import           XMonad.Internal.Dependency
 
 type Callback = String -> IO ()
 
@@ -59,5 +60,5 @@ displayMaybe cb f = cb <=< maybe (return na) f
 displayMaybe' :: Callback -> (a -> IO ()) -> Maybe a -> IO ()
 displayMaybe' cb = maybe (cb na)
 
-withDBusClientConnection :: Bool -> Callback -> (Client -> IO ()) -> IO ()
-withDBusClientConnection sys cb f = displayMaybe' cb f =<< getDBusClient sys
+withDBusClientConnection :: SafeClient c => Callback -> (c -> IO ()) -> IO ()
+withDBusClientConnection cb f = displayMaybe' cb f =<< getDBusClient

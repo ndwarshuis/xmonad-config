@@ -40,6 +40,9 @@ module XMonad.Internal.Dependency
   , IOTree_
   , DBusTree
   , DBusTree_
+  , SafeClient(..)
+  , SysClient(..)
+  , SesClient(..)
   , IODependency(..)
   , IODependency_(..)
   , SystemDependency(..)
@@ -109,6 +112,7 @@ module XMonad.Internal.Dependency
   , shellTest
   ) where
 
+import           Control.Exception       hiding (bracket)
 import           Control.Monad.IO.Class
 import           Control.Monad.Identity
 import           Control.Monad.Reader
@@ -293,8 +297,49 @@ type SubfeatureRoot a = Subfeature (Root a)
 -- needed
 data Root a = forall p. IORoot (p -> a) (IOTree p)
   | IORoot_ a IOTree_
-  | forall p. DBusRoot (p -> Client -> a) (DBusTree p) (Maybe Client)
-  | DBusRoot_ (Client -> a) DBusTree_ (Maybe Client)
+  | forall c p. SafeClient c => DBusRoot (p -> c -> a) (DBusTree c p) (Maybe c)
+  | forall c. SafeClient c => DBusRoot_ (c -> a) (DBusTree_ c) (Maybe c)
+
+class SafeClient c where
+  toClient :: c -> Client
+
+  getDBusClient :: IO (Maybe c)
+
+  withDBusClient :: (c -> IO a) -> IO (Maybe a)
+  withDBusClient f = do
+    client <- getDBusClient
+    forM client $ \c -> do
+      r <- f c
+      disconnect (toClient c)
+      return r
+
+  withDBusClient_ :: (c -> IO ()) -> IO ()
+  withDBusClient_ = void . withDBusClient
+
+  fromDBusClient :: (c -> a) -> IO (Maybe a)
+  fromDBusClient f = withDBusClient (return . f)
+
+newtype SysClient = SysClient Client
+
+instance SafeClient SysClient where
+  toClient (SysClient cl) = cl
+
+  getDBusClient = fmap SysClient <$> getDBusClient' True
+
+newtype SesClient = SesClient Client
+
+instance SafeClient SesClient where
+  toClient (SesClient cl) = cl
+
+  getDBusClient = fmap SesClient <$> getDBusClient' False
+
+getDBusClient' :: Bool -> IO (Maybe Client)
+getDBusClient' sys = do
+  res <- try $ if sys then connectSystem else connectSession
+  case res of
+    Left e  -> putStrLn (clientErrorMessage e) >> return Nothing
+    Right c -> return $ Just c
+
 
 -- | The dependency tree with rule to merge results when needed
 data Tree d d_ p =
@@ -309,9 +354,9 @@ data Tree_ d = And_ (Tree_ d) (Tree_ d) | Or_ (Tree_ d) (Tree_ d) | Only_ d
 
 -- | Shorthand tree types for lazy typers
 type IOTree p = Tree IODependency IODependency_ p
-type DBusTree p = Tree IODependency DBusDependency_ p
+type DBusTree c p = Tree IODependency (DBusDependency_ c) p
 type IOTree_ = Tree_ IODependency_
-type DBusTree_ = Tree_ DBusDependency_
+type DBusTree_ c = Tree_ (DBusDependency_ c)
 
 -- | A dependency that only requires IO to evaluate (with payload)
 data IODependency p =
@@ -325,12 +370,12 @@ data IODependency p =
   | forall a. IOSometimes (Sometimes a) (a -> p)
 
 -- | A dependency pertaining to the DBus
-data DBusDependency_ = Bus [Fulfillment] BusName
+data DBusDependency_ c = Bus [Fulfillment] BusName
   | Endpoint [Fulfillment] BusName ObjectPath InterfaceName DBusMember
   | DBusIO IODependency_
   deriving (Eq, Generic)
 
-instance Hashable DBusDependency_ where
+instance Hashable (DBusDependency_ c) where
   hashWithSalt s (Bus f b)            = s `hashWithSalt` f
                                         `hashWithSalt` formatBusName b
   hashWithSalt s (Endpoint f b o i m) = s `hashWithSalt` f
@@ -445,7 +490,8 @@ data PostFail = PostFail [Msg] | PostMissing Msg
 -- that the results will always be the same.
 
 emptyCache :: Cache
-emptyCache = Cache H.empty H.empty H.empty
+-- emptyCache = Cache H.empty H.empty H.empty
+emptyCache = Cache H.empty H.empty
 
 memoizeIO_ :: (IODependency_ -> FIO Result_) -> IODependency_ -> FIO Result_
 memoizeIO_ f d = do
@@ -458,16 +504,17 @@ memoizeIO_ f d = do
       modify (\s -> s { cIO_ = H.insert d r (cIO_ s) })
       return r
 
-memoizeDBus_ :: (DBusDependency_ -> FIO Result_) -> DBusDependency_ -> FIO Result_
-memoizeDBus_ f d = do
-  m <- gets cDBus_
-  case H.lookup d m of
-    (Just r) -> return r
-    Nothing  -> do
-      -- io $ putStrLn $ "not using cache for " ++ show d
-      r <- f d
-      modify (\s -> s { cDBus_ = H.insert d r (cDBus_ s) })
-      return r
+-- memoizeDBus_ :: SafeClient c => (DBusDependency_ c -> FIO Result_)
+--   -> DBusDependency_ c -> FIO Result_
+-- memoizeDBus_ get f d = do
+--   m <- gets cDBus_
+--   case H.lookup d m of
+--     (Just r) -> return r
+--     Nothing  -> do
+--       -- io $ putStrLn $ "not using cache for " ++ show d
+--       r <- f d
+--       modify (\s -> s { cDBus_ = H.insert d r (cDBus_ s) })
+--       return r
 
 memoizeFont :: (String -> IO (Result FontBuilder)) -> String -> FIO (Result FontBuilder)
 memoizeFont f d = do
@@ -548,9 +595,9 @@ type XPQuery = XPFeatures -> Bool
 
 data Cache = Cache
   { --cIO    :: forall p. Memoizable p => H.HashMap (IODependency p) (Result p)
-    cIO_   :: H.HashMap IODependency_ Result_
-  , cDBus_ :: H.HashMap DBusDependency_ Result_
-  , cFont  :: H.HashMap String (Result FontBuilder)
+    cIO_  :: H.HashMap IODependency_ Result_
+  -- , cDBus_ :: forall c. H.HashMap (DBusDependency_ c) Result_
+  , cFont :: H.HashMap String (Result FontBuilder)
   }
 
 getParams :: IO XParams
@@ -884,12 +931,13 @@ introspectInterface = interfaceName_ "org.freedesktop.DBus.Introspectable"
 introspectMethod :: MemberName
 introspectMethod = memberName_ "Introspect"
 
-testDBusDependency_ :: Client -> DBusDependency_ -> FIO Result_
-testDBusDependency_ cl = memoizeDBus_ (testDBusDependency'_ cl)
+testDBusDependency_ :: SafeClient c => c -> DBusDependency_ c -> FIO Result_
+-- testDBusDependency_ cl = memoizeDBus_ (testDBusDependency'_ cl)
+testDBusDependency_ = testDBusDependency'_
 
-testDBusDependency'_ :: Client -> DBusDependency_ -> FIO Result_
+testDBusDependency'_ :: SafeClient c => c -> DBusDependency_ c -> FIO Result_
 testDBusDependency'_ cl (Bus _ bus) = io $ do
-  ret <- callMethod cl queryBus queryPath queryIface queryMem
+  ret <- callMethod (toClient cl) queryBus queryPath queryIface queryMem
   return $ case ret of
         Left e    -> Left [Msg Error e]
         Right b -> let ns = bodyGetNames b in
@@ -907,7 +955,7 @@ testDBusDependency'_ cl (Bus _ bus) = io $ do
     bodyGetNames _   = []
 
 testDBusDependency'_ cl (Endpoint _ busname objpath iface mem) = io $ do
-  ret <- callMethod cl busname objpath introspectInterface introspectMethod
+  ret <- callMethod (toClient cl) busname objpath introspectInterface introspectMethod
   return $ case ret of
         Left e     -> Left [Msg Error e]
         Right body -> procBody body
@@ -996,18 +1044,18 @@ sometimesExeArgs :: MonadIO m => String -> String -> [Fulfillment] -> Bool
 sometimesExeArgs fn n ful sys path args =
   sometimesIO_ fn n (Only_ (IOSystem_ ful $ Executable sys path)) $ spawnCmd path args
 
-sometimesDBus :: Maybe Client -> String -> String -> Tree_ DBusDependency_
-  -> (Client -> a) -> Sometimes a
+sometimesDBus :: SafeClient c => Maybe c -> String -> String
+  -> Tree_ (DBusDependency_ c) -> (c -> a) -> Sometimes a
 sometimesDBus c fn n t x = sometimes1 fn n $ DBusRoot_ x t c
 
-sometimesEndpoint :: MonadIO m => String -> String -> [Fulfillment]
-  -> BusName -> ObjectPath -> InterfaceName -> MemberName -> Maybe Client
-  -> Sometimes (m ())
+sometimesEndpoint :: (SafeClient c, MonadIO m) => String -> String
+  -> [Fulfillment] -> BusName -> ObjectPath -> InterfaceName -> MemberName
+  -> Maybe c -> Sometimes (m ())
 sometimesEndpoint fn name ful busname path iface mem cl =
   sometimesDBus cl fn name deps cmd
   where
     deps = Only_ $ Endpoint ful busname path iface $ Method_ mem
-    cmd c = io $ void $ callMethod c busname path iface mem
+    cmd c = io $ void $ callMethod (toClient c) busname path iface mem
 
 --------------------------------------------------------------------------------
 -- | Dependency Tree Constructors
@@ -1207,7 +1255,7 @@ dataSysDependency f d = first Q $
     f' = ("fulfilment", JSON_UQ $ dataFulfillments f)
 
 
-dataDBusDependency :: DBusDependency_ -> DependencyData
+dataDBusDependency :: DBusDependency_ c -> DependencyData
 dataDBusDependency d =
   case d of
     (DBusIO i)         -> dataIODependency_ i

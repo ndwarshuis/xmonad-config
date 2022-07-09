@@ -52,9 +52,9 @@ data BrightnessControls = BrightnessControls
   , bctlDec :: SometimesIO
   }
 
-brightnessControls :: XPQuery -> BrightnessConfig a b -> Maybe Client
+brightnessControls :: XPQuery -> BrightnessConfig a b -> Maybe SesClient
   -> BrightnessControls
-brightnessControls q bc client =
+brightnessControls q bc cl =
   BrightnessControls
   { bctlMax = cb "max brightness" memMax
   , bctlMin = cb "min brightness" memMin
@@ -62,14 +62,14 @@ brightnessControls q bc client =
   , bctlDec = cb "decrease brightness" memDec
   }
   where
-    cb = callBacklight q client bc
+    cb = callBacklight q cl bc
 
 callGetBrightness :: Num c => BrightnessConfig a b -> Client -> IO (Maybe c)
 callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client =
   either (const Nothing) bodyGetBrightness
   <$> callMethod client xmonadBusName p i memGet
 
-signalDep :: BrightnessConfig a b -> DBusDependency_
+signalDep :: BrightnessConfig a b -> DBusDependency_ SesClient
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
   Endpoint [] xmonadBusName p i $ Signal_ memCur
 
@@ -88,20 +88,21 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
 -- | Internal DBus Crap
 
 brightnessExporter :: RealFrac b => XPQuery -> [Fulfillment] -> [IODependency_]
-  -> BrightnessConfig a b -> Maybe Client -> SometimesIO
+  -> BrightnessConfig a b -> Maybe SesClient -> SometimesIO
 brightnessExporter q ful deps bc@BrightnessConfig { bcName = n } cl =
   Sometimes (n ++ " DBus Interface") q [Subfeature root "exporter"]
   where
     root = DBusRoot_ (exportBrightnessControls' bc) tree cl
     tree = listToAnds (Bus ful xmonadBusName) $ fmap DBusIO deps
 
-exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
-exportBrightnessControls' bc client = do
+exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> SesClient -> IO ()
+exportBrightnessControls' bc cl = do
+  let ses = toClient cl
   maxval <- bcGetMax bc -- assume the max value will never change
   let bounds = (bcMinRaw bc, maxval)
-  let autoMethod' m f = autoMethod m $ emitBrightness bc client =<< f bc bounds
+  let autoMethod' m f = autoMethod m $ emitBrightness bc ses =<< f bc bounds
   let funget = bcGet bc
-  export client (bcPath bc) defaultInterface
+  export ses (bcPath bc) defaultInterface
     { interfaceName = bcInterface bc
     , interfaceMethods =
       [ autoMethod' memMax bcMax
@@ -130,7 +131,7 @@ emitBrightness BrightnessConfig{ bcPath = p, bcInterface = i } client cur =
   where
     sig = signal p i memCur
 
-callBacklight :: XPQuery -> Maybe Client -> BrightnessConfig a b -> String
+callBacklight :: XPQuery -> Maybe SesClient -> BrightnessConfig a b -> String
   -> MemberName -> SometimesIO
 callBacklight q cl BrightnessConfig { bcPath = p
                                     , bcInterface = i
@@ -138,7 +139,7 @@ callBacklight q cl BrightnessConfig { bcPath = p
   Sometimes (unwords [n, controlName]) q [Subfeature root "method call"]
   where
     root = DBusRoot_ cmd (Only_ $ Endpoint [] xmonadBusName p i $ Method_ m) cl
-    cmd c = io $ void $ callMethod c xmonadBusName p i m
+    cmd c = io $ void $ callMethod (toClient c) xmonadBusName p i m
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a
 bodyGetBrightness [b] = fromIntegral <$> (fromVariant b :: Maybe Int32)

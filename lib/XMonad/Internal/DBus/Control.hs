@@ -21,7 +21,6 @@ import           Control.Monad
 
 import           DBus
 import           DBus.Client
-import           DBus.Internal
 
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
@@ -31,36 +30,37 @@ import           XMonad.Internal.Dependency
 
 -- | Current connections to the DBus (session and system buses)
 data DBusState = DBusState
-    { dbSesClient :: Maybe Client
-    , dbSysClient :: Maybe Client
+    { dbSesClient :: Maybe SesClient
+    , dbSysClient :: Maybe SysClient
     }
 
 -- | Connect to the DBus
 connectDBus :: IO DBusState
 connectDBus = do
-  ses <- getDBusClient False
-  sys <- getDBusClient True
+  ses <- getDBusClient
+  sys <- getDBusClient
   return DBusState { dbSesClient = ses, dbSysClient = sys }
 
+-- TODO why is this only the session client?
 -- | Disconnect from the DBus
 disconnectDBus :: DBusState -> IO ()
-disconnectDBus db = forM_ (dbSysClient db) disconnect
+disconnectDBus db = forM_ (toClient <$> dbSysClient db) disconnect
 
 -- | Connect to the DBus and request the XMonad name
 connectDBusX :: IO DBusState
 connectDBusX = do
   db <- connectDBus
-  forM_ (dbSesClient db) requestXMonadName
+  forM_ (toClient <$> dbSesClient db) requestXMonadName
   return db
 
 -- | Disconnect from DBus and release the XMonad name
 disconnectDBusX :: DBusState -> IO ()
 disconnectDBusX db = do
-  forM_ (dbSesClient db) releaseXMonadName
+  forM_ (toClient <$> dbSesClient db) releaseXMonadName
   disconnectDBus db
 
 -- | All exporter features to be assigned to the DBus
-dbusExporters :: [Maybe Client -> SometimesIO]
+dbusExporters :: [Maybe SesClient -> SometimesIO]
 dbusExporters = [exportScreensaver, exportIntelBacklight, exportClevoKeyboard]
 
 releaseXMonadName :: Client -> IO ()
