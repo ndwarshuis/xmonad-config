@@ -288,7 +288,8 @@ xsaneDynamicWorkspace = Sometimes "scanner workspace" xpfXSANE
     c = "Xsane"
 
 f5vpnDynamicWorkspace :: Sometimes DynWorkspace
-f5vpnDynamicWorkspace = sometimesIO_ "F5 VPN workspace" "f5vpn" tree dw
+f5vpnDynamicWorkspace = Sometimes "F5 VPN workspace" xpfF5VPN
+  [Subfeature (IORoot_ dw tree) "f5vpn"]
   where
     tree = Only_ $ sysExe [Package False "f5vpn"] "f5vpn"
     dw = DynWorkspace

@@ -502,6 +502,7 @@ data XPFeatures = XPFeatures
   , xpfIntelBacklight :: Bool
   , xpfClevoBacklight :: Bool
   , xpfBattery        :: Bool
+  , xpfF5VPN          :: Bool
   }
 
 instance FromJSON XPFeatures where
@@ -515,6 +516,7 @@ instance FromJSON XPFeatures where
     <*> o .:+ "intel_backlight"
     <*> o .:+ "clevo_backlight"
     <*> o .:+ "battery"
+    <*> o .:+ "f5vpn"
 
 defParams :: XParams
 defParams = XParams
@@ -534,6 +536,7 @@ defXPFeatures = XPFeatures
   , xpfIntelBacklight = False
   , xpfClevoBacklight = False
   , xpfBattery = False
+  , xpfF5VPN = False
   }
 
 type XPQuery = XPFeatures -> Bool
