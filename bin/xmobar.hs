@@ -28,22 +28,15 @@ import           Xmobar.Plugins.Screensaver
 import           Xmobar.Plugins.VPN
 
 import           System.Posix.Signals
-import           XMonad.Core
-    ( cfgDir
-    , getDirectories
-    , io
-    )
-import           XMonad.Hooks.DynamicLog                        (wrap)
+import           XMonad.Core                                    hiding (config)
+import           XMonad.Hooks.DynamicLog                        hiding (xmobar)
 import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.Command.Power
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
 import           XMonad.Internal.DBus.Screensaver               (ssSignalDep)
-import           XMonad.Internal.Process
-    ( proc'
-    , readCreateProcessWithExitCode'
-    )
+import           XMonad.Internal.Process                        hiding (CmdSpec)
 import qualified XMonad.Internal.Theme                          as T
 import           Xmobar                                         hiding
     ( iconOffset

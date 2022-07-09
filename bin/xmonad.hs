@@ -7,19 +7,14 @@
 module Main (main) where
 
 import           Control.Concurrent
-import           Control.Concurrent.Lifted                      (fork)
+import           Control.Concurrent.Lifted
 import           Control.Monad
 
 import           Data.Internal.DBus
 import           Data.Internal.Dependency
 import           Data.List
-    ( intercalate
-    , isPrefixOf
-    , sortBy
-    , sortOn
-    )
 import           Data.Maybe
-import           Data.Monoid                                    (All (..))
+import           Data.Monoid
 
 import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
@@ -35,10 +30,6 @@ import           XMonad.Actions.CycleWS
 import           XMonad.Actions.PhysicalScreens
 import           XMonad.Actions.Warp
 import           XMonad.Hooks.DynamicLog
-    ( pad
-    , wrap
-    , xmobarColor
-    )
 import           XMonad.Hooks.EwmhDesktops
 import           XMonad.Hooks.ManageDocks
 import           XMonad.Hooks.ManageHelpers
