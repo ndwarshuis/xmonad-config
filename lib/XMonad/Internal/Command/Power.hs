@@ -21,6 +21,8 @@ module XMonad.Internal.Command.Power
   , suspendPrompt
   , quitPrompt
   , powerPrompt
+  , defFontPkgs
+  , promptFontDep
   ) where
 
 import           Control.Arrow               (first)
@@ -57,10 +59,17 @@ myPrimeOffload :: String
 myPrimeOffload = "prime-offload"
 
 --------------------------------------------------------------------------------
+-- | Packages
+
+optimusPackages :: [Fulfillment]
+optimusPackages = [Package False "optimus-manager"]
+
+--------------------------------------------------------------------------------
 -- | Core commands
 
 runScreenLock :: SometimesX
-runScreenLock = sometimesExe "screen locker" "i3lock script" False myScreenlock
+runScreenLock = sometimesExe "screen locker" "i3lock script"
+  [Package False "i3lock-color"] False myScreenlock
 
 runPowerOff :: X ()
 runPowerOff = spawn "systemctl poweroff"
@@ -80,11 +89,18 @@ runReboot = spawn "systemctl reboot"
 runAutolock :: Sometimes (IO ProcessHandle)
 runAutolock = sometimesIO_ "automatic screen lock" "xss-lock" tree cmd
   where
-    tree = And_ (Only_ $ sysExe "xss-lock") (Only_ $ IOSometimes_ runScreenLock)
+    tree = And_ (Only_ $ sysExe [Package True "xss-lock"] "xss-lock")
+      $ Only_ $ IOSometimes_ runScreenLock
     cmd = snd <$> spawnPipeArgs "xss-lock" ["--ignore-sleep", "screenlock"]
 
 --------------------------------------------------------------------------------
 -- | Confirmation prompts
+
+promptFontDep :: IOTree T.FontBuilder
+promptFontDep = fontTreeAlt T.defFontFamily defFontPkgs
+
+defFontPkgs :: [Fulfillment]
+defFontPkgs = [Package True "ttf-dejavu"]
 
 confirmPrompt' :: String -> X () -> T.FontBuilder -> X ()
 confirmPrompt' s x fb = confirmPrompt (T.promptTheme fb) s x
@@ -96,7 +112,7 @@ quitPrompt :: T.FontBuilder -> X ()
 quitPrompt = confirmPrompt' "quit?" $ io exitSuccess
 
 sometimesPrompt :: String -> (T.FontBuilder -> X ()) -> SometimesX
-sometimesPrompt n = sometimesIO n (n ++ " command") $ fontTreeAlt T.defFontFamily
+sometimesPrompt n = sometimesIO n (n ++ " command") promptFontDep
 
 -- TODO doesn't this need to also lock the screen?
 runSuspendPrompt :: SometimesX
@@ -141,9 +157,9 @@ runOptimusPrompt = Sometimes "graphics switcher"
   where
     s = Subfeature { sfData = r, sfName = "optimus manager" }
     r = IORoot runOptimusPrompt' t
-    t = And1 (fontTreeAlt T.defFontFamily)
-      $ listToAnds (socketExists "optimus-manager" socketName) $ sysExe
-      <$> [myOptimusManager, myPrimeOffload]
+    t = And1 promptFontDep
+      $ listToAnds (socketExists "optimus-manager" [] socketName)
+      $ sysExe optimusPackages <$> [myOptimusManager, myPrimeOffload]
     socketName = (</> "optimus-manager") <$> getTemporaryDirectory
 
 --------------------------------------------------------------------------------
@@ -177,7 +193,7 @@ runPowerPrompt = Sometimes "power prompt" (const True) [sf]
   where
     sf = Subfeature withLock "prompt with lock"
     withLock = IORoot (uncurry powerPrompt) tree
-    tree = And12 (,) lockTree (fontTreeAlt T.defFontFamily)
+    tree = And12 (,) lockTree promptFontDep
     lockTree = Or (Only $ IOSometimes runScreenLock id) (Only $ IOConst skip)
 
 powerPrompt :: X () -> T.FontBuilder -> X ()

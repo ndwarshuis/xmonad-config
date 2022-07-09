@@ -28,7 +28,8 @@ import           System.Directory
     )
 import           System.IO
 
-import           XMonad.Core                 hiding (spawn)
+import           XMonad.Core                     hiding (spawn)
+import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.DBus.Common
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Notify
@@ -64,10 +65,20 @@ myClipboardManager :: String
 myClipboardManager = "greenclip"
 
 --------------------------------------------------------------------------------
+-- | Packages
+
+dmenuPkgs :: [Fulfillment]
+dmenuPkgs = [Package True "rofi"]
+
+clipboardPkgs :: [Fulfillment]
+clipboardPkgs = [Package False "rofi-greenclip"]
+
+--------------------------------------------------------------------------------
 -- | Other internal functions
 
 spawnDmenuCmd :: String -> [String] -> SometimesX
-spawnDmenuCmd n = sometimesExeArgs n "rofi preset" True myDmenuCmd
+spawnDmenuCmd n =
+  sometimesExeArgs n "rofi preset" dmenuPkgs True myDmenuCmd
 
 themeArgs :: String -> [String]
 themeArgs hexColor =
@@ -78,6 +89,12 @@ themeArgs hexColor =
 myDmenuMatchingArgs :: [String]
 myDmenuMatchingArgs = ["-i"] -- case insensitivity
 
+dmenuTree :: IOTree_ -> IOTree_
+dmenuTree = And_ $ Only_ dmenuDep
+
+dmenuDep :: IODependency_
+dmenuDep = sysExe dmenuPkgs myDmenuCmd
+
 --------------------------------------------------------------------------------
 -- | Exported Commands
 
@@ -85,7 +102,7 @@ myDmenuMatchingArgs = ["-i"] -- case insensitivity
 runDevMenu :: SometimesX
 runDevMenu = sometimesIO_ "device manager" "rofi devices" t x
   where
-    t = Only_ $ localExe myDmenuDevices
+    t = dmenuTree $ Only_ (localExe [] myDmenuDevices)
     x = do
       c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
       spawnCmd myDmenuDevices
@@ -99,7 +116,7 @@ runBTMenu = Sometimes "bluetooth selector" xpfBluetooth
   [Subfeature (IORoot_ cmd tree) "rofi bluetooth"]
   where
     cmd = spawnCmd myDmenuBluetooth $ "-c":themeArgs "#0044bb"
-    tree = Only_ $ sysExe myDmenuBluetooth
+    tree = dmenuTree $ Only_ $ sysExe [] myDmenuBluetooth
 
 runVPNMenu :: SometimesX
 runVPNMenu = Sometimes "VPN selector" xpfVPN
@@ -107,7 +124,8 @@ runVPNMenu = Sometimes "VPN selector" xpfVPN
   where
     cmd = spawnCmd myDmenuVPN
       $ ["-c"] ++ themeArgs "#007766" ++ myDmenuMatchingArgs
-    tree = toAnd_ (localExe myDmenuVPN) $ socketExists "expressVPN"
+    tree = dmenuTree $ toAnd_ (localExe [] myDmenuVPN)
+      $ socketExists "expressVPN" []
       $ return "/var/lib/expressvpn/expressvpnd.socket"
 
 runCmdMenu :: SometimesX
@@ -124,11 +142,15 @@ runNetMenu cl =
   sometimesDBus cl "network control menu" "rofi NetworkManager" tree cmd
   where
     cmd _ = spawnCmd myDmenuNetworks $ themeArgs "#ff3333"
-    tree = toAnd_ (DBusIO $ localExe myDmenuNetworks) $ Bus networkManagerBus
+    tree = And_ (Only_ $ Bus networkManagerPkgs networkManagerBus)
+      $ toAnd_ (DBusIO dmenuDep) $ DBusIO
+      $ sysExe [Package False "networkmanager-dmenu-git"] myDmenuNetworks
 
 runAutorandrMenu :: SometimesX
-runAutorandrMenu = sometimesExeArgs "autorandr menu" "rofi autorandr"
-  True myDmenuMonitors $ themeArgs "#ff0066"
+runAutorandrMenu = sometimesIO_ "autorandr menu" "rofi autorandr" tree cmd
+  where
+    cmd = spawnCmd myDmenuMonitors $ themeArgs "#ff0066"
+    tree = dmenuTree $ Only_ $ localExe [] myDmenuMonitors
 
 --------------------------------------------------------------------------------
 -- | Password manager
@@ -138,8 +160,8 @@ runBwMenu cl = sometimesDBus cl "password manager" "rofi bitwarden" tree cmd
   where
     cmd _ = spawnCmd myDmenuPasswords
       $ ["-c"] ++ themeArgs "#bb6600" ++ myDmenuMatchingArgs
-    tree = toAnd_ (DBusIO $ localExe myDmenuPasswords)
-      $ Bus $ busName_ "org.rofi.bitwarden"
+    tree = And_ (Only_ $ Bus [] $ busName_ "org.rofi.bitwarden")
+      $ toAnd_ (DBusIO dmenuDep) (DBusIO $ localExe [] myDmenuPasswords)
 
 --------------------------------------------------------------------------------
 -- | Clipboard
@@ -148,8 +170,9 @@ runClipMenu :: SometimesX
 runClipMenu = sometimesIO_ "clipboard manager" "rofi greenclip" tree act
   where
     act = spawnCmd myDmenuCmd args
-    tree = listToAnds (process myClipboardManager)
-      $ sysExe <$> [myDmenuCmd, myClipboardManager]
+    tree = listToAnds dmenuDep [ sysExe clipboardPkgs myClipboardManager
+                               , process [] myClipboardManager
+                               ]
     args = [ "-modi", "\"clipboard:greenclip print\""
            , "-show", "clipboard"
            , "-run-command", "'{cmd}'"
@@ -169,7 +192,7 @@ runShowKeys = Always "keyboard menu" $ Option showKeysDMenu $ Always_
 showKeysDMenu :: SubfeatureRoot ([((KeyMask, KeySym), NamedAction)] -> X ())
 showKeysDMenu = Subfeature
   { sfName = "keyboard shortcut menu"
-  , sfData = IORoot_ showKeys $ Only_ $ sysExe myDmenuCmd
+  , sfData = IORoot_ showKeys $ Only_ dmenuDep
   }
 
 showKeys :: [((KeyMask, KeySym), NamedAction)] -> X ()

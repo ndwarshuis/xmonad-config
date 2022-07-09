@@ -34,7 +34,8 @@ import           XMonad.Core
     , io
     )
 import           XMonad.Hooks.DynamicLog                        (wrap)
-import           XMonad.Internal.Command.Power                  (hasBattery)
+import           XMonad.Internal.Command.Desktop
+import           XMonad.Internal.Command.Power
 import           XMonad.Internal.DBus.Brightness.ClevoKeyboard
 import           XMonad.Internal.DBus.Brightness.IntelBacklight
 import           XMonad.Internal.DBus.Control
@@ -75,7 +76,7 @@ evalConfig db = do
 
 -- | The text font family
 textFont :: Always T.FontBuilder
-textFont = fontAlways "XMobar Text Font" "DejaVu Sans Mono"
+textFont = fontAlways "XMobar Text Font" "DejaVu Sans Mono" defFontPkgs
 
 -- | Offset of the text in the bar
 textFontOffset :: Int
@@ -88,6 +89,7 @@ textFontData = T.defFontData { T.weight = Just T.Bold, T.size = Just 11 }
 -- | The icon font family
 iconFont :: Sometimes T.FontBuilder
 iconFont = fontSometimes "XMobar Icon Font" "Symbols Nerd Font"
+  [Package True "ttf-nerd-fonts-symbols"]
 
 -- | Offsets for the icons in the bar (relative to the text offset)
 iconOffset :: BarFont -> Int
@@ -191,20 +193,22 @@ getBattery :: BarFeature
 getBattery = iconIO_ "battery level indicator" xpfBattery root tree
   where
     root useIcon = IORoot_ (batteryCmd useIcon)
-    tree = Only_ $ IOTest_ "Test if battery is present" $ fmap (Msg Error) <$> hasBattery
+    tree = Only_ $ IOTest_ "Test if battery is present" []
+      $ fmap (Msg Error) <$> hasBattery
 
 getVPN :: Maybe Client -> BarFeature
 getVPN cl = iconDBus_ "VPN status indicator" xpfVPN root $ toAnd_ vpnDep test
   where
     root useIcon tree = DBusRoot_ (const $ vpnCmd useIcon) tree cl
-    test = DBusIO $ IOTest_ "Use nmcli to test if VPN is present" vpnPresent
+    test = DBusIO $ IOTest_ "Use nmcli to test if VPN is present"
+      networkManagerPkgs vpnPresent
 
 getBt :: Maybe Client -> BarFeature
 getBt = xmobarDBus "bluetooth status indicator" xpfBluetooth btDep btCmd
 
 getAlsa :: BarFeature
 getAlsa = iconIO_ "volume level indicator" (const True) root
-  $ Only_ $ sysExe "alsactl"
+  $ Only_ $ sysExe [Package True "alsa-utils"] "alsactl"
   where
     root useIcon = IORoot_ (alsaCmd useIcon)
 

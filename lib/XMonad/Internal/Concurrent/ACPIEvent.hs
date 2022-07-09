@@ -26,10 +26,7 @@ import           XMonad.Internal.Command.Power
 import           XMonad.Internal.Concurrent.ClientMessage
 import           XMonad.Internal.Dependency
 import           XMonad.Internal.Shell
-import           XMonad.Internal.Theme
-    ( FontBuilder
-    , defFontFamily
-    )
+import           XMonad.Internal.Theme                    (FontBuilder)
 
 --------------------------------------------------------------------------------
 -- | Data structure to hold the ACPI events I care about
@@ -94,7 +91,7 @@ acpiPath :: FilePath
 acpiPath = "/var/run/acpid.socket"
 
 socketDep :: IOTree_
-socketDep = Only_ $ pathR acpiPath
+socketDep = Only_ $ pathR acpiPath [Package True "acpid"]
 
 -- | Handle ClientMessage event containing and ACPI event (to be used in
 -- Xmonad's event hook)
@@ -123,6 +120,6 @@ runHandleACPI = Always "ACPI event handler" $ Option sf fallback
   where
     sf = Subfeature withLock "acpid prompt"
     withLock = IORoot (uncurry handleACPI)
-      $ And12 (,) (fontTreeAlt defFontFamily) $ Only
+      $ And12 (,) promptFontDep $ Only
       $ IOSometimes runScreenLock id
     fallback = Always_ $ FallbackAlone $ const skip

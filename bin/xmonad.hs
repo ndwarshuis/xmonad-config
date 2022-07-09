@@ -104,7 +104,7 @@ tabbedFeature :: Always Theme
 tabbedFeature = Always "theme for tabbed windows" $ Option sf fallback
   where
     sf = Subfeature niceTheme "theme with nice font"
-    niceTheme = IORoot T.tabbedTheme $ fontTree T.defFontFamily
+    niceTheme = IORoot T.tabbedTheme $ fontTree T.defFontFamily defFontPkgs
     fallback = Always_ $ FallbackAlone $ T.tabbedTheme T.fallbackFont
 
 features :: Maybe Client -> FeatureSet
@@ -236,7 +236,7 @@ f5Tag = "F5VPN"
 gimpDynamicWorkspace :: Sometimes DynWorkspace
 gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
   where
-    tree = Only_ $ sysExe "gimp"
+    tree = Only_ $ sysExe [Package True "gimp"] "gimp"
     dw = DynWorkspace
          { dwName = "Gimp"
          , dwTag = gimpTag
@@ -258,8 +258,8 @@ vmDynamicWorkspace :: Sometimes DynWorkspace
 vmDynamicWorkspace = Sometimes "virtualbox workspace" xpfVirtualBox
   [Subfeature root "windows 8 VM"]
   where
-    root = IORoot_ dw $ toAnd_ (sysExe "VBoxManage")
-      $ IOTest_ name $ vmExists vm
+    root = IORoot_ dw $ toAnd_ (sysExe [Package True "virtualbox"] "VBoxManage")
+      $ IOTest_ name [] $ vmExists vm
     name = unwords ["test if", vm, "exists"]
     c = "VirtualBoxVM"
     vm = "win8raw"
@@ -276,7 +276,7 @@ xsaneDynamicWorkspace :: Sometimes DynWorkspace
 xsaneDynamicWorkspace = Sometimes "scanner workspace" xpfXSANE
   [Subfeature (IORoot_ dw tree) "xsane"]
   where
-    tree = Only_ $ sysExe "xsane"
+    tree = Only_ $ sysExe [Package True "xsane"] "xsane"
     dw = DynWorkspace
          { dwName = "XSane"
          , dwTag = xsaneTag
@@ -290,7 +290,7 @@ xsaneDynamicWorkspace = Sometimes "scanner workspace" xpfXSANE
 f5vpnDynamicWorkspace :: Sometimes DynWorkspace
 f5vpnDynamicWorkspace = sometimesIO_ "F5 VPN workspace" "f5vpn" tree dw
   where
-    tree = Only_ $ sysExe "f5vpn"
+    tree = Only_ $ sysExe [Package False "f5vpn"] "f5vpn"
     dw = DynWorkspace
          { dwName = "F5Vpn"
          , dwTag = f5Tag
@@ -666,8 +666,6 @@ externalBindings ts db =
     -- M-<F1> reserved for showing the keymap
     , KeyBinding "M-<F2>" "restart xmonad" restartf
     , KeyBinding "M-<F3>" "recompile xmonad" recompilef
-    , KeyBinding "M-<F7>" "start Isync Service" $ Left runStartISyncService
-    , KeyBinding "M-C-<F7>" "start Isync Timer" $ Left runStartISyncTimer
     , KeyBinding "M-<F8>" "select autorandr profile" $ Left runAutorandrMenu
     , KeyBinding "M-<F9>" "toggle ethernet" $ Left runToggleEthernet
     , KeyBinding "M-<F10>" "toggle bluetooth" $ Left $ runToggleBluetooth sys

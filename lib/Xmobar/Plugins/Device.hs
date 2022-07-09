@@ -17,6 +17,7 @@ import           DBus
 import           DBus.Client
 import           DBus.Internal
 
+import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common
@@ -42,7 +43,7 @@ devSignal :: String
 devSignal = "Ip4Connectivity"
 
 devDep :: DBusDependency_
-devDep = Endpoint nmBus nmPath nmInterface $ Method_ getByIP
+devDep = Endpoint networkManagerPkgs nmBus nmPath nmInterface $ Method_ getByIP
 
 getDevice :: Client -> String -> IO (Maybe ObjectPath)
 getDevice client iface = bodyToMaybe <$> callMethod' client mc

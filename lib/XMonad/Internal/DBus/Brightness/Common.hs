@@ -71,7 +71,7 @@ callGetBrightness BrightnessConfig { bcPath = p, bcInterface = i } client =
 
 signalDep :: BrightnessConfig a b -> DBusDependency_
 signalDep BrightnessConfig { bcPath = p, bcInterface = i } =
-  Endpoint xmonadBusName p i $ Signal_ memCur
+  Endpoint [] xmonadBusName p i $ Signal_ memCur
 
 matchSignal :: Num c => BrightnessConfig a b -> (Maybe c -> IO ()) -> Client -> IO ()
 matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
@@ -87,13 +87,13 @@ matchSignal BrightnessConfig { bcPath = p, bcInterface = i } cb =
 --------------------------------------------------------------------------------
 -- | Internal DBus Crap
 
-brightnessExporter :: RealFrac b => XPQuery -> [IODependency_]
+brightnessExporter :: RealFrac b => XPQuery -> [Fulfillment] -> [IODependency_]
   -> BrightnessConfig a b -> Maybe Client -> SometimesIO
-brightnessExporter q deps bc@BrightnessConfig { bcName = n } cl =
+brightnessExporter q ful deps bc@BrightnessConfig { bcName = n } cl =
   Sometimes (n ++ " DBus Interface") q [Subfeature root "exporter"]
   where
     root = DBusRoot_ (exportBrightnessControls' bc) tree cl
-    tree = listToAnds (Bus xmonadBusName) $ fmap DBusIO deps
+    tree = listToAnds (Bus ful xmonadBusName) $ fmap DBusIO deps
 
 exportBrightnessControls' :: RealFrac b => BrightnessConfig a b -> Client -> IO ()
 exportBrightnessControls' bc client = do
@@ -137,7 +137,7 @@ callBacklight q cl BrightnessConfig { bcPath = p
                                     , bcName = n } controlName m =
   Sometimes (unwords [n, controlName]) q [Subfeature root "method call"]
   where
-    root = DBusRoot_ cmd (Only_ $ Endpoint xmonadBusName p i $ Method_ m) cl
+    root = DBusRoot_ cmd (Only_ $ Endpoint [] xmonadBusName p i $ Method_ m) cl
     cmd c = io $ void $ callMethod c xmonadBusName p i m
 
 bodyGetBrightness :: Num a => [Variant] -> Maybe a

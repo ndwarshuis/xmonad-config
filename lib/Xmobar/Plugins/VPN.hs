@@ -14,14 +14,15 @@ module Xmobar.Plugins.VPN
 import           Control.Concurrent.MVar
 import           Control.Monad
 
-import qualified Data.Map                   as M
+import qualified Data.Map                        as M
 import           Data.Maybe
-import qualified Data.Set                   as S
+import qualified Data.Set                        as S
 
 import           DBus
 import           DBus.Client
 import           DBus.Internal
 
+import           XMonad.Internal.Command.Desktop
 import           XMonad.Internal.Dependency
 import           Xmobar
 import           Xmobar.Plugins.Common
@@ -119,4 +120,5 @@ vpnAlias :: String
 vpnAlias = "vpn"
 
 vpnDep :: DBusDependency_
-vpnDep = Endpoint vpnBus vpnPath omInterface $ Method_ getManagedObjects
+vpnDep = Endpoint networkManagerPkgs vpnBus vpnPath omInterface
+  $ Method_ getManagedObjects

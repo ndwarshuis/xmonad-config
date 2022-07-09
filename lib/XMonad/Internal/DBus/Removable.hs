@@ -33,7 +33,7 @@ memRemoved :: MemberName
 memRemoved = memberName_ "InterfacesRemoved"
 
 dbusDep :: MemberName -> DBusDependency_
-dbusDep m = Endpoint bus path interface $ Signal_ m
+dbusDep m = Endpoint [Package True "udisks2"] bus path interface $ Signal_ m
 
 addedDep :: DBusDependency_
 addedDep = dbusDep memAdded

@@ -27,8 +27,6 @@ module XMonad.Internal.Command.Desktop
   , runScreenCapture
   , runDesktopCapture
   , runCaptureBrowser
-  , runStartISyncTimer
-  , runStartISyncService
   , runNotificationClose
   , runNotificationCloseAll
   , runNotificationHistory
@@ -36,6 +34,9 @@ module XMonad.Internal.Command.Desktop
 
   -- daemons
   , runNetAppDaemon
+
+  -- packages
+  , networkManagerPkgs
   ) where
 
 import           Control.Monad               (void)
@@ -65,6 +66,9 @@ import           XMonad.Operations
 myTerm :: String
 myTerm = "urxvt"
 
+myCalc :: String
+myCalc = "bc"
+
 myBrowser :: String
 myBrowser = "brave-accel"
 
@@ -90,6 +94,26 @@ myNotificationCtrl :: String
 myNotificationCtrl = "dunstctl"
 
 --------------------------------------------------------------------------------
+-- | Packages
+
+myTermPkgs :: [Fulfillment]
+myTermPkgs = [ Package True "rxvt-unicode"
+             , Package True "urxvt-perls"
+             ]
+
+myEditorPkgs :: [Fulfillment]
+myEditorPkgs = [Package True "emacs-nativecomp"]
+
+notifyPkgs :: [Fulfillment]
+notifyPkgs = [Package True "dunst"]
+
+bluetoothPkgs :: [Fulfillment]
+bluetoothPkgs = [Package True "bluez-utils"]
+
+networkManagerPkgs :: [Fulfillment]
+networkManagerPkgs = [Package True "networkmanager"]
+
+--------------------------------------------------------------------------------
 -- | Misc constants
 
 volumeChangeSound :: FilePath
@@ -99,13 +123,13 @@ volumeChangeSound = "smb_fireball.wav"
 -- | Some nice apps
 
 runTerm :: SometimesX
-runTerm = sometimesExe "terminal" "urxvt" True myTerm
+runTerm = sometimesExe "terminal" "urxvt" myTermPkgs True myTerm
 
 runTMux :: SometimesX
 runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
   where
-    deps = listToAnds (socketExists "tmux" socketName)
-      $ fmap sysExe [myTerm, "tmux", "bash"]
+    deps = listToAnds (socketExists "tmux" [] socketName)
+      $ fmap (sysExe myTermPkgs) [myTerm, "tmux", "bash"]
     act = spawn
       $ "tmux has-session"
       #!&& fmtCmd myTerm ["-e", "bash", "-c", singleQuote c]
@@ -120,30 +144,32 @@ runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
 runCalc :: SometimesX
 runCalc = sometimesIO_ "calculator" "R" deps act
   where
-    deps = toAnd_ (sysExe myTerm) (sysExe "R")
-    act = spawnCmd myTerm ["-e", "R"]
+    deps = toAnd_ (sysExe myTermPkgs myTerm) (sysExe [Package True "bc"] myCalc)
+    act = spawnCmd myTerm ["-e", myCalc, "-l"]
 
 runBrowser :: SometimesX
-runBrowser = sometimesExe "web browser" "brave" False myBrowser
+runBrowser = sometimesExe "web browser" "brave" [Package False "brave-bin"]
+  False myBrowser
 
 runEditor :: SometimesX
 runEditor = sometimesIO_ "text editor" "emacs" tree cmd
   where
     cmd = spawnCmd myEditor
       ["-c", "-e", doubleQuote "(select-frame-set-input-focus (selected-frame))"]
-    -- NOTE we could test if the emacs socket exists, but it won't come up
+    -- NOTE 1: we could test if the emacs socket exists, but it won't come up
     -- before xmonad starts, so just check to see if the process has started
-    tree = toAnd_ (sysExe myEditor) $ process myEditorServer
+    tree = toAnd_ (sysExe myEditorPkgs myEditor) $ process [] myEditorServer
 
 runFileManager :: SometimesX
-runFileManager = sometimesExe "file browser" "pcmanfm" True "pcmanfm"
+runFileManager = sometimesExe "file browser" "pcmanfm" [Package True "pcmanfm"]
+  True "pcmanfm"
 
 --------------------------------------------------------------------------------
 -- | Multimedia Commands
 
 runMultimediaIfInstalled :: String -> String -> SometimesX
 runMultimediaIfInstalled n cmd = sometimesExeArgs (n ++ " multimedia control")
-  "playerctl" True myMultimediaCtl [cmd]
+  "playerctl" [Package True "playerctl"] True myMultimediaCtl [cmd]
 
 runTogglePlay :: SometimesX
 runTogglePlay = runMultimediaIfInstalled "play/pause" "play-pause"
@@ -172,8 +198,10 @@ playSound file = do
 
 featureSound :: String -> FilePath -> X () -> X () -> SometimesX
 featureSound n file pre post =
-  sometimesIO_ ("volume " ++ n ++ " control") "paplay" (Only_ $ sysExe "paplay")
+  sometimesIO_ ("volume " ++ n ++ " control") "paplay" tree
   $ pre >> playSound file >> post
+  where
+    tree = Only_ $ sysExe [Package True "libpulse"] "paplay"
 
 runVolumeDown :: SometimesX
 runVolumeDown = featureSound "up" volumeChangeSound (return ()) $ void (lowerVolume 2)
@@ -192,8 +220,8 @@ runNotificationCmd n arg cl =
   sometimesDBus cl (n ++ " control") "dunstctl" tree cmd
   where
     cmd _ = spawnCmd myNotificationCtrl [arg]
-    tree = toAnd_ (DBusIO $ sysExe myNotificationCtrl)
-      $ Endpoint notifyBus notifyPath (interfaceName_ "org.dunstproject.cmd0")
+    tree = toAnd_ (DBusIO $ sysExe notifyPkgs myNotificationCtrl)
+      $ Endpoint [] notifyBus notifyPath (interfaceName_ "org.dunstproject.cmd0")
       $ Method_ $ memberName_ "NotificationAction"
 
 runNotificationClose :: Maybe Client -> SometimesX
@@ -219,14 +247,15 @@ runNetAppDaemon :: Maybe Client -> Sometimes (IO ProcessHandle)
 runNetAppDaemon cl = Sometimes "network applet" xpfVPN
   [Subfeature (DBusRoot_ cmd tree cl) "NM-applet"]
   where
-    tree = toAnd_ (DBusIO $ localExe "nm-applet") $ Bus networkManagerBus
+    tree = toAnd_ app $ Bus networkManagerPkgs networkManagerBus
+    app = DBusIO $ sysExe [Package True "network-manager-applet"] "nm-applet"
     cmd _ = snd <$> spawnPipe "nm-applet"
 
 runToggleBluetooth :: Maybe Client -> SometimesX
 runToggleBluetooth cl = Sometimes "bluetooth toggle" xpfBluetooth
   [Subfeature (DBusRoot_ cmd tree cl) "bluetoothctl"]
   where
-    tree = And_ (Only_ $ DBusIO $ sysExe myBluetooth) (Only_ $ Bus btBus)
+    tree = And_ (Only_ $ DBusIO $ sysExe bluetoothPkgs myBluetooth) (Only_ $ Bus [] btBus)
     cmd _ = spawn
       $ myBluetooth ++ " show | grep -q \"Powered: no\""
       #!&& "a=on"
@@ -236,7 +265,7 @@ runToggleBluetooth cl = Sometimes "bluetooth toggle" xpfBluetooth
 
 runToggleEthernet :: SometimesX
 runToggleEthernet = sometimes1 "ethernet toggle" "nmcli" $ IORoot (spawn . cmd) $
-  And1 (Only readEthernet) (Only_ $ sysExe "nmcli")
+  And1 (Only readEthernet) (Only_ $ sysExe networkManagerPkgs "nmcli")
   where
     -- TODO make this less noisy
     cmd iface =
@@ -245,22 +274,6 @@ runToggleEthernet = sometimes1 "ethernet toggle" "nmcli" $ IORoot (spawn . cmd) 
       #!|| "a=disconnect"
       #!>> fmtCmd "nmcli" ["device", "$a", iface]
       #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "ethernet \"$a\"ed"  }
-
-runStartISyncTimer :: SometimesX
-runStartISyncTimer = sometimesIO_ "isync timer" "mbsync timer"
-  (Only_ $ sysdUser "mbsync.timer")
-  $ spawn
-  $ "systemctl --user start mbsync.timer"
-  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync timer started"  }
-  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync timer failed to start" }
-
-runStartISyncService :: SometimesX
-runStartISyncService = sometimesIO_ "isync" "mbsync service"
-  (Only_ $ sysdUser "mbsync.service")
-  $ spawn
-  $ "systemctl --user start mbsync.service"
-  #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "Isync completed" }
-  #!|| fmtNotifyCmd defNoteError { body = Just $ Text "Isync failed" }
 
 --------------------------------------------------------------------------------
 -- | Configuration commands
@@ -297,7 +310,8 @@ runFlameshot :: String -> String -> Maybe Client -> SometimesX
 runFlameshot n mode cl = sometimesDBus cl n myCapture tree cmd
   where
     cmd _ = spawnCmd myCapture [mode]
-    tree = toAnd_ (DBusIO $ sysExe myCapture) $ Bus $ busName_ "org.flameshot.Flameshot"
+    tree = toAnd_ (DBusIO $ sysExe [Package True "flameshot"] myCapture)
+      $ Bus [] $ busName_ "org.flameshot.Flameshot"
 
 -- TODO this will steal focus from the current window (and puts it
 -- in the root window?) ...need to fix
@@ -314,6 +328,6 @@ runScreenCapture = runFlameshot "screen capture" "screen"
 
 runCaptureBrowser :: SometimesX
 runCaptureBrowser = sometimesIO_ "screen capture browser" "feh"
-  (Only_ $ sysExe myImageBrowser) $ do
+  (Only_ $ sysExe [Package True "feh"] myImageBrowser) $ do
   dir <- io getCaptureDir
   spawnCmd myImageBrowser [dir]

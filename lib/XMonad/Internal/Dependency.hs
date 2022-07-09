@@ -47,6 +47,7 @@ module XMonad.Internal.Dependency
   , DBusMember(..)
   , UnitType(..)
   , Result
+  , Fulfillment(..)
 
   -- dumping
   , dumpFeature
@@ -314,7 +315,7 @@ type DBusTree_ = Tree_ DBusDependency_
 -- | A dependency that only requires IO to evaluate (with payload)
 data IODependency p =
   -- a cachable IO action that yields a payload
-  IORead String (FIO (Result p))
+  IORead String [Fulfillment] (FIO (Result p))
   -- always yields a payload
   | IOConst p
   -- an always that yields a payload
@@ -323,33 +324,37 @@ data IODependency p =
   | forall a. IOSometimes (Sometimes a) (a -> p)
 
 -- | A dependency pertaining to the DBus
-data DBusDependency_ = Bus BusName
-  | Endpoint BusName ObjectPath InterfaceName DBusMember
+data DBusDependency_ = Bus [Fulfillment] BusName
+  | Endpoint [Fulfillment] BusName ObjectPath InterfaceName DBusMember
   | DBusIO IODependency_
   deriving (Eq, Generic)
 
 instance Hashable DBusDependency_ where
-  hashWithSalt s (Bus b)            = hashWithSalt s $ formatBusName b
-  hashWithSalt s (Endpoint b o i m) = s `hashWithSalt` formatBusName b
-                                      `hashWithSalt` formatObjectPath o
-                                      `hashWithSalt` formatInterfaceName i
-                                      `hashWithSalt` m
-  hashWithSalt s (DBusIO i)            = hashWithSalt s i
+  hashWithSalt s (Bus f b)            = s `hashWithSalt` f
+                                        `hashWithSalt` formatBusName b
+  hashWithSalt s (Endpoint f b o i m) = s `hashWithSalt` f
+                                        `hashWithSalt` formatBusName b
+                                        `hashWithSalt` formatObjectPath o
+                                        `hashWithSalt` formatInterfaceName i
+                                        `hashWithSalt` m
+  hashWithSalt s (DBusIO i)           = hashWithSalt s i
 
 -- | A dependency that only requires IO to evaluate (no payload)
-data IODependency_ = IOSystem_ SystemDependency
-  | IOTest_ String (IO (Maybe Msg))
+data IODependency_ = IOSystem_ [Fulfillment] SystemDependency
+  | IOTest_ String [Fulfillment] (IO (Maybe Msg))
   | forall a. IOSometimes_ (Sometimes a)
 
 instance Eq IODependency_ where
-  (==) (IOSystem_ s0) (IOSystem_ s1)     = s0 == s1
-  (==) (IOTest_ _ _) (IOTest_ _ _)       = False
-  (==) (IOSometimes_ _) (IOSometimes_ _) = False
-  (==) _ _                               = False
+  (==) (IOSystem_ f0 s0) (IOSystem_ f1 s1) = f0 == f1 && s0 == s1
+  (==) (IOTest_ {}) (IOTest_ {})           = False
+  (==) (IOSometimes_ _) (IOSometimes_ _)   = False
+  (==) _ _                                 = False
 
 instance Hashable IODependency_ where
-  hashWithSalt s (IOSystem_ y)                    = hashWithSalt s y
-  hashWithSalt s (IOTest_ n _)                    = hashWithSalt s n
+  hashWithSalt s (IOSystem_ f y)                    = s `hashWithSalt` f
+                                                      `hashWithSalt` y
+  hashWithSalt s (IOTest_ n f _)                  = s `hashWithSalt` n
+                                                    `hashWithSalt` f
   hashWithSalt s (IOSometimes_ (Sometimes n _ _)) = hashWithSalt s n
 
 -- | A system component to an IODependency
@@ -378,6 +383,14 @@ instance Hashable DBusMember where
   hashWithSalt s (Method_ m)   = hashWithSalt s $ formatMemberName m
   hashWithSalt s (Signal_ m)   = hashWithSalt s $ formatMemberName m
   hashWithSalt s (Property_ p) = hashWithSalt s p
+
+-- TODO there is a third type of package: not in aur or official
+-- | A means to fulfill a dependency
+-- For now this is just the name of an Arch Linux package (AUR or official)
+data Fulfillment = Package Bool String deriving (Eq, Show)
+
+instance Hashable Fulfillment where
+  hashWithSalt s (Package a n) = s `hashWithSalt` a `hashWithSalt` n
 
 --------------------------------------------------------------------------------
 -- | Tested dependency tree
@@ -672,7 +685,7 @@ testTree test_ test = go
     liftRight = either (return . Left)
 
 testIODependency :: IODependency p -> FIO (Result p)
-testIODependency (IORead _ t)      = t
+testIODependency (IORead _ _ t)      = t
 testIODependency (IOConst c)       = return $ Right $ PostPass c []
 -- TODO this is a bit odd because this is a dependency that will always
 -- succeed, which kinda makes this pointless. The only reason I would want this
@@ -705,8 +718,8 @@ testIODependency_ :: IODependency_ -> FIO Result_
 testIODependency_ = memoizeIO_ testIODependency'_
 
 testIODependency'_ :: IODependency_ -> FIO Result_
-testIODependency'_ (IOSystem_ s) = io $ readResult_ <$> testSysDependency s
-testIODependency'_ (IOTest_ _ t) = io $ readResult_ <$> t
+testIODependency'_ (IOSystem_ _ s) = io $ readResult_ <$> testSysDependency s
+testIODependency'_ (IOTest_ _ _ t) = io $ readResult_ <$> t
 testIODependency'_ (IOSometimes_ x) = bimap (fmap stripMsg) (fmap stripMsg . snd)
   <$> evalSometimesMsg x
 
@@ -756,33 +769,33 @@ unitType UserUnit   = "user"
 -- Make a special case for these since we end up testing the font alot, and it
 -- would be nice if I can cache them.
 
-fontAlways :: String -> String -> Always FontBuilder
-fontAlways n fam = always1 n (fontFeatureName fam) root fallbackFont
+fontAlways :: String -> String -> [Fulfillment] -> Always FontBuilder
+fontAlways n fam ful = always1 n (fontFeatureName fam) root fallbackFont
   where
-    root = IORoot id $ fontTree fam
+    root = IORoot id $ fontTree fam ful
 
-fontSometimes :: String -> String -> Sometimes FontBuilder
-fontSometimes n fam = sometimes1 n (fontFeatureName fam) root
+fontSometimes :: String -> String -> [Fulfillment]-> Sometimes FontBuilder
+fontSometimes n fam ful = sometimes1 n (fontFeatureName fam) root
   where
-    root = IORoot id $ fontTree fam
+    root = IORoot id $ fontTree fam ful
 
 fontFeatureName :: String -> String
 fontFeatureName n = unwords ["Font family for", singleQuote n]
 
-fontTreeAlt :: String -> Tree IODependency d_ FontBuilder
-fontTreeAlt fam = Or (fontTree fam) $ Only $ IOConst fallbackFont
+fontTreeAlt :: String -> [Fulfillment] -> Tree IODependency d_ FontBuilder
+fontTreeAlt fam ful = Or (fontTree fam ful) $ Only $ IOConst fallbackFont
 
-fontTree :: String -> Tree IODependency d_ FontBuilder
-fontTree = Only . fontDependency
+fontTree :: String -> [Fulfillment] -> Tree IODependency d_ FontBuilder
+fontTree n = Only . fontDependency n
 
-fontTree_ :: String -> IOTree_
-fontTree_ = Only_ . fontDependency_
+fontTree_ :: String -> [Fulfillment] -> IOTree_
+fontTree_ n = Only_ . fontDependency_ n
 
-fontDependency :: String -> IODependency FontBuilder
-fontDependency fam = IORead (fontTestName fam) $ testFont fam
+fontDependency :: String -> [Fulfillment] -> IODependency FontBuilder
+fontDependency fam ful = IORead (fontTestName fam) ful $ testFont fam
 
-fontDependency_ :: String -> IODependency_
-fontDependency_ fam = IOTest_ (fontTestName fam) $ voidRead <$> testFont' fam
+fontDependency_ :: String -> [Fulfillment] -> IODependency_
+fontDependency_ fam ful = IOTest_ (fontTestName fam) ful $ voidRead <$> testFont' fam
 
 fontTestName :: String -> String
 fontTestName fam = unwords ["test if font", singleQuote fam, "exists"]
@@ -824,8 +837,10 @@ listInterfaces = fromRight [] <$> tryIOError (listDirectory sysfsNet)
 sysfsNet :: FilePath
 sysfsNet = "/sys/class/net"
 
+-- ASSUME there are no (non-base) packages required to make these interfaces
+-- work (all at the kernel level)
 readInterface :: String -> (String -> Bool) -> IODependency String
-readInterface n f = IORead n go
+readInterface n f = IORead n [] go
   where
     go = io $ do
       ns <- filter f <$> listInterfaces
@@ -838,8 +853,9 @@ readInterface n f = IORead n go
 --------------------------------------------------------------------------------
 -- | Misc testers
 
-socketExists :: String -> IO FilePath -> IODependency_
-socketExists n = IOTest_ ("test if " ++ n ++ " socket exists") . socketExists'
+socketExists :: String -> [Fulfillment] -> IO FilePath -> IODependency_
+socketExists n ful = IOTest_ ("test if " ++ n ++ " socket exists") ful
+  . socketExists'
 
 socketExists' :: IO FilePath -> IO (Maybe Msg)
 socketExists' getPath = do
@@ -864,8 +880,8 @@ testDBusDependency_ :: Client -> DBusDependency_ -> FIO Result_
 testDBusDependency_ cl = memoizeDBus_ (testDBusDependency'_ cl)
 
 testDBusDependency'_ :: Client -> DBusDependency_ -> FIO Result_
-testDBusDependency'_ client (Bus bus) = io $ do
-  ret <- callMethod client queryBus queryPath queryIface queryMem
+testDBusDependency'_ cl (Bus _ bus) = io $ do
+  ret <- callMethod cl queryBus queryPath queryIface queryMem
   return $ case ret of
         Left e    -> Left [Msg Error e]
         Right b -> let ns = bodyGetNames b in
@@ -882,8 +898,8 @@ testDBusDependency'_ client (Bus bus) = io $ do
     bodyGetNames [v] = fromMaybe [] $ fromVariant v :: [String]
     bodyGetNames _   = []
 
-testDBusDependency'_ client (Endpoint busname objpath iface mem) = io $ do
-  ret <- callMethod client busname objpath introspectInterface introspectMethod
+testDBusDependency'_ cl (Endpoint _ busname objpath iface mem) = io $ do
+  ret <- callMethod cl busname objpath introspectInterface introspectMethod
   return $ case ret of
         Left e     -> Left [Msg Error e]
         Right body -> procBody body
@@ -963,24 +979,26 @@ sometimesIO_ fn n t x = sometimes1 fn n $ IORoot_ x t
 sometimesIO :: String -> String -> IOTree p -> (p -> a) -> Sometimes a
 sometimesIO fn n t x = sometimes1 fn n $ IORoot x t
 
-sometimesExe :: MonadIO m => String -> String -> Bool -> FilePath -> Sometimes (m ())
-sometimesExe fn n sys path = sometimesExeArgs fn n sys path []
+sometimesExe :: MonadIO m => String -> String -> [Fulfillment] -> Bool
+  -> FilePath -> Sometimes (m ())
+sometimesExe fn n ful sys path = sometimesExeArgs fn n ful sys path []
 
-sometimesExeArgs :: MonadIO m => String -> String -> Bool -> FilePath
-  -> [String] -> Sometimes (m ())
-sometimesExeArgs fn n sys path args =
-  sometimesIO_ fn n (Only_ (IOSystem_ $ Executable sys path)) $ spawnCmd path args
+sometimesExeArgs :: MonadIO m => String -> String -> [Fulfillment] -> Bool
+  -> FilePath -> [String] -> Sometimes (m ())
+sometimesExeArgs fn n ful sys path args =
+  sometimesIO_ fn n (Only_ (IOSystem_ ful $ Executable sys path)) $ spawnCmd path args
 
 sometimesDBus :: Maybe Client -> String -> String -> Tree_ DBusDependency_
   -> (Client -> a) -> Sometimes a
 sometimesDBus c fn n t x = sometimes1 fn n $ DBusRoot_ x t c
 
-sometimesEndpoint :: MonadIO m => String -> String -> BusName -> ObjectPath -> InterfaceName
-  -> MemberName -> Maybe Client -> Sometimes (m ())
-sometimesEndpoint fn name busname path iface mem client =
-  sometimesDBus client fn name deps cmd
+sometimesEndpoint :: MonadIO m => String -> String -> [Fulfillment]
+  -> BusName -> ObjectPath -> InterfaceName -> MemberName -> Maybe Client
+  -> Sometimes (m ())
+sometimesEndpoint fn name ful busname path iface mem cl =
+  sometimesDBus cl fn name deps cmd
   where
-    deps = Only_ $ Endpoint busname path iface $ Method_ mem
+    deps = Only_ $ Endpoint ful busname path iface $ Method_ mem
     cmd c = io $ void $ callMethod c busname path iface mem
 
 --------------------------------------------------------------------------------
@@ -1011,35 +1029,38 @@ readResult_ _        = Right []
 --------------------------------------------------------------------------------
 -- | IO Dependency Constructors
 
-exe :: Bool -> String -> IODependency_
-exe b = IOSystem_ . Executable b
+exe :: Bool -> [Fulfillment] -> String -> IODependency_
+exe b ful = IOSystem_ ful . Executable b
 
-sysExe :: String -> IODependency_
+sysExe :: [Fulfillment] -> String -> IODependency_
 sysExe = exe True
 
-localExe :: String -> IODependency_
+localExe :: [Fulfillment] -> String -> IODependency_
 localExe = exe False
 
-pathR :: String -> IODependency_
-pathR n = IOSystem_ $ AccessiblePath n True False
+path' :: Bool -> Bool -> String -> [Fulfillment] -> IODependency_
+path' r w n ful = IOSystem_ ful $ AccessiblePath n r w
 
-pathW :: String -> IODependency_
-pathW n = IOSystem_ $ AccessiblePath n False True
+pathR :: String -> [Fulfillment] -> IODependency_
+pathR = path' True False
 
-pathRW :: String -> IODependency_
-pathRW n = IOSystem_ $ AccessiblePath n True True
+pathW :: String -> [Fulfillment] -> IODependency_
+pathW = path' False True
 
-sysd :: UnitType -> String -> IODependency_
-sysd u = IOSystem_ . Systemd u
+pathRW :: String -> [Fulfillment] -> IODependency_
+pathRW = path' True True
 
-sysdUser :: String -> IODependency_
+sysd :: UnitType -> [Fulfillment] -> String -> IODependency_
+sysd u ful = IOSystem_ ful . Systemd u
+
+sysdUser :: [Fulfillment] -> String -> IODependency_
 sysdUser = sysd UserUnit
 
-sysdSystem :: String -> IODependency_
+sysdSystem :: [Fulfillment] -> String -> IODependency_
 sysdSystem = sysd SystemUnit
 
-process :: String -> IODependency_
-process = IOSystem_ . Process
+process :: [Fulfillment] -> String -> IODependency_
+process ful = IOSystem_ ful . Process
 
 --------------------------------------------------------------------------------
 -- | Printing
@@ -1140,48 +1161,72 @@ dataTree_ f_ = go
 
 dataIODependency :: IODependency p -> DependencyData
 dataIODependency d = first Q $ case d of
-  (IORead n _)                      -> ("ioread", [("desc", JSON_Q $ Q n)])
+  (IORead n f _)                    -> ("ioread", [ ("desc", JSON_Q $ Q n)
+                                                  , ("fulfilment", JSON_UQ
+                                                      $ dataFulfillments f)
+                                                  ])
   (IOConst _)                       -> ("const", [])
   -- TODO what if this isn't required?
-  (IOSometimes (Sometimes n _ _) _) -> ("sometimes", [("name", JSON_Q $ Q n)])
+  (IOSometimes (Sometimes n _ _) _) -> ("sometimes", [ ("name", JSON_Q $ Q n)])
   (IOAlways (Always n _) _)         -> ("always", [("name", JSON_Q $ Q n)])
 
 dataIODependency_ :: IODependency_ -> DependencyData
 dataIODependency_ d = case d of
-  (IOSystem_ s)    -> dataSysDependency s
-  (IOSometimes_ _) -> (Q "sometimes", [])
-  (IOTest_ desc _) -> (Q "iotest", [("desc", JSON_Q $ Q desc)])
+  (IOSystem_ f s)    -> dataSysDependency f s
+  (IOSometimes_ _)   -> (Q "sometimes", [])
+  (IOTest_ desc f _) -> (Q "iotest", [ ("desc", JSON_Q $ Q desc)
+                                     , ("fulfilment", JSON_UQ $ dataFulfillments f)
+                                     ])
 
-dataSysDependency :: SystemDependency -> DependencyData
-dataSysDependency d = first Q $
+dataSysDependency :: [Fulfillment] -> SystemDependency -> DependencyData
+dataSysDependency f d = first Q $
   case d of
     (Executable sys path) -> ("executable", [ ("system", JSON_UQ $ jsonBool sys)
                                             , ("path", JSON_Q $ Q path)
+                                            , f'
                                             ])
     (AccessiblePath p r w) -> ("path", [ ("path", JSON_Q $ Q p)
                                        , ("readable", JSON_UQ $ jsonBool r)
                                        , ("writable", JSON_UQ $ jsonBool w)
+                                       , f'
                                        ])
     (Systemd t n) -> ("systemd", [ ("unittype", JSON_Q $ Q $ unitType t)
-                                 , ("unit", JSON_Q $ Q n)])
-    (Process n) -> ("process", [("name", JSON_Q $ Q n)])
+                                 , ("unit", JSON_Q $ Q n)
+                                 , f'
+                                 ])
+    (Process n) -> ("process", [("name", JSON_Q $ Q n), f'])
+  where
+    f' = ("fulfilment", JSON_UQ $ dataFulfillments f)
+
 
 dataDBusDependency :: DBusDependency_ -> DependencyData
 dataDBusDependency d =
   case d of
     (DBusIO i)         -> dataIODependency_ i
-    (Bus b)            -> (Q "bus", [("busname", JSON_Q $ Q $ formatBusName b)])
-    (Endpoint b o i m) -> let (mt, mn) = memberData m
+    (Bus f b)            -> (Q "bus", [ ("busname", JSON_Q $ Q $ formatBusName b)
+                                      , ("fulfilment", JSON_UQ $ dataFulfillments f)
+                                      ])
+    (Endpoint f b o i m) -> let (mt, mn) = memberData m
       in (Q "endpoint", [ ("busname", JSON_Q $ Q $ formatBusName b)
                         , ("objectpath", JSON_Q $ Q $ formatObjectPath o)
                         , ("interface", JSON_Q $ Q $ formatInterfaceName i)
                         , ("membertype", JSON_Q $ Q mt)
                         , ("membername", JSON_Q $ Q mn)
+                        , ("fulfilment", JSON_UQ $ dataFulfillments f)
                         ])
   where
     memberData (Method_ n)   = ("method", formatMemberName n)
     memberData (Signal_ n)   = ("signal", formatMemberName n)
     memberData (Property_ n) = ("property", n)
+
+dataFulfillments :: [Fulfillment] -> JSONUnquotable
+dataFulfillments = jsonArray . fmap (JSON_UQ . dataFulfillment)
+
+dataFulfillment :: Fulfillment -> JSONUnquotable
+dataFulfillment (Package a n) = jsonObject [ ("type", JSON_Q $ Q "package")
+                                           , ("official", JSON_UQ $ jsonBool a)
+                                           , ("name", JSON_Q $ Q n)
+                                           ]
 
 fromMsg :: Msg -> JSONUnquotable
 fromMsg (Msg e s) = jsonObject [ ("level", JSON_Q $ Q $ show e)
