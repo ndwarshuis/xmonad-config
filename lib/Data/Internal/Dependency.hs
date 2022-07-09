@@ -284,7 +284,8 @@ data Subfeature f = Subfeature
 
 -- | Loglevel at which feature testing should be reported
 -- This is currently not used for anything important
-data LogLevel = Silent | Error | Warn | Debug deriving (Eq, Show, Ord, Generic)
+data LogLevel = Silent | Error | Warn | Debug | Info
+  deriving (Eq, Show, Ord, Generic)
 
 type SubfeatureRoot a = Subfeature (Root a)
 
@@ -444,43 +445,33 @@ data PostFail = PostFail [Msg] | PostMissing Msg
 -- that each repeated test without caching would be run in such close succession
 -- that the results will always be the same.
 
+-- TODO cache DBus calls
 emptyCache :: Cache
--- emptyCache = Cache H.empty H.empty H.empty
 emptyCache = Cache H.empty H.empty
 
 memoizeIO_ :: (IODependency_ -> FIO Result_) -> IODependency_ -> FIO Result_
 memoizeIO_ f d = do
   m <- gets cIO_
   case H.lookup d m of
-    (Just r) -> return r
+    (Just r) -> return $ info "retrieving from to cache" r
     Nothing  -> do
-      -- io $ putStrLn $ "not using cache for " ++ show d
-      r <- f d
+      r <- info "adding to cache" <$> f d
       modify (\s -> s { cIO_ = H.insert d r (cIO_ s) })
       return r
-
--- memoizeDBus_ :: SafeClient c => (DBusDependency_ c -> FIO Result_)
---   -> DBusDependency_ c -> FIO Result_
--- memoizeDBus_ get f d = do
---   m <- gets cDBus_
---   case H.lookup d m of
---     (Just r) -> return r
---     Nothing  -> do
---       -- io $ putStrLn $ "not using cache for " ++ show d
---       r <- f d
---       modify (\s -> s { cDBus_ = H.insert d r (cDBus_ s) })
---       return r
+  where
+    info m = fmap (++ [Msg Info m])
 
 memoizeFont :: (String -> IO (Result FontBuilder)) -> String -> FIO (Result FontBuilder)
 memoizeFont f d = do
   m <- gets cFont
   case H.lookup d m of
-    (Just r) -> return r
+    (Just r) -> return $ info "retrieving from cache" r
     Nothing  -> do
-      -- io $ putStrLn $ "not using cache for " ++ show d
-      r <- io $ f d
+      r <- io $ info "adding to cache" <$> f d
       modify (\s -> s { cFont = H.insert d r (cFont s) })
       return r
+  where
+    info m = fmap (`addMsgs` [Msg Info m])
 
 --------------------------------------------------------------------------------
 -- | Configuration
