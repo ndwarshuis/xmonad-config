@@ -236,7 +236,7 @@ f5Tag = "F5VPN"
 gimpDynamicWorkspace :: Sometimes DynWorkspace
 gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
   where
-    tree = Only_ $ sysExe [Package True "gimp"] "gimp"
+    tree = Only_ $ sysExe [Package True "gimp"] "gimp-2.10"
     dw = DynWorkspace
          { dwName = "Gimp"
          , dwTag = gimpTag
