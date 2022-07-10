@@ -193,4 +193,5 @@ promptTheme fb = P.def
   , P.promptBorderWidth = 1
   , P.height            = 35
   , P.position          = P.CenteredAt 0.5 0.5
+  , P.historySize       = 0
   }
