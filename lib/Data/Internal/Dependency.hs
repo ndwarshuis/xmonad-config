@@ -1164,7 +1164,7 @@ dataTree_ f_ = go
 dataIODependency :: IODependency p -> DependencyData
 dataIODependency d = first Q $ case d of
   (IORead n f _)                    -> ("ioread", [ ("desc", JSON_Q $ Q n)
-                                                  , ("fulfilment", JSON_UQ
+                                                  , ("fulfillment", JSON_UQ
                                                       $ dataFulfillments f)
                                                   ])
   (IOConst _)                       -> ("const", [])
@@ -1177,7 +1177,7 @@ dataIODependency_ d = case d of
   (IOSystem_ f s)    -> dataSysDependency f s
   (IOSometimes_ _)   -> (Q "sometimes", [])
   (IOTest_ desc f _) -> (Q "iotest", [ ("desc", JSON_Q $ Q desc)
-                                     , ("fulfilment", JSON_UQ $ dataFulfillments f)
+                                     , ("fulfillment", JSON_UQ $ dataFulfillments f)
                                      ])
 
 dataSysDependency :: [Fulfillment] -> SystemDependency -> DependencyData
@@ -1198,7 +1198,7 @@ dataSysDependency f d = first Q $
                                  ])
     (Process n) -> ("process", [("name", JSON_Q $ Q n), f'])
   where
-    f' = ("fulfilment", JSON_UQ $ dataFulfillments f)
+    f' = ("fulfillment", JSON_UQ $ dataFulfillments f)
 
 
 dataDBusDependency :: DBusDependency_ c -> DependencyData
@@ -1206,7 +1206,7 @@ dataDBusDependency d =
   case d of
     (DBusIO i)         -> dataIODependency_ i
     (Bus f b)            -> (Q "bus", [ ("busname", JSON_Q $ Q $ formatBusName b)
-                                      , ("fulfilment", JSON_UQ $ dataFulfillments f)
+                                      , ("fulfillment", JSON_UQ $ dataFulfillments f)
                                       ])
     (Endpoint f b o i m) -> let (mt, mn) = memberData m
       in (Q "endpoint", [ ("busname", JSON_Q $ Q $ formatBusName b)
@@ -1214,7 +1214,7 @@ dataDBusDependency d =
                         , ("interface", JSON_Q $ Q $ formatInterfaceName i)
                         , ("membertype", JSON_Q $ Q mt)
                         , ("membername", JSON_Q $ Q mn)
-                        , ("fulfilment", JSON_UQ $ dataFulfillments f)
+                        , ("fulfillment", JSON_UQ $ dataFulfillments f)
                         ])
   where
     memberData (Method_ n)   = ("method", formatMemberName n)
