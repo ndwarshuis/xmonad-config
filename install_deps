@@ -2,9 +2,37 @@
 
 ## Install all pkgs required for xmonad to run at full capacity
 
-xmonad_pkgs=(autorandr feh xorg-server xorg-xset libpulse flameshot
-             playerctl acpid ttf-symbola-free ttf-symbola-free
-             ttf-dejavu numlockx picom i3lock-color
-             xorg-xrandr xss-lock)
+# these are extra packages that pertain to processes outside xmonad but are
+# still required/desired to make it work correctly
+xmonad_pkgs=(autorandr picom)
 
-yay --needed --noconfirm --norebuild --removemake -S "${xmonad_pkgs[@]}"
+query='.[].success |
+objects |
+.root.tree |
+..|.left?.data, ..|.right?.data, .data? |
+select(. != null) |
+.fulfillment |
+select(. != null) |
+add | select(. != null)'
+
+raw=$(xmonad --deps | jq "$query")
+
+jq_type () {
+    echo "$1" | jq --raw-output "select(.type==\"$2\") | .name" | sort | uniq
+}
+
+mapfile -t official < <(jq_type "$raw" "Official")
+mapfile -t local < <(jq_type "$raw" "AUR")
+
+if ! pacman -Si "${official[@]}" > /dev/null; then
+    echo "At least one official package doesn't exist."
+    exit 1
+fi
+
+if ! yay -Si "${local[@]}"; then
+    echo "At least one local package doesn't exist."
+    exit 1
+fi
+    
+sudo pacman --noconfirm -S "${xmonad_pkgs[@]}" "${official[@]}"
+yay --needed --noconfirm --norebuild --removemake -S "${local[@]}"
