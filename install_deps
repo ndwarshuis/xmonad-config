@@ -1,10 +1,22 @@
 #!/bin/bash
 
-## Install all pkgs required for xmonad to run at full capacity
+## Build xmonad and install packages to make it run at full capacity
 
-# these are extra packages that pertain to processes outside xmonad but are
-# still required/desired to make it work correctly
-xmonad_pkgs=(autorandr picom)
+prebuild () {
+    # TODO this can be integrated into stack with nix
+    # for x11
+    make_pkgs=(libx11 libxrandr libxss alsa-lib)
+    # for x11-xft
+    make_pkgs+=(libxft)
+    # for xmobar
+    make_pkgs+=(libxpm)
+
+    sudo pacman --noconfirm -S "${make_pkgs[@]}"
+}
+
+build () {
+    stack install
+}
 
 query='.[].success |
 objects |
@@ -15,24 +27,34 @@ select(. != null) |
 select(. != null) |
 add | select(. != null)'
 
-raw=$(xmonad --deps | jq "$query")
-
 jq_type () {
     echo "$1" | jq --raw-output "select(.type==\"$2\") | .name" | sort | uniq
 }
 
-mapfile -t official < <(jq_type "$raw" "Official")
-mapfile -t local < <(jq_type "$raw" "AUR")
+postbuild () {
+    # these are extra packages that pertain to processes outside xmonad but are
+    # still required/desired to make it work correctly
+    xmonad_pkgs=(xinit autorandr picom)
 
-if ! pacman -Si "${official[@]}" > /dev/null; then
-    echo "At least one official package doesn't exist."
-    exit 1
-fi
+    raw=$(xmonad --deps | jq "$query")
 
-if ! yay -Si "${local[@]}"; then
-    echo "At least one local package doesn't exist."
-    exit 1
-fi
+    mapfile -t official < <(jq_type "$raw" "Official")
+    mapfile -t local < <(jq_type "$raw" "AUR")
+
+    if ! pacman -Si "${official[@]}" > /dev/null; then
+        echo "At least one official package doesn't exist."
+        exit 1
+    fi
+
+    if ! yay -Si "${local[@]}"; then
+        echo "At least one local package doesn't exist."
+        exit 1
+    fi
     
-sudo pacman --noconfirm -S "${xmonad_pkgs[@]}" "${official[@]}"
-yay --needed --noconfirm --norebuild --removemake -S "${local[@]}"
+    sudo pacman --noconfirm -S "${xmonad_pkgs[@]}" "${official[@]}"
+    yay --needed --noconfirm --norebuild --removemake -S "${local[@]}"
+}
+
+prebuild
+build
+postbuild
