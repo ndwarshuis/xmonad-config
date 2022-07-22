@@ -143,7 +143,7 @@ runTMux = sometimesIO_ "terminal multiplexer" "tmux" deps act
       return $ t </> "tmux-" ++ show u </> "default"
 
 runCalc :: SometimesX
-runCalc = sometimesIO_ "calculator" "R" deps act
+runCalc = sometimesIO_ "calculator" "bc" deps act
   where
     deps = toAnd_ (sysExe myTermPkgs myTerm) (sysExe [Package Official "bc"] myCalc)
     act = spawnCmd myTerm ["-e", myCalc, "-l"]
