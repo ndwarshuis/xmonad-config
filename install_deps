@@ -5,7 +5,11 @@
 prebuild () {
     # TODO this can be integrated into stack with nix
     # for x11
-    make_pkgs=(libx11 libxrandr libxss alsa-lib)
+    make_pkgs=(libx11 libxrandr libxss)
+    # for alsa
+    make_pkgs=(alsa-lib)
+    # for iwlib
+    make_pkgs=(wireless_tools)
     # for x11-xft
     make_pkgs+=(libxft)
     # for xmobar
