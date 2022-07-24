@@ -71,6 +71,7 @@ executable xmonad
                  , xmonad >= 0.13
                  , xmonad-contrib >= 0.13
                  , lifted-base >= 0.2.3.12
+                 , directory >= 1.3.3.0
     default-language: Haskell2010
     ghc-options: -Wall -Werror -Wpartial-fields -fno-warn-missing-signatures -threaded
 

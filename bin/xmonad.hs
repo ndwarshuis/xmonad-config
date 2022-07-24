@@ -20,8 +20,10 @@ import           Graphics.X11.Types
 import           Graphics.X11.Xlib.Atom
 import           Graphics.X11.Xlib.Extras
 
+import           System.Directory
 import           System.Environment
 import           System.IO
+import           System.IO.Error
 import           System.Process
 
 import           XMonad
@@ -75,10 +77,23 @@ run :: IO ()
 run = do
   db <- connectDBusX
   conf <- withCache $ evalConf db
-  ds <- getDirectories
+  ds <- getCreateDirectories
   -- IDK why this is necessary; nothing prior to this will print if missing
   hFlush stdout
   launch conf ds
+
+getCreateDirectories :: IO Directories
+getCreateDirectories = do
+  ds <- getDirectories
+  mapM_ (createIfMissing ds) [dataDir, cfgDir, cacheDir]
+  return ds
+  where
+    createIfMissing ds f = do
+      let d = f ds
+      r <- tryIOError $ createDirectoryIfMissing True d
+      case r of
+        (Left e) -> print e
+        _        -> return ()
 
 data FeatureSet = FeatureSet
   { fsKeys          :: ThreadState -> DBusState -> [KeyGroup FeatureX]
