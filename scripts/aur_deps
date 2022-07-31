@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Print list of packages to be installed via yay
+
+mapfile -t local < <(./.query_pkgs "AUR")
+
+if ! yay -Si "${local[@]}" > /dev/null; then
+    echo "At least one local package doesn't exist."
+    exit 1
+fi
+
+echo "${local[@]}"

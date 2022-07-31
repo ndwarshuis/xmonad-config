@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Print list of packages to be installed via pacman
+
+# these are extra packages that pertain to processes outside xmonad but are
+# still required/desired to make it work correctly
+xmonad_pkgs=(xinit autorandr picom)
+
+mapfile -t official < <(./.query_pkgs "Official")
+
+if ! pacman -Si "${official[@]}" > /dev/null; then
+    echo "At least one official package doesn't exist."
+    exit 1
+fi
+
+echo "${xmonad_pkgs[@]}" "${official[@]}"
