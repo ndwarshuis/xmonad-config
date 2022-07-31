@@ -18,3 +18,33 @@ Built just for me...although you may fork if you like it ;)
    * selecting Wifi networks (networkmanager_dmenu)
    * clipboard management (greenclip)
    * mounting disks
+
+# Installation
+
+The "easy" way will only work on Arch out of the box.
+
+After cloning this repo, move to the root of this repo and install the build
+dependency packages:
+
+```
+pacman -S --needed - < make_pkgs
+```
+
+Build/install xmonad/xmobar binaries:
+
+```
+stack install
+```
+
+Install official runtime dependencies:
+
+```
+pacman -S --needed $(./scripts/pacman_deps)
+```
+
+Install unofficial runtime dependencies with your favorite AUR helper (which is
+obviously yay):
+
+```
+yay -S $(./scripts/aur_deps)
+```
