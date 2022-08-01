@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Print list of packages to be installed via pacman
+
+query='.[].success |
+objects |
+.root.tree |
+..|.left?.data, ..|.right?.data, .data? |
+select(. != null) |
+.fulfillment |
+select(. != null) |
+add | select(. != null)'
+
+jq_type () {
+    echo "$1" | jq --raw-output "select(.type==\"$2\") | .name" | sort | uniq
+}
+
+raw=$(xmonad --deps | jq "$query")
+
+jq_type "$raw" "$1"
+
+# these are extra packages that pertain to processes outside xmonad but are
+# still required/desired to make it work correctly
+xmonad_pkgs=(xorg-xinit autorandr picom)
+
+mapfile -t official < <(jq_type "$raw" "Official")
+mapfile -t local < <(jq_type "$raw" "AUR")
+
+if ! pacman -Si "${official[@]}" > /dev/null; then
+    echo "At least one official package doesn't exist."
+    exit 1
+fi
+
+if ! yay -Si "${local[@]}" > /dev/null; then
+    echo "At least one local package doesn't exist."
+    exit 1
+fi
+
+echo "${xmonad_pkgs[@]}" "${official[@]}" "${local[@]}" | tr ' ' '\n'
