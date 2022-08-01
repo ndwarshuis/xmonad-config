@@ -176,7 +176,7 @@ getWireless = Sometimes "wireless status indicator" xpfWireless
   [Subfeature (IORoot wirelessCmd $ Only readWireless) "sysfs path"]
 
 getEthernet :: Maybe SysClient -> BarFeature
-getEthernet cl = iconDBus "ethernet status indicator" (const True) root tree
+getEthernet cl = iconDBus "ethernet status indicator" xpfEthernet root tree
   where
     root useIcon tree' = DBusRoot (const . ethernetCmd useIcon) tree' cl
     tree = And1 (Only readEthernet) (Only_ devDep)
