@@ -265,9 +265,11 @@ runToggleBluetooth cl = Sometimes "bluetooth toggle" xpfBluetooth
       #!&& fmtNotifyCmd defNoteInfo { body = Just $ Text "bluetooth powered $a" }
 
 runToggleEthernet :: SometimesX
-runToggleEthernet = sometimes1 "ethernet toggle" "nmcli" $ IORoot (spawn . cmd) $
-  And1 (Only readEthernet) (Only_ $ sysExe networkManagerPkgs "nmcli")
+runToggleEthernet = Sometimes "ethernet toggle" xpfEthernet
+  [Subfeature root "nmcli"]
   where
+    root = IORoot (spawn . cmd) $ And1 (Only readEthernet) $ Only_
+      $ sysExe networkManagerPkgs "nmcli"
     -- TODO make this less noisy
     cmd iface =
       "nmcli -g GENERAL.STATE device show " ++ iface ++ " | grep -q disconnected"

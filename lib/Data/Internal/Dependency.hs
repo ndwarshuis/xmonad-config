@@ -494,6 +494,7 @@ data XPFeatures = XPFeatures
   { xpfOptimus        :: Bool
   , xpfVirtualBox     :: Bool
   , xpfXSANE          :: Bool
+  , xpfEthernet       :: Bool
   , xpfWireless       :: Bool
   , xpfVPN            :: Bool
   , xpfBluetooth      :: Bool
@@ -508,6 +509,7 @@ instance FromJSON XPFeatures where
     <$> o .:+ "optimus"
     <*> o .:+ "virtualbox"
     <*> o .:+ "xsane"
+    <*> o .:+ "ethernet"
     <*> o .:+ "wireless"
     <*> o .:+ "vpn"
     <*> o .:+ "bluetooth"
@@ -527,6 +529,7 @@ defXPFeatures = XPFeatures
   { xpfOptimus = False
   , xpfVirtualBox = False
   , xpfXSANE = False
+  , xpfEthernet = False
   , xpfWireless = False
   -- TODO this might be broken down into different flags (expressvpn, etc)
   , xpfVPN = False
