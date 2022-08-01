@@ -16,6 +16,7 @@ import           Data.Internal.Dependency
 import           Data.List
 import           Data.Maybe
 
+import           System.Environment
 import           System.Exit
 import           System.IO
 import           System.IO.Error
@@ -40,11 +41,21 @@ import           XMonad.Internal.Process                        hiding (CmdSpec)
 import qualified XMonad.Internal.Theme                          as T
 import           Xmobar                                         hiding
     ( iconOffset
+    , run
     )
 import           Xmobar.Plugins.Common
 
+
 main :: IO ()
-main = do
+main = getArgs >>= parse
+
+parse :: [String] -> IO ()
+parse []         = run
+parse ["--deps"] = withCache printDeps
+parse _          = usage
+
+run :: IO ()
+run = do
   db <- connectDBus
   c <- withCache $ evalConfig db
   disconnectDBus db
@@ -62,6 +73,20 @@ evalConfig db = do
   (ifs, ios) <- getIconFonts
   d <- io $ cfgDir <$> getDirectories
   return $ config bf ifs ios cs d
+
+printDeps :: FIO ()
+printDeps = do
+  db <- io connectDBus
+  fs <- mapM dumpFeature $ allFeatures db
+  let (UQ u) = jsonArray $ fmap JSON_UQ fs
+  io $ putStrLn u
+  io $ disconnectDBus db
+
+usage :: IO ()
+usage = putStrLn $ intercalate "\n"
+  [ "xmobar: run greatest taskbar"
+  , "xmobar --deps: print dependencies"
+  ]
 
 --------------------------------------------------------------------------------
 -- | toplevel configuration
@@ -151,8 +176,13 @@ getAllCommands right = BarRegions
   }
 
 rightPlugins :: DBusState -> FIO [Maybe CmdSpec]
-rightPlugins DBusState { dbSesClient = ses, dbSysClient = sys }
-  = mapM evalFeature
+rightPlugins db = mapM evalFeature $ allFeatures db
+  ++ [always' "date indicator" dateCmd]
+  where
+    always' n = Right . Always n . Always_ . FallbackAlone
+
+allFeatures :: DBusState -> [Feature CmdSpec]
+allFeatures DBusState { dbSesClient = ses, dbSysClient = sys } =
   [ Left getWireless
   , Left $ getEthernet sys
   , Left $ getVPN sys
@@ -163,10 +193,7 @@ rightPlugins DBusState { dbSesClient = ses, dbSysClient = sys }
   , Left $ getCk ses
   , Left $ getSs ses
   , Right getLock
-  , always' "date indicator" dateCmd
   ]
-  where
-    always' n = Right . Always n . Always_ . FallbackAlone
 
 type BarFeature = Sometimes CmdSpec
 
