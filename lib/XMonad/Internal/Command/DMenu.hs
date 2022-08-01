@@ -139,9 +139,11 @@ runWinMenu :: SometimesX
 runWinMenu = spawnDmenuCmd "window switcher" ["-show", "window"]
 
 runNetMenu :: Maybe SysClient -> SometimesX
-runNetMenu cl =
-  sometimesDBus cl "network control menu" "rofi NetworkManager" tree cmd
+runNetMenu cl = Sometimes "network control menu" enabled
+  [Subfeature root "network control menu"]
   where
+    enabled f = xpfEthernet f || xpfWireless f || xpfVPN f
+    root = DBusRoot_ cmd tree cl
     cmd _ = spawnCmd myDmenuNetworks $ themeArgs "#ff3333"
     tree = And_ (Only_ $ Bus networkManagerPkgs networkManagerBus)
       $ toAnd_ (DBusIO dmenuDep) $ DBusIO
