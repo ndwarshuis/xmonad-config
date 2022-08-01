@@ -15,9 +15,7 @@ jq_type () {
     echo "$1" | jq --raw-output "select(.type==\"$2\") | .name" | sort | uniq
 }
 
-raw=$(xmonad --deps | jq "$query")
-
-jq_type "$raw" "$1"
+raw=$(echo -e "$(xmonad --deps | jq "$query")\n$(xmobar --deps | jq "$query")")
 
 # these are extra packages that pertain to processes outside xmonad but are
 # still required/desired to make it work correctly
