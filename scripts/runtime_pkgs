@@ -19,7 +19,7 @@ raw=$(echo -e "$(xmonad --deps | jq "$query")\n$(xmobar --deps | jq "$query")")
 
 # these are extra packages that pertain to processes outside xmonad but are
 # still required/desired to make it work correctly
-xmonad_pkgs=(xorg-xinit autorandr picom)
+xmonad_pkgs=(xorg-xinit xorg-server autorandr picom)
 
 mapfile -t official < <(jq_type "$raw" "Official")
 mapfile -t local < <(jq_type "$raw" "AUR")
