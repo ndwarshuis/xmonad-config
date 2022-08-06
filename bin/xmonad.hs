@@ -567,14 +567,21 @@ internalBindings dws c =
     ]
 
   , KeyGroup "Screens"
-    [ KeyBinding "M-l" "move up screen" nextScreen
-    , KeyBinding "M-h" "move down screen" prevScreen
-    , KeyBinding "M-C-l" "follow client up screen" $ shiftNextScreen >> nextScreen
-    , KeyBinding "M-C-h" "follow client down screen" $ shiftPrevScreen >> prevScreen
-    , KeyBinding "M-S-l" "shift workspace up screen" $ swapNextScreen >> nextScreen
-    , KeyBinding "M-S-h" "shift workspace down screen" $ swapPrevScreen >> prevScreen
+    [ KeyBinding "M-l" "move up screen" nextScr
+    , KeyBinding "M-h" "move down screen" prevScr
+    , KeyBinding "M-C-l" "follow client up screen" $ nextScr' W.shift
+    , KeyBinding "M-C-h" "follow client down screen" $ prevScr' W.shift
+    , KeyBinding "M-S-l" "shift workspace up screen" $ nextScr' W.greedyView
+    , KeyBinding "M-S-h" "shift workspace down screen" $ prevScr' W.greedyView
     ]
   ]
+  where
+    prev = onPrevNeighbour horizontalScreenOrderer
+    next = onNextNeighbour horizontalScreenOrderer
+    prevScr = prev W.view
+    nextScr = next W.view
+    prevScr' f = prev f >> prevScr
+    nextScr' f = next f >> nextScr
 
 mkNamedSubmap :: XConfig Layout ->  KeyGroup (X ()) -> [((KeyMask, KeySym), NamedAction)]
 mkNamedSubmap c KeyGroup { kgHeader = h, kgBindings = b } =
