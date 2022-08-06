@@ -464,10 +464,9 @@ logXinerama h = withWindowSet $ \ws -> io
 compareXCoord
   :: W.Screen i1 l1 a1 ScreenId ScreenDetail
      -> W.Screen i2 l2 a2 ScreenId ScreenDetail -> Ordering
-compareXCoord s0 s1 = compare x0 x1
+compareXCoord s0 s1 = compare (go s0) (go s1)
   where
-    (_, Rectangle x0 _ _ _) = getScreenIdAndRectangle s0
-    (_, Rectangle x1 _ _ _) = getScreenIdAndRectangle s1
+    go = (\(Rectangle x _ _ _) -> x) . snd . getScreenIdAndRectangle
 
 --------------------------------------------------------------------------------
 -- | Managehook configuration
