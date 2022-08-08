@@ -1,5 +1,6 @@
 libx11
 libxrandr
+libxinerama
 libxss
 alsa-lib
 wireless_tools
