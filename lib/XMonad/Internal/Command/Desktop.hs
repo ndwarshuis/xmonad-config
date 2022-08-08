@@ -202,7 +202,9 @@ featureSound n file pre post =
   sometimesIO_ ("volume " ++ n ++ " control") "paplay" tree
   $ pre >> playSound file >> post
   where
-    tree = Only_ $ sysExe [Package Official "libpulse"] "paplay"
+    -- ASSUME pulseaudio pulls in libpulse as a dep; pulseaudio itself is needed
+    -- to play sound (duh) but libpulse is the package with the paplay binary
+    tree = Only_ $ sysExe [Package Official "pulseaudio"] "paplay"
 
 runVolumeDown :: SometimesX
 runVolumeDown = featureSound "up" volumeChangeSound (return ()) $ void (lowerVolume 2)
