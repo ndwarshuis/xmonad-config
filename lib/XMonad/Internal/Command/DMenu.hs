@@ -105,7 +105,7 @@ runDevMenu = sometimesIO_ "device manager" "rofi devices" t x
   where
     t = dmenuTree $ Only_ (localExe [] myDmenuDevices)
     x = do
-      c <- io $ getXdgDirectory XdgConfig "rofi/devices.yml"
+      c <- io $ getXdgDirectory XdgConfig "rofi/devices.dhall"
       spawnCmd myDmenuDevices
         $ ["-c", c]
         ++ "--" : themeArgs "#999933"
