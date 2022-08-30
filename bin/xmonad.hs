@@ -262,6 +262,7 @@ gimpDynamicWorkspace = sometimesIO_ "gimp workspace" "gimp" tree dw
       <&&> className =? c
     c = "Gimp-2.10" -- TODO I don't feel like changing the version long term
 
+-- TODO don't hardcode the VM name/title/shortcut
 vmDynamicWorkspace :: Sometimes DynWorkspace
 vmDynamicWorkspace = Sometimes "virtualbox workspace" xpfVirtualBox
   [Subfeature root "windows 8 VM"]

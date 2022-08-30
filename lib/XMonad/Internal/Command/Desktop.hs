@@ -286,6 +286,7 @@ runToggleEthernet = Sometimes "ethernet toggle" xpfEthernet
 runRestart :: X ()
 runRestart = restart "xmonad" True
 
+-- TODO only recompile the VM binary if we have virtualbox enabled
 runRecompile :: X ()
 runRecompile = do
   -- assume that the conf directory contains a valid stack project
