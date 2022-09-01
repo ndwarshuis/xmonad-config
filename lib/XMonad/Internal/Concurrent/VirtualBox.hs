@@ -20,7 +20,7 @@ import           System.FilePath
 import           XMonad.Internal.Shell
 
 vmExists :: String -> IO (Maybe Msg)
-vmExists vm = either (const Nothing) (Just . Msg Error) <$> vmInstanceConfig vm
+vmExists vm = either (Just . Msg Error) (const Nothing) <$> vmInstanceConfig vm
 
 vmInstanceConfig :: String -> IO (Either String FilePath)
 vmInstanceConfig vmName = do
