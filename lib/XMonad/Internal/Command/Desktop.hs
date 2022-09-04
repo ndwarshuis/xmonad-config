@@ -71,7 +71,7 @@ myCalc :: String
 myCalc = "bc"
 
 myBrowser :: String
-myBrowser = "brave-accel"
+myBrowser = "brave"
 
 myEditor :: String
 myEditor = "emacsclient"
